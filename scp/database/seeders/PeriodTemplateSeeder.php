@@ -30,7 +30,7 @@ class PeriodTemplateSeeder extends Seeder
                 'day_type' => 'selasa',
                 'period_number' => 1,
                 'start_time' => '07:30:00',
-                'end_type' => '08:15:00' 
+                'end_time' => '08:15:00' 
             ],
             [
                 'day_type' => 'rabu_kamis',
