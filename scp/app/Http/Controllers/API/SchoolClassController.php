@@ -11,9 +11,13 @@ class SchoolClassController extends Controller
 {
     public function index(Request $request)
     {
-        $classes = SchoolClass::paginate($request->validate([
+        $request->validate([
             'per_page' => 'nullable|integer|min:1|max:100'
-        ]));
+        ]);
+
+        $perPage = $request->integer('per_page', 15);
+
+        $classes = SchoolClass::paginate($perPage);
 
         return response()->json([
             'success' => true,
