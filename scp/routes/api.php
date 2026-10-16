@@ -42,7 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 
-Route::middleware(['auth:sanctum', 'role:vice_principal,teacher'])->group(function () {
+Route::middleware(['auth:sanctum', 'role:vice_principal'])->group(function () {
     Route::get('/waka-only', function (Request $request) {
         return response()->json([
             'success' => true,
@@ -75,6 +75,13 @@ Route::middleware(['auth:sanctum', 'role:vice_principal,teacher'])->group(functi
     Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);
 
     Route::get('/reports/journals', [ReportController::class, 'teachingJournals']);
+});
+
+Route::middleware(['auth:sanctum', 'role:vice_principal,teacher'])->group(function () {
+    Route::get('/attendance-warnings', [AttendanceWarningController::class, 'index']);
+});
+
+Route::middleware(['auth:sanctum', 'role:teacher'])->group(function () {
 
     Route::post('/journals', [JournalController::class, 'store']);
 
@@ -85,8 +92,6 @@ Route::middleware(['auth:sanctum', 'role:vice_principal,teacher'])->group(functi
     Route::post('/permissions/{id}/status', [StudentPermisionController::class, 'updateStatus']);
 
     Route::post('/substitute', [SubstituteAssignmentController::class, 'store']);
-
-    Route::get('/attendance-warnings', [AttendanceWarningController::class, 'index']);
 
     Route::post('/journals/{id}/quiz/generate', [QuizController::class, 'generate']);
 

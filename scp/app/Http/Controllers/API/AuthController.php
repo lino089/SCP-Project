@@ -41,10 +41,12 @@ class AuthController extends Controller
     }
 
     public function me(Request $request){
+        $user = $request->user()->load('assignments');
+
         return response()->json([
             'success' => true,
             'message' => 'Data profil berhasil diambil',
-            'data' => $request->user() 
+            'data' => $user
         ], 200);
     }
 
