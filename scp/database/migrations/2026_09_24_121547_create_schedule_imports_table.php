@@ -17,9 +17,8 @@ return new class extends Migration
             $table->integer('cycle_type');
             $table->string('file_path_kelas')->nullable();
             $table->string('file_path_ruangan')->nullable();
-            $table->enum('status', ['uploaded', 'parsing', 'preview_ready', 'confirmed', 'faild']);
+            $table->enum('status', ['uploaded', 'parsing', 'preview_ready', 'confirmed', 'failed']);
             $table->string('parser_version')->default('v1.0');
-            $table->string('created-at')->nullable();
             $table->timestamps();
         });
     }
