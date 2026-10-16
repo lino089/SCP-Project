@@ -10,17 +10,7 @@ class Schedule extends Model
 {
 
     use SoftDeletes;
-    protected $fillable = [
-        'cycle_type',
-        'period_number',
-        'duration_periods',
-        'teacher_id',
-        'class_id',
-        'room_id',
-        'subject_id',
-        'day_of_week',
-        'source'
-    ];
+    protected $guarded = ['id'];
 
     public function teacher()
     {

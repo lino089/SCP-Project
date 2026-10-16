@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('reason');
             $table->string('attachment_path');
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
-            $table->foreignId('users')->nullable()->constrained('users');
+            $table->foreignId('approved_by')->nullable()->constrained('users');
             $table->timestamps();
         });
     }

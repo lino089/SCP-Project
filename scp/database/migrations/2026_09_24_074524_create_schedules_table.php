@@ -22,7 +22,7 @@ return new class extends Migration
             $table->integer('duration_periods')->default(1);
             $table->integer('cycle_type');
             $table->enum('source', ['manual', 'imported']);
-            $table->foreignId('import_bacth_id')->nullable();
+            $table->foreignId('import_batch_id')->nullable();
             $table->softDeletes();
             $table->timestamps();
         });

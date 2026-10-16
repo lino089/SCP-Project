@@ -11,17 +11,9 @@ class SubjectController extends Controller
 {
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|unique:subject,name'
+        $request->validate( [
+            'name' => 'required|string|unique:subjects,name'
         ]);
-
-        if($validator->fails()){
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi Gagal',
-                'error' => $validator->errors()
-            ]);
-        }
 
         $subject = Subject::create([
             'name' => $request->name

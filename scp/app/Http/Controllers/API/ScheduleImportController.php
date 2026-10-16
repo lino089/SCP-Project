@@ -15,19 +15,11 @@ class ScheduleImportController extends Controller
 {
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'cycle_type' => 'required|integer|in:1,2',
             'file_kelas' => 'required|file|mimes:pdf|max:2048',
             'file_ruangan' => 'required|file|mimes:pdf|max:2048'
         ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'error' => $validator->errors()
-            ], 422);
-        }
 
         // Menyimpan file fisik
         $pathKelas = $request->file('file_kelas')->store('imports/schedules');
@@ -66,7 +58,7 @@ class ScheduleImportController extends Controller
         $request->validate(['password' => 'required|string']);
 
         if (!Hash::check($request->password, $request->user()->password)) {
-            return response()->json(['success' => false, 'message' => 'Password Salah.']);
+            return response()->json(['success' => false, 'message' => 'Password Salah.'], 422);
         }
 
         $import = ScheduleImport::with('rows')->where('status', 'preview_ready')->findOrFail($id);
