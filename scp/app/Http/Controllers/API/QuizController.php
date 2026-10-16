@@ -71,7 +71,7 @@ class QuizController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Kuiz belum dibuka' 
-                ],402);
+                ],403);
             }
 
             $attendance = Attendance::where('journal_id', $quiz->journal_id)
@@ -121,7 +121,7 @@ class QuizController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak.'
-            ]);
+            ], 422);
         }
 
         $existing = QuizSubmision::where('quiz_id', $quiz->id)

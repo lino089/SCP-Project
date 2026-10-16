@@ -32,7 +32,7 @@ class ScheduleController extends Controller
                 'errors' => [
                     'password' => ['Password Salah!!']
                 ]
-            ], 403);
+            ], 422);
         }
 
         $startPeriod = $request->period_number;

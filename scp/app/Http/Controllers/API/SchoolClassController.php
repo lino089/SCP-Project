@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\SchoolClass;
+use App\Models\Classes;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -17,7 +17,7 @@ class SchoolClassController extends Controller
 
         $perPage = $request->integer('per_page', 15);
 
-        $classes = SchoolClass::paginate($perPage);
+        $classes = Classes::paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -39,7 +39,7 @@ class SchoolClassController extends Controller
             'level' => 'required|string'
         ]);
 
-        $schoolClass = SchoolClass::create([
+        $schoolClass = Classes::create([
             'name' => $request->name,
             'level' => $request->level
         ]);
@@ -52,7 +52,7 @@ class SchoolClassController extends Controller
     }
 
     public function destroy($id){
-        $schoolClass = SchoolClass::findOrFail($id);
+        $schoolClass = Classes::findOrFail($id);
 
         $schoolClass->delete();
 

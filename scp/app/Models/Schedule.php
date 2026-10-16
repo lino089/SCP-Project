@@ -24,6 +24,6 @@ class Schedule extends Model
 
     public function classRoom()
     {
-        return $this->belongsTo(SchoolClass::class, 'class_id');
+        return $this->belongsTo(Classes::class, 'class_id');
     }
 }
