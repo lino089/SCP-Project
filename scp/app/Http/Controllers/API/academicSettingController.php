@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Models\SystemConfiguration;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Validator;
@@ -13,18 +14,10 @@ class academicSettingController extends Controller
     public function updateMondayStatus(Request $request)
     {
 
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'is_upacara' => 'required|boolean',
             'password' => 'required|string'
         ]);
-
-        if($validator->fails()){
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'error' => $validator->errors()
-            ], 422);
-        }
 
         if (!Hash::check($request->password, $request->user()->password)) {
             return response()->json([
@@ -36,14 +29,15 @@ class academicSettingController extends Controller
             ], 422);
         }
 
-        DB::table('system_configurations')->where('id', 1)->update([
-            'monday_is_upacara' => $request->is_upacara
-        ]);
+        $config = SystemConfiguration::firstOrFail();
+        $config->update(['monday_is_upacara' => $request->is_upacara]); 
 
         return response()->json([
             'success' => true,
             'message' => 'Status upacara hari senin berhasil diperbarui.',
-            'data' => null
+            'data' => [
+                'monday_is_upacara' => $config->monday_is_upacara
+            ]
         ]);
     }
 }

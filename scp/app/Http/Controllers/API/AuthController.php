@@ -11,24 +11,12 @@ use App\Models\User;
 class AuthController extends Controller
 {
     public function login(Request $request){
-
         // Cek data yang harus masuk
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'nis_nip' => 'required|string',
             'password' => 'required|string',
             'device_name' => 'required|string'
         ]);
-
-        // Memastikan semua data terisi
-        if($validator->fails()){
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => [
-                    'field' => $validator->errors()
-                ]
-            ], 422);
-        }
 
         // Memvalidasi kredensial yang dimasukan
         if(!Auth::attempt($request->only('nis_nip', 'password'))){
@@ -56,7 +44,6 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Data profil berhasil diambil',
-            // Menggampil data user(pengguna yang sedang login), dan user() ini adalah method bawaan laravel bukan dari DB.
             'data' => $request->user() 
         ], 200);
     }

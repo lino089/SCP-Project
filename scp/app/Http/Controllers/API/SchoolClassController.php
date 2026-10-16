@@ -11,7 +11,9 @@ class SchoolClassController extends Controller
 {
     public function index(Request $request)
     {
-        $classes = SchoolClass::paginate($request->query('per_page', 15));
+        $classes = SchoolClass::paginate($request->validate([
+            'per_page' => 'nullable|integer|min:1|max:100'
+        ]));
 
         return response()->json([
             'success' => true,
@@ -28,18 +30,10 @@ class SchoolClassController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'name' => 'required|string',
             'level' => 'required|string'
         ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi Gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $schoolClass = SchoolClass::create([
             'name' => $request->name,

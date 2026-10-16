@@ -15,7 +15,6 @@ use App\Http\Controllers\API\StudentPermisionController;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\SubstituteAssignmentController;
 use App\Http\Controllers\API\TeacherController;
-use App\Models\StudentPermision;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -34,7 +33,7 @@ Route::get('/ping', function () {
     ]);
 });
 
-Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);

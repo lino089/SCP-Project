@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Hash;
 class ScheduleController extends Controller
 {
     public function store(Request $request){
-        $validator = Validator::make($request->all(), [
+        $request->validate( [
             'cycle_type' => 'required|integer',
             'period_number' => 'required|integer',
             'duration_periods' => 'required|integer',
@@ -24,14 +24,6 @@ class ScheduleController extends Controller
             'source' => 'required|in:manual,imported',
             'password' => 'required|string'
         ]);
-
-        if($validator->fails()){
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi Gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         if(!Hash::check($request->password, $request->user()->password)){
             return response()->json([
