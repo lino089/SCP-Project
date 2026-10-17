@@ -9,11 +9,13 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\Schedule;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Services\ScheduleConflictService;
 
 class ScheduleController extends Controller
 {
+    public function __construct(private ScheduleConflictService $conflicts){}
     public function store(Request $request){
-        $request->validate( [
+        $validated = $request->validate( [
             'cycle_type' => 'required|integer|in:1,2',
             'period_number' => 'required|integer|min:1',
             'duration_periods' => 'nullable|integer|min:1',
@@ -35,45 +37,24 @@ class ScheduleController extends Controller
             return $error;
         }
 
-        $startPeriod = $request->period_number;
-        $endPeriod = $startPeriod + $request->duration_periods - 1;
+        $conflicts = $this->conflicts->findConflicts($validated);
 
-        $isConflict = Schedule::where('cycle_type', $request->cycle_type)
-        ->where('day_of_week', $request->day_of_week)
-        ->where(function ($query) use ($request){
-            $query->where('teacher_id', $request->teacher_id)
-                ->orWhere('class_id', $request->class_id)
-                ->orWhere('room_id', $request->room_id);
-        })
-        ->where(function ($query) use ($startPeriod, $endPeriod){
-            $query->where('period_number', '<=', $endPeriod)
-                ->whereRaw('(period_number + duration_periods - 1) >= ?', [$startPeriod]);
-        })->exists();
-
-        if($isConflict){
+        if($conflicts->isNotEmpty()){
             return response()->json([
                 'success' => false,
                 'message' => 'Jadwal bentrok!',
-                'errors' => ['schedule' => ['Terjadi bentrok guru, kelas atau ruangan pada jam tersebut.']]
+                'errors' => [
+                    'schedule' => ['Terjadi bentrok guru, kelas atau ruangan pada jadwal.']
+                ]
             ], 422);
         }
-
-        $newSchedule = Schedule::create([
-            'cycle_type' => $request->cycle_type,
-            'period_number' => $request->period_number,
-            'duration_periods' => $request->duration_periods,
-            'teacher_id' => $request->teacher_id,
-            'class_id' => $request->class_id,
-            'room_id' => $request->room_id,
-            'subject_id' => $request->subject_id,   
-            'day_of_week' => $request->day_of_week,
-            'source' => 'manual'
-        ]);
-
+        
+        $schedule = Schedule::create($validated + ['source' => 'manual']);
+        
         return response()->json([
             'success' => true,
             'message' => 'Jadwal berhasil dibuat',
-            'data' => $newSchedule
+            'data' => $schedule
         ], 201);
     }
 }
