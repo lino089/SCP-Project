@@ -81,10 +81,13 @@ Route::middleware(['auth:sanctum', 'role:teacher'])->group(function () {
     Route::patch('/quizzes/{id}/publish', [QuizController::class, 'publish']);
 });
 
+Route::middleware(['auth:sanctum', 'role:teacher,student'])->group(function() {
+    Route::get('/quizzes/{id}', [QuizController::class, 'show']);
+});
+
 // 4. Siswa & Orang Tua
 Route::middleware(['auth:sanctum', 'role:student,parent'])->group(function () {
     Route::post('/permissions', [StudentPermisionController::class, 'store']);
     Route::get('/students/{id}/attendance/summary', [StudentController::class, 'attendanceSummary']);
-    Route::get('/quizzes/{id}', [QuizController::class, 'show']);
-    Route::post('/quizzes/{id}/submit', [QuizController::class, 'submit']);
+    Route::post('/quizzes/{id}/submissions', [QuizController::class, 'submit']);
 });
