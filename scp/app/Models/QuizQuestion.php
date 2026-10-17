@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class QuizQuestion extends Model
 {
@@ -11,4 +12,9 @@ class QuizQuestion extends Model
     protected $casts = [
         'options' => 'array',
     ];
+
+    public function quiz(): BelongsTo
+    {
+        return $this->belongsTo(Quiz::class, 'quiz_id');
+    }
 }

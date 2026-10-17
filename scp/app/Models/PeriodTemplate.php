@@ -12,4 +12,8 @@ class PeriodTemplate extends Model
         'start_time',
         'end_time',
     ];
+
+    protected $casts = [
+        'period_number' => 'integer'
+    ];
 }

@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ScheduleImport extends Model
 {
@@ -15,7 +17,18 @@ class ScheduleImport extends Model
         'parser_version',
     ];
 
-    public function rows(){
+    public function rows(): HasMany
+    {
         return $this->hasMany(ScheduleImportRow::class, 'import_id');
+    }
+
+    public function waka(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'waka_id');
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(Schedule::class, 'import_batch_id');
     }
 }

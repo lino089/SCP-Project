@@ -72,4 +72,52 @@ class User extends Authenticatable
     {
         return $this->belongsTo(User::class, 'linked_student_id');
     }
+
+    /**
+     * Relasi akun siswa ke akun orang tuanya
+     */
+    public function parents(): HasMany
+    {
+        return $this->hasMany(User::class, 'linked_student_id');
+    }
+
+    /**
+     * Relasi jadwal mengajar guru
+     */
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(Schedule::class, 'teacher_id');
+    }
+
+    /**
+     * Relasi riwayat presensi siswa
+     */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class, 'student_id');
+    }
+
+    /**
+     * Relasi riwayat perizinan siswa
+     */
+    public function permissions(): HasMany
+    {
+        return $this->hasMany(StudentPermision::class, 'student_id');
+    }
+
+    /**
+     * Relasi jurnal yang diampu sebagai guru pengganti
+     */
+    public function substituteJournals(): HasMany
+    {
+        return $this->hasMany(Journal::class, 'substitute_teacher_id');
+    }
+
+    /**
+     * Relasi riwayat pergantian putaran siklus yang dilakukan waka
+     */
+    public function cycleHistories(): HasMany
+    {
+        return $this->hasMany(CycleHistory::class, 'changed_by');
+    }
 }

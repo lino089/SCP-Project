@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TeacherAssignment extends Model
 {
@@ -13,8 +13,13 @@ class TeacherAssignment extends Model
         'class_id'
     ];
 
-    public function teacherAssignments(): HasMany
+    public function teacher(): BelongsTo
     {
-        return $this->hasMany(TeacherAssignment::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(Classes::class, 'class_id');
     }
 }

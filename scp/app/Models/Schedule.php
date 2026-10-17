@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 class Schedule extends Model
 {
@@ -31,8 +33,28 @@ class Schedule extends Model
         return $this->belongsTo(Subject::class, 'subject_id');
     }
 
-    public function classRoom()
+    public function classRoom(): BelongsTo
     {
         return $this->belongsTo(Classes::class, 'class_id');
+    }
+
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Rooms::class, 'room_id');
+    }
+
+    public function importBatch(): BelongsTo
+    {
+        return $this->belongsTo(ScheduleImport::class, 'import_batch_id');
+    }
+
+    public function journals(): HasMany
+    {
+        return $this->hasMany(Journal::class, 'schedule_id');
+    }
+
+    public function substituteAssignments(): HasMany
+    {
+        return $this->hasMany(SubstituteAssignment::class, 'schedule_id');
     }
 }
