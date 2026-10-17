@@ -11,7 +11,11 @@ class Classes extends Model
 
     protected $table = 'classes';
 
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'name',
+        'level',
+        'next_class_id',
+    ];
 
     public function schedules()
     {

@@ -4,13 +4,22 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Symfony\Component\Routing\Loader\Configurator\Traits\AddTrait;
-
 class Schedule extends Model
 {
-
     use SoftDeletes;
-    protected $guarded = ['id'];
+
+    protected $fillable = [
+        'teacher_id',
+        'class_id',
+        'subject_id',
+        'room_id',
+        'day_of_week',
+        'period_number',
+        'duration_periods',
+        'cycle_type',
+        'source',
+        'import_batch_id',
+    ];
 
     public function teacher()
     {

@@ -6,7 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class SubstituteAssignment extends Model
 {
-    protected $guarded = ['id'];
-
-
+    protected $fillable = [
+        'schedule_id',
+        'original_teacher_id',
+        'substitute_teacher_id',
+        'assigned_by',
+        'date',
+        'reason',
+    ];
 }
