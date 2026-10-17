@@ -419,7 +419,7 @@ Dokumentasi tahapan pengembangan sistem backend berbasis Laravel, PostgreSQL, da
     1. Endpoint GET `/api/academic-settings`
     2. Endpoint PATCH `/api/academic-settings`
     3. Endpoint PATCH `/api/academic-settings/monday-status`
-    - File academicSettingController :
+    - File AcademicSettingController :
     ```php
     public function updateMondayStatus(Request $request)
     {
@@ -430,14 +430,8 @@ Dokumentasi tahapan pengembangan sistem backend berbasis Laravel, PostgreSQL, da
         ]);
 
         2. Konfirmasi Password.
-        if (!Hash::check($request->password, $request->user()->password)) {
-            return response()->json([
-                "success" => false,
-                'message' => 'Validasi gagal',
-                'errors' => [
-                    'password' => ['Password tidak valid.']
-                ]
-            ], 422);
+        if ($error = $this->passwordIdConfirmed($request)) {
+            return $error;
         }
 
         3. Mengambil Konfigurasi.
@@ -518,14 +512,8 @@ Dokumentasi tahapan pengembangan sistem backend berbasis Laravel, PostgreSQL, da
         ]);
 
         2. Konfirmasi password.
-        if(!Hash::check($request->password, $request->user()->password)){
-            return response()->json([
-                'success' => false,
-                'message' => 'konfirmasi gagal',
-                'errors' => [
-                    'password' => ['Password Salah!!']
-                ]
-            ], 403);
+        if ($error = $this->passwordIdConfirmed($request)) {
+            return $error;
         }
 
         3. Menghitung rentang periode

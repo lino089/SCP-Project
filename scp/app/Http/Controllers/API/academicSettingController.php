@@ -19,14 +19,8 @@ class AcademicSettingController extends Controller
             'password' => 'required|string'
         ]);
 
-        if (!Hash::check($request->password, $request->user()->password)) {
-            return response()->json([
-                "success" => false,
-                'message' => 'Validasi gagal',
-                'errors' => [
-                    'password' => ['Password tidak valid.']
-                ]
-            ], 422);
+        if ($error = $this->passwordIdConfirmed($request)) {
+            return $error;
         }
 
         $config = SystemConfiguration::firstOrFail();

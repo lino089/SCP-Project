@@ -22,7 +22,7 @@ class ScheduleController extends Controller
                 'integer',
                 Rule::exists('users', 'id')
                     ->where('role', 'teacher')
-                    ->whereNull('delete_at')
+                    ->whereNull('deleted_at')
             ], 
             'class_id' => 'required|integer|exists:classes,id',
             'room_id' => 'required|integer|exists:rooms,id',
@@ -31,14 +31,8 @@ class ScheduleController extends Controller
             'password' => 'required|string'
         ]);
 
-        if(!Hash::check($request->password, $request->user()->password)){
-            return response()->json([
-                'success' => false,
-                'message' => 'konfirmasi gagal',
-                'errors' => [
-                    'password' => ['Password Salah!!']
-                ]
-            ], 422);
+        if ($error = $this->passwordIdConfirmed($request)) {
+            return $error;
         }
 
         $startPeriod = $request->period_number;
