@@ -14,19 +14,11 @@ use Illuminate\Support\Facades\Hash;
 class StudentController extends Controller
 {
     public function store(Request $request){
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'name' => 'required|string',
             'nis' => 'required|string|unique:users,nis_nip',
             'class_id' =>'required|exists:classes,id'
         ]);
-
-        if($validator->fails()){
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $result = DB::transaction(function() use ($request){
             $randomPassword = Str::random(8);
