@@ -23,7 +23,7 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => "Kredensial tidak valid",
-                'error' => [
+                'errors' => [
                     'field' => 'NIS/NIP atau Password salah'
                 ]
             ], 401);
