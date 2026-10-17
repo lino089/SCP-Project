@@ -5,7 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Classes;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class SchoolClassController extends Controller
 {
@@ -34,32 +34,44 @@ class SchoolClassController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string',
-            'level' => 'required|string'
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('classes', 'name')->whereNull('delete_at')
+            ],
+            'level' => 'required|integer|in:10,11,12'
         ]);
 
-        $schoolClass = Classes::create([
-            'name' => $request->name,
-            'level' => $request->level
-        ]);
+        $classes = Classes::create($validated);
 
         return response()->json([
             'success' => true,
             'message' => 'Data berhasil ditambahkan',
-            'data' => $schoolClass
+            'data' => $classes
         ],201);
     }
 
     public function destroy($id){
-        $schoolClass = Classes::findOrFail($id);
+        $class = Classes::findOrFail($id);
 
-        $schoolClass->delete();
+        if($class->schedules()->exists()){
+            return response()->json([
+                'success' => false,
+                'message' => 'Kelas tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'errors' => [
+                    'class' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.']
+                ]
+            ],409);
+        }
+
+        $class->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Data kelas berhasil dihapus',
-            'data' => $schoolClass
-        ]);
+            'data' => $class
+        ], 201);
     }
 }

@@ -12,4 +12,9 @@ class Classes extends Model
     protected $table = 'classes';
 
     protected $guarded = ['id'];
+
+    public function schedules()
+    {
+        return $this->hasMany(Schedule::class, 'class_id');
+    }
 }

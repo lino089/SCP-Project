@@ -71,7 +71,7 @@ class ScheduleController extends Controller
             'teacher_id' => $request->teacher_id,
             'class_id' => $request->class_id,
             'room_id' => $request->room_id,
-            'subject_id' => $request->subject_id,
+            'subject_id' => $request->subject_id,   
             'day_of_week' => $request->day_of_week,
             'source' => 'manual'
         ]);
