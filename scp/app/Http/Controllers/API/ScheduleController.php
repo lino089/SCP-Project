@@ -8,20 +8,26 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Schedule;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class ScheduleController extends Controller
 {
     public function store(Request $request){
         $request->validate( [
-            'cycle_type' => 'required|integer',
-            'period_number' => 'required|integer',
-            'duration_periods' => 'required|integer',
-            'teacher_id' => 'required|integer|exists:users,id', 
+            'cycle_type' => 'required|integer|in:1,2',
+            'period_number' => 'required|integer|min:1',
+            'duration_periods' => 'nullable|integer|min:1',
+            'teacher_id' => [
+                'required',
+                'integer',
+                Rule::exists('users', 'id')
+                    ->where('role', 'teacher')
+                    ->whereNull('delete_at')
+            ], 
             'class_id' => 'required|integer|exists:classes,id',
             'room_id' => 'required|integer|exists:rooms,id',
             'subject_id' => 'required|integer|exists:subjects,id',
-            'day_of_week' => 'required|integer',
-            'source' => 'required|in:manual,imported',
+            'day_of_week' => 'required|integer|between:1,7',
             'password' => 'required|string'
         ]);
 
@@ -67,7 +73,7 @@ class ScheduleController extends Controller
             'room_id' => $request->room_id,
             'subject_id' => $request->subject_id,
             'day_of_week' => $request->day_of_week,
-            'source' => $request->source
+            'source' => 'manual'
         ]);
 
         return response()->json([
