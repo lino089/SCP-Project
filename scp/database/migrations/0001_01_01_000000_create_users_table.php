@@ -20,8 +20,8 @@ return new class extends Migration
             $table->boolean('must_change_password')->default(true);
             $table->string('google_id')->nullable();
             $table->string('phone_number')->nullable();
-            $table->foreignId('linked_student_id')->nullable();
-            $table->foreignId('class_id')->nullable();
+            $table->foreignId('linked_student_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('class_id')->nullable()->constrained('classes');
             $table->date('graduation_date')->nullable();
             $table->softDeletes('deleted_at');
 
