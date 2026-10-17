@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers\API;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -18,25 +17,32 @@ class AuthController extends Controller
             'device_name' => 'required|string'
         ]);
 
-        // Memvalidasi kredensial yang dimasukan
-        if(!Auth::attempt($request->only('nis_nip', 'password'))){
+        // Memvalidasi kredensial pengguna
+        $user = User::where('nis_nip', $request->nis_nip)->first();
+
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
-                'message' => "Kredensial tidak valid",
+                'message' => 'Kredensial tidak valid',
                 'errors' => [
-                    'field' => 'NIS/NIP atau Password salah'
+                    'nis_nip' => [
+                        'NIS/NIP atau password salah'
+                    ]
                 ]
             ], 401);
         }
 
-        $user = User::where('nis_nip', $request->nis_nip)->firstOrFail();
-
-        $token = $user->createToken($request->device_name)->plainTextToken;
+        $expiresAt = now()->addMinutes((int) (config('sanctum.expiration') ?? 43200));
+        $token = $user->createToken($request->device_name, ['*'], $expiresAt);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil Login',
-            "data" => $token
+            'data' => [
+                'token' => $token->plainTextToken,
+                'expires_at' => $expiresAt,
+                'must_change_password' => (bool) $user->must_change_password
+            ]
         ], 200);
     }
 

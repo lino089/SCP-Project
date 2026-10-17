@@ -254,31 +254,36 @@ Dokumentasi tahapan pengembangan sistem backend berbasis Laravel, PostgreSQL, da
         ]);
 
         2. Memeriksa Kredensial.
-        - Auth::attempt : mencari user dengan nis_nip
+        - Mencari user berdasarkan nis_nip dan memeriksa password dengan Hash::check
         - Jika data tidak sesuai akan mengembalikan response gagal dalam bentuk JSON 401
-        if(!Auth::attempt($request->only('nis_nip', 'password'))){
+        $user = User::where('nis_nip', $request->nis_nip)->first();
+
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
-                'message' => "Kredensial tidak valid",
-                'error' => [
-                    'field' => 'NIS/NIP atau Password salah'
+                'message' => 'Kredensial tidak valid',
+                'errors' => [
+                    'nis_nip' => [
+                        'NIS/NIP atau password salah'
+                    ]
                 ]
             ], 401);
         }
 
-        3. Mengambil User dan menyimpanya dalam variable $user.
-        $user = User::where('nis_nip', $request->nis_nip)->firstOrFail();
+        3. Membuat Token dengan masa berlaku 30 hari (43200 menit).
+        - createToken membuat baris di tabel personal_access_tokens beserta expires_at.
+        $expiresAt = now()->addMinutes((int) (config('sanctum.expiration') ?? 43200));
+        $token = $user->createToken($request->device_name, ['*'], $expiresAt);
 
-        4. Membuat Token.
-        - createToken membuat baris di tabel personal_access_tokens.
-        - plainTextToken adalah string token yang dikirim ke klien, sedangkan database hanya menyimpan hashnya.
-        $token = $user->createToken($request->device_name)->plainTextToken;
-
-        5. Mengembalikan response sukses dalam bentuk JSON.
+        4. Mengembalikan response sukses dalam bentuk JSON dengan objek data { token, expires_at, must_change_password }.
         return response()->json([
             'success' => true,
             'message' => 'Berhasil Login',
-            "data" => $token
+            'data' => [
+                'token' => $token->plainTextToken,
+                'expires_at' => $expiresAt,
+                'must_change_password' => (bool) $user->must_change_password
+            ]
         ], 200);
     }
     ```
