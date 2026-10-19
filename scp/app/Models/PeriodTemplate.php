@@ -16,4 +16,15 @@ class PeriodTemplate extends Model
     protected $casts = [
         'period_number' => 'integer'
     ];
+
+    public static function dayTypeFor(int $dayOfWeek, bool $mondayIsUpacara): ?string
+    {
+        return match ($dayOfWeek) {
+            1 => $mondayIsUpacara ? 'senin_upacara' : 'senin_reguler',
+            2 => 'selasa',
+            3, 4 => 'rabu_kamis',
+            5 => 'jumat',
+            default => null, // Sabtu dan Minggu tidak punya jadwal
+        };
+    }
 }

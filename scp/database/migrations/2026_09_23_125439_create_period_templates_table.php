@@ -17,6 +17,7 @@ return new class extends Migration
             $table->integer('period_number');
             $table->time('start_time');
             $table->time('end_time');
+            $table->unique(['day_type', 'period_number']);
             $table->timestamps();
         });
     }
