@@ -9,8 +9,9 @@ class ScheduleConflictService
 {
     public function findConflicts(array $data, ?int $ignoreId = null): Collection
     {
+        $duration = (int) ($data['duration_periods'] ?? 1);
         $start = (int) $data['period_number'];
-        $end = $start + ($data['duration_periods']);
+        $end = $start + $duration - 1;
 
         $resources = array_filter([
             'teacher_id' => $data['teacher_id'] ?? null,

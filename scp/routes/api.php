@@ -56,6 +56,8 @@ Route::middleware(['auth:sanctum', 'role:vice_principal'])->group(function () {
     Route::post('/subjects', [SubjectController::class, 'store']);
 
     Route::post('/schedules', [ScheduleController::class, 'store']);
+    Route::put('/schedules/{id}', [ScheduleController::class, 'update']);
+    Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
     Route::post('/schedule-imports', [ScheduleImportController::class, 'store']);
     Route::get('/schedule-imports/{id}', [ScheduleImportController::class, 'show']);
     Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);

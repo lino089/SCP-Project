@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\Hash;
 
 abstract class Controller
 {
+    protected function passwordIsConfirmed(Request $request): ?JsonResponse
+    {
+        return $this->passwordIdConfirmed($request);
+    }
+
     protected function passwordIdConfirmed(Request $request): ?JsonResponse{
         if (Hash::check($request->input('password'), $request->user()->password)){
             return null;
