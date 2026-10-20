@@ -35,6 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
+            if ($e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                return $e->getResponse();
+            }
+
             //422 : validasi gagal
             if($e instanceof ValidationException){
                 return response()->json([

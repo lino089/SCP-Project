@@ -8,11 +8,30 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Quiz extends Model
 {
-    protected $guarded = ['id'];
+    protected $table = 'ai_quizzes';
 
-    public function journal(): BelongsTo
+    protected $fillable = [
+        'teacher_id',
+        'class_id',
+        'title',
+        'status',
+        'due_date',
+        'max_attempts',
+    ];
+
+    protected $casts = [
+        'due_date' => 'datetime',
+        'max_attempts' => 'integer',
+    ];
+
+    public function teacher(): BelongsTo
     {
-        return $this->belongsTo(Journal::class, 'journal_id');
+        return $this->belongsTo(User::class, 'teacher_id');
+    }
+
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(Classes::class, 'class_id');
     }
 
     public function questions(): HasMany
@@ -22,6 +41,6 @@ class Quiz extends Model
 
     public function submissions(): HasMany
     {
-        return $this->hasMany(QuizSubmision::class, 'quiz_id');
+        return $this->hasMany(QuizSubmission::class, 'quiz_id');
     }
 }

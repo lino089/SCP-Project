@@ -98,7 +98,23 @@ class User extends Authenticatable
     }
 
     /**
-     * Relasi riwayat perizinan siswa
+     * Relasi riwayat perizinan siswa (PRD v4.4)
+     */
+    public function leaveRequests(): HasMany
+    {
+        return $this->hasMany(LeaveRequest::class, 'student_id');
+    }
+
+    /**
+     * Relasi perizinan yang diajukan user (sebagai siswa atau orang tua)
+     */
+    public function appliedLeaveRequests(): HasMany
+    {
+        return $this->hasMany(LeaveRequest::class, 'applicant_id');
+    }
+
+    /**
+     * Relasi riwayat perizinan siswa (Legacy alias)
      */
     public function permissions(): HasMany
     {

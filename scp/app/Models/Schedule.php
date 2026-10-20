@@ -33,6 +33,11 @@ class Schedule extends Model
         return $this->belongsTo(Subject::class, 'subject_id');
     }
 
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(Classes::class, 'class_id');
+    }
+
     public function classRoom(): BelongsTo
     {
         return $this->belongsTo(Classes::class, 'class_id');

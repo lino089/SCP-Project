@@ -17,40 +17,68 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        // User::create([
-        //     'role' => 'vice_principal',
-        //     'nis_nip' => '12345678',
-        //     'password' => Hash::make('password'),
-        //     'must_change_password' => false,
-        //     'name' => 'Waka Kurikulum',
-        // ]);
-
-        // DB::table('system_configurations')->insert([
-        //     'id' => 1,
-        //     'active_cycle' => 1,
-        //     'monday_is_upacara' => true
-        // ]);
-
         $now = now();
 
-        DB::table('rooms')->insert([
-            ['name' => 'Ruang Teori 1', 'capacity' => 36, 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Ruang Teori 2', 'capacity' => 36, 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Lab Komputer 1', 'capacity' => 36, 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Lab Komputer 2', 'capacity' => 36, 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Lab IPA', 'capacity' => 36, 'created_at' => $now, 'updated_at' => $now],
-        ]);
+        // 1. Inisialisasi Akun Waka Kurikulum pertama
+        User::firstOrCreate(
+            ['nis_nip' => '12345678'],
+            [
+                'role' => 'vice_principal',
+                'password' => Hash::make('password'),
+                'must_change_password' => false,
+                'name' => 'Waka Kurikulum',
+                'email' => 'waka@smkn1bantul.sch.id',
+            ]
+        );
 
-        DB::table('subjects')->insert([
-            ['name' => 'Matematika', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Bahasa Indonesia', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Bahasa Inggris', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Pendidikan Agama', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Pemrograman Web', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Basis Data', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Pemrograman Berorientasi Objek', 'created_at' => $now, 'updated_at' => $now],
-        ]);
+        // 2. Inisialisasi record konfigurasi sistem id=1
+        DB::table('system_configurations')->upsert(
+            [
+                'id' => 1,
+                'active_cycle' => 1,
+                'monday_is_upacara' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            ['id'],
+            ['active_cycle', 'monday_is_upacara', 'updated_at']
+        );
+
+        // 3. Seeder Period Templates lengkap 10 JP (Senin-Jumat)
+        $this->call(PeriodTemplateSeeder::class);
+
+        // 4. Data Master Awal Ruangan
+        $rooms = [
+            ['name' => 'Ruang Teori 1', 'capacity' => 36],
+            ['name' => 'Ruang Teori 2', 'capacity' => 36],
+            ['name' => 'Lab Komputer 1', 'capacity' => 36],
+            ['name' => 'Lab Komputer 2', 'capacity' => 36],
+            ['name' => 'Lab IPA', 'capacity' => 36],
+        ];
+
+        foreach ($rooms as $r) {
+            DB::table('rooms')->updateOrInsert(
+                ['name' => $r['name']],
+                ['capacity' => $r['capacity'], 'created_at' => $now, 'updated_at' => $now]
+            );
+        }
+
+        // 5. Data Master Awal Mata Pelajaran
+        $subjects = [
+            'Matematika',
+            'Bahasa Indonesia',
+            'Bahasa Inggris',
+            'Pendidikan Agama',
+            'Pemrograman Web',
+            'Basis Data',
+            'Pemrograman Berorientasi Objek',
+        ];
+
+        foreach ($subjects as $s) {
+            DB::table('subjects')->updateOrInsert(
+                ['name' => $s],
+                ['created_at' => $now, 'updated_at' => $now]
+            );
+        }
     }
 }

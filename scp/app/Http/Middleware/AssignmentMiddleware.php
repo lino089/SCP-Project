@@ -18,14 +18,14 @@ class AssignmentMiddleware
         $user   = $request->user();
 
         $hasAssignment = $user?->role === 'teacher'
-            && $user->teacherAsssignments()->where('type', $type)->exists();
+            && $user->assignments()->where('type', $type)->exists();
 
         if(!$hasAssignment) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak, anda tidak memiliki izin.',
                 'errors' => [
-                    'assigment' => ['Membutuhkan penugasan' . $type . '.']
+                    'assignment' => ['Membutuhkan penugasan ' . $type . '.']
                 ]
             ], 403);
         }

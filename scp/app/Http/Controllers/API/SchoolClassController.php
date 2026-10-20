@@ -39,7 +39,7 @@ class SchoolClassController extends Controller
                 'required',
                 'string',
                 'max:50',
-                Rule::unique('classes', 'name')->whereNull('delete_at')
+                Rule::unique('classes', 'name')->whereNull('deleted_at')
             ],
             'level' => 'required|integer|in:10,11,12'
         ]);
@@ -72,6 +72,6 @@ class SchoolClassController extends Controller
             'success' => true,
             'message' => 'Data kelas berhasil dihapus',
             'data' => $class
-        ], 201);
+        ], 200);
     }
 }

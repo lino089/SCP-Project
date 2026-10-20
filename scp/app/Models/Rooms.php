@@ -10,6 +10,8 @@ class Rooms extends Model
 {
     use SoftDeletes;
 
+    protected $table = 'rooms';
+
     protected $fillable = [
         'name',
         'capacity',

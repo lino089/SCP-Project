@@ -5,6 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @deprecated Digantikan oleh App\Models\LeaveRequest sesuai PRD v4.4.
+ */
 class StudentPermision extends Model
 {
     protected $fillable = [
