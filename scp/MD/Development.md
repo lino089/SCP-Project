@@ -1,7 +1,7 @@
 # Dokumentasi Perkembangan Proyek: Fase 0 (Fondasi, Bug Kritis & Penyelarasan Skema DB)
 
 **Proyek:** School Class Progress (SCP) — Backend REST API  
-**Fase:** Fase 0 (Fondasi, Perbaikan Bug Kritis & Penyelarasan Skema Database)  
+**Fase:** Fase 0 ()  
 **Acuan Spesifikasi:** `MD/PRD.md` (v4.4) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
 **Waktu Eksekusi:** 2026-10-20  
 **Status Fase:** Selesai (100% Lolos Pengujian)
@@ -299,3 +299,892 @@ Dengan selesainya seluruh tugas pada Fase 0:
 - Fondasi database dan integritas model sudah 100% selaras dengan PRD v4.4.
 - Tidak ada bug kritis atau runtime exception yang menghambat pengerjaan master data.
 - Project siap melangkah ke **Fase 1: Master Data & Manajemen Siklus Akademik** (CRUD Rooms, Subjects, Classes, Teachers, Students, Promosi Kelas, dan Cycle History).
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 1 (Master Data & Manajemen Siklus Akademik)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 1 (Master Data & Manajemen Siklus Akademik)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4 Bagian 5.1, 5.5, 5.13, 9.2, 9.3) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-20  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 7. Ringkasan Implementasi & Tujuan Fase 1
+
+Fase 1 mengimplementasikan seluruh kebutuhan siklus akademik dan CRUD master data inti sekolah dengan arsitektur RESTful API yang aman, konsisten, dan terintegrasi dengan aturan bisnis pada PRD v4.4:
+1. **Penyempurnaan Skema Siswa (`is_held_back`)**: Menambahkan kolom `is_held_back` (boolean, default false) pada tabel `users` untuk memfasilitasi penandaan siswa tinggal kelas sebelum kenaikan kelas massal (PRD 5.13).
+2. **Master Data Ruangan (`rooms`)**: Menghadirkan CRUD lengkap untuk master ruangan (`RoomController`) berpaginasi dengan pencarian nama, validasi kapasitas min 1, validasi nama unik mengabaikan data terhapus (`whereNull('deleted_at')`), serta proteksi HTTP 409 Conflict apabila ruangan masih terikat pada jadwal aktif di tabel `schedules`.
+3. **Master Data Mata Pelajaran (`subjects`)**: Membangun modul controller `SubjectController` dengan standardisasi soft-delete, dukungan re-create nama mapel yang sama setelah soft-delete, pencarian case-insensitive, dan proteksi HTTP 409 Conflict jika mapel terkait dengan jadwal aktif.
+4. **Master Data Kelas & Promosi Massal (`classes`, `class-promotions`)**:
+   - Memperbarui `SchoolClassController` untuk mendukung konfigurasi `next_class_id` berelasi self-referencing.
+   - Mengimplementasikan endpoint kenaikan kelas dan kelulusan massal akhir tahun ajaran (`POST /api/class-promotions`): mempromosikan siswa ke `next_class_id`, mempertahankan siswa berstatus `is_held_back` dan mereset statusnya, serta menetapkan tanggal kelulusan `graduation_date` bagi siswa kelas 12 (kelas akhir).
+5. **Master Data Guru & Penugasan Tambahan (`teachers`, `assignments`)**:
+   - CRUD Guru pada tabel `users` (terfilter `role = 'teacher'`) dengan auto-provisioning password acak 8 karakter dan flag `must_change_password = true`.
+   - Mendukung pencatatan `fet_staff_id` (kode guru resmi sinkronisasi FET untuk Fase 2).
+   - Mengatur penugasan multi-peran (`POST/DELETE /api/teachers/{id}/assignments`) untuk Wali Kelas dan Kesiswaan, dengan validasi satu kelas hanya boleh memiliki satu wali kelas aktif.
+   - Proteksi HTTP 409 Conflict saat penghapusan guru yang masih memiliki jadwal mengajar aktif.
+6. **Master Data Siswa & Sinkronisasi Akun Wali (`students`, `hold-back`)**:
+   - CRUD Siswa pada tabel `users` (terfilter `role = 'student'`), mendukung filter kelas (`?class_id=`) dan pencarian (`?search=`).
+   - Auto-provisioning akun orang tua (`role = 'parent'`, username `P-{nis}`, `linked_student_id`) dalam transaksi atomik saat pendaftaran siswa baru.
+   - Sinkronisasi otomatis NIS orang tua saat NIS siswa diperbarui.
+   - Penghapusan siswa secara otomatis meng-cascade soft-delete ke akun orang tua terkait.
+   - Endpoint penandaan tinggal kelas (`POST /api/students/{id}/hold-back`).
+7. **Pengaturan Siklus Akademik & Riwayat Putaran (`academic-settings`, `cycle-history`)**:
+   - Membaca konfigurasi `active_cycle` (Putaran 1/Putaran 2) dan `monday_is_upacara`.
+   - Mengubah putaran aktif (`PATCH /api/academic-settings`) yang mewajibkan konfirmasi password Waka (gagal 422 jika salah), mengakhiri record riwayat sebelumnya (`ended_at`), dan mencatat record baru pada tabel `cycle_history`.
+   - Mengubah status upacara bendera Senin (`PATCH /api/academic-settings/monday-status`) dengan konfirmasi password.
+   - Menyajikan daftar riwayat putaran berpaginasi (`GET /api/cycle-history`).
+
+---
+
+## 8. Daftar File yang Dibuat atau Diubah pada Fase 1
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `database/migrations/2026_10_20_000004_add_is_held_back_to_users_table.php` | Dibuat | Menambahkan kolom boolean `is_held_back` (default false) pada tabel `users`. |
+| 2 | `app/Models/User.php` | Diubah | Mendaftarkan atribut `is_held_back` pada `$fillable` dan `$casts`. |
+| 3 | `app/Http/Controllers/API/RoomController.php` | Dibuat | Controller CRUD Master Data Ruangan, validasi kapasitas, soft-delete, dan proteksi 409. |
+| 4 | `app/Http/Controllers/API/SubjectController.php` | Diubah | Controller CRUD Master Data Mata Pelajaran dengan soft-delete, pencarian, dan proteksi 409. |
+| 5 | `app/Http/Controllers/API/SchoolClassController.php` | Diubah | Mendukung `next_class_id` pada update kelas dan transaksi kenaikan kelas massal (`promoteClasses`). |
+| 6 | `app/Http/Controllers/API/TeacherController.php` | Diubah | CRUD Guru dengan `fet_staff_id`, auto-password, penugasan tambahan, dan proteksi 409 jadwal aktif. |
+| 7 | `app/Http/Controllers/API/StudentController.php` | Diubah | CRUD Siswa, auto-provisioning & sync akun orang tua `P-{nis}`, cascade soft delete, dan endpoint `holdBack`. |
+| 8 | `app/Http/Controllers/API/academicSettingController.php` | Diubah | Menampilkan konfigurasi, switch putaran dengan verifikasi password & audit `cycle_history`, dan status upacara. |
+| 9 | `routes/api.php` | Diubah | Mendaftarkan seluruh route Fase 1 di bawah otentikasi Sanctum, rate limiter, dan otorisasi role Waka. |
+| 10 | `tests/Feature/RoomTest.php` | Dibuat | Automated feature test untuk modul Room (CRUD, search, proteksi 409, otorisasi role). |
+| 11 | `tests/Feature/SubjectTest.php` | Dibuat | Automated feature test untuk modul Subject (CRUD, search, unique soft-delete, proteksi 409). |
+| 12 | `tests/Feature/TeacherManagementTest.php` | Dibuat | Automated feature test untuk modul Guru & Penugasan (`fet_staff_id`, penugasan, proteksi 409). |
+| 13 | `tests/Feature/StudentManagementTest.php` | Dibuat | Automated feature test untuk modul Siswa (CRUD, filter, auto-parent `P-{nis}`, sync, cascade delete, hold-back). |
+| 14 | `tests/Feature/ClassPromotionTest.php` | Dibuat | Automated feature test konfigurasi `next_class_id` dan promosi kenaikan kelas/kelulusan massal. |
+| 15 | `tests/Feature/AcademicSettingTest.php` | Dibuat | Automated feature test pengaturan akademik, konfirmasi password (422), log riwayat putaran. |
+
+---
+
+## 9. Potongan Kode Penting & Penjelasan Logika
+
+### 9.1 Proteksi Penghapusan Berelasi Aktif (HTTP 409 Conflict)
+Setiap entitas master data (`Room`, `Subject`, `Classes`, `User` guru) dicegah dari penghapusan tidak disengaja jika masih dirujuk oleh tabel `schedules`.
+```php
+// app/Http/Controllers/API/RoomController.php
+public function destroy(int $id): JsonResponse
+{
+    $room = Room::findOrFail($id);
+
+    if ($room->schedules()->exists()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Ruangan tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+            'errors' => [
+                'room' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.'],
+            ],
+        ], 409);
+    }
+
+    $room->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Data ruangan berhasil dihapus.',
+        'data' => $room,
+    ], 200);
+}
+```
+*Penjelasan:* Memeriksa eksistensi jadwal aktif via relasi `$room->schedules()->exists()`. Jika ditemukan, controller segera mengembalikan status HTTP 409 Conflict lengkap dengan arahan resolusi bagi pengguna. Pola identik diterapkan pada `SubjectController`, `SchoolClassController`, dan `TeacherController`.
+
+---
+
+### 9.2 Auto-Provisioning & Sinkronisasi Akun Siswa & Orang Tua
+```php
+// app/Http/Controllers/API/StudentController.php
+public function store(Request $request): JsonResponse
+{
+    $request->validate([
+        'name' => 'required|string|max:100',
+        'nis' => [
+            'required',
+            'string',
+            'max:50',
+            Rule::unique('users', 'nis_nip')->whereNull('deleted_at'),
+        ],
+        'class_id' => 'required|integer|exists:classes,id',
+    ]);
+
+    $result = DB::transaction(function () use ($request) {
+        $randomPassword = Str::random(8);
+
+        $student = User::create([
+            'name' => $request->name,
+            'role' => 'student',
+            'nis_nip' => $request->nis,
+            'password' => Hash::make($randomPassword),
+            'must_change_password' => true,
+            'class_id' => $request->class_id,
+        ]);
+
+        $parent = User::create([
+            'name' => 'Wali dari ' . $request->name,
+            'role' => 'parent',
+            'nis_nip' => 'P-' . $request->nis,
+            'linked_student_id' => $student->id,
+            'password' => Hash::make($randomPassword),
+            'must_change_password' => true,
+        ]);
+
+        return [
+            'student' => $student->load('schoolClass'),
+            'parent' => $parent,
+            'generate_password' => $randomPassword,
+        ];
+    });
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Data siswa berhasil ditambahkan.',
+        'data' => $result,
+    ], 201);
+}
+```
+*Penjelasan:* Dijalankan dalam satu `DB::transaction` atomik. Sistem secara otomatis mencetak akun siswa dan akun orang tua dengan prefix `P-{nis}` serta menautkan relasi `linked_student_id`. Keduanya mendapatkan password awal acak yang sama dan diwajibkan mengganti password pada saat login pertama kali (`must_change_password = true`).
+
+---
+
+### 9.3 Algoritma Promosi Kenaikan Kelas & Kelulusan Massal
+```php
+// app/Http/Controllers/API/SchoolClassController.php
+public function promoteClasses(Request $request): JsonResponse
+{
+    $result = DB::transaction(function () {
+        $students = User::where('role', 'student')->with('schoolClass')->get();
+
+        $promotedCount = 0;
+        $heldBackCount = 0;
+        $graduatedCount = 0;
+
+        foreach ($students as $student) {
+            if ($student->is_held_back) {
+                // Siswa tinggal kelas: reset flag untuk tahun ajaran baru, tidak ubah class_id
+                $student->update(['is_held_back' => false]);
+                $heldBackCount++;
+                continue;
+            }
+
+            $currentClass = $student->schoolClass;
+
+            if ($currentClass && $currentClass->next_class_id) {
+                // Naik ke kelas berikutnya
+                $student->update(['class_id' => $currentClass->next_class_id]);
+                $promotedCount++;
+            } elseif ($currentClass && is_null($currentClass->next_class_id)) {
+                // Kelas akhir (kelas 12): kelulusan
+                $student->update([
+                    'graduation_date' => now()->toDateString(),
+                    'class_id' => null,
+                ]);
+                $graduatedCount++;
+            }
+        }
+
+        return [
+            'total_students' => $students->count(),
+            'promoted' => $promotedCount,
+            'held_back' => $heldBackCount,
+            'graduated' => $graduatedCount,
+        ];
+    });
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Proses kenaikan kelas dan kelulusan berhasil diproses.',
+        'data' => $result,
+    ], 200);
+}
+```
+*Penjelasan:* Sesuai PRD 5.13, proses kenaikan kelas dieksekusi secara massal. Siswa yang ditandai tinggal kelas (`is_held_back = true`) dipertahankan pada kelas yang sama dan flag tinggal kelas direset ke `false`. Siswa yang memiliki `next_class_id` dipindahkan ke kelas tujuan, sedangkan siswa di kelas akhir tanpa tujuan lanjutan otomatis di-set `class_id = null` dan dicatat tanggal kelulusannya (`graduation_date`).
+
+---
+
+### 9.4 Pergantian Putaran Aktif dengan Konfirmasi Password & Log Audit
+```php
+// app/Http/Controllers/API/academicSettingController.php
+public function updateCycle(Request $request): JsonResponse
+{
+    $request->validate([
+        'cycle_type' => 'required|integer|in:1,2',
+        'password' => 'required|string',
+    ]);
+
+    if ($error = $this->passwordIsConfirmed($request)) {
+        return $error;
+    }
+
+    $result = DB::transaction(function () use ($request) {
+        $config = SystemConfiguration::firstOrFail();
+        $config->update(['active_cycle' => $request->cycle_type]);
+
+        // Tutup riwayat putaran sebelumnya jika ada
+        CycleHistory::whereNull('ended_at')->update(['ended_at' => now()]);
+
+        // Catat log riwayat putaran baru
+        $history = CycleHistory::create([
+            'cycle_number' => $request->cycle_type,
+            'started_at' => now(),
+            'changed_by' => $request->user()->id,
+        ]);
+
+        return [
+            'active_cycle' => $config->active_cycle,
+            'history' => $history,
+        ];
+    });
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Putaran aktif berhasil diubah.',
+        'data' => $result,
+    ], 200);
+}
+```
+*Penjelasan:* Memvalidasi kata sandi akun pemanggil menggunakan helper `$this->passwordIsConfirmed($request)`. Jika verifikasi gagal, langsung mengembalikan HTTP 422 Unprocessable Entity. Jika valid, dalam satu transaksi atomik nilai `active_cycle` diperbarui, log putaran sebelumnya ditutup dengan mengisi `ended_at = now()`, dan baris baru di-insert pada tabel `cycle_history` dengan menyertakan `changed_by`.
+
+---
+
+## 10. Daftar Endpoint API Fase 1
+
+| Method | Endpoint | Hak Akses | Parameter / Body | Deskripsi & Response |
+|---|---|---|---|---|
+| `GET` | `/api/rooms` | Terautentikasi | Query: `search`, `per_page` | Daftar master ruangan berpaginasi (HTTP 200). |
+| `POST` | `/api/rooms` | Waka Kurikulum | Body: `name`, `capacity` | Tambah ruangan baru (HTTP 201). |
+| `PUT` | `/api/rooms/{id}` | Waka Kurikulum | Body: `name`, `capacity` | Update ruangan (HTTP 200). |
+| `DELETE` | `/api/rooms/{id}` | Waka Kurikulum | Path: `id` | Soft-delete ruangan (HTTP 200), tolak 409 jika terikat jadwal aktif. |
+| `GET` | `/api/subjects` | Terautentikasi | Query: `search`, `per_page` | Daftar mata pelajaran berpaginasi (HTTP 200). |
+| `POST` | `/api/subjects` | Waka Kurikulum | Body: `name` | Tambah mata pelajaran baru (HTTP 201). |
+| `PUT` | `/api/subjects/{id}` | Waka Kurikulum | Body: `name` | Update mata pelajaran (HTTP 200). |
+| `DELETE` | `/api/subjects/{id}` | Waka Kurikulum | Path: `id` | Soft-delete mata pelajaran (HTTP 200), tolak 409 jika terikat jadwal. |
+| `GET` | `/api/classes` | Terautentikasi | Query: `search`, `per_page` | Daftar kelas lengkap beserta `nextClass` (HTTP 200). |
+| `PUT` | `/api/classes/{id}` | Waka Kurikulum | Body: `name`, `level`, `next_class_id` | Update kelas dan mapping kelas tujuan lanjutan (HTTP 200). |
+| `POST` | `/api/class-promotions` | Waka Kurikulum | *(None)* | Eksekusi massal kenaikan kelas dan kelulusan (HTTP 200). |
+| `GET` | `/api/teachers` | Terautentikasi | Query: `search`, `per_page` | Daftar guru lengkap beserta penugasan tambahannya (HTTP 200). |
+| `POST` | `/api/teachers` | Waka Kurikulum | Body: `name`, `nip`/`nis_nip`, `fet_staff_id` | Buat akun guru baru dengan password otomatis (HTTP 201). |
+| `PUT` | `/api/teachers/{id}` | Waka Kurikulum | Body: `name`, `nip`, `fet_staff_id` | Update profil guru dan ID sinkronisasi FET (HTTP 200). |
+| `DELETE` | `/api/teachers/{id}` | Waka Kurikulum | Path: `id` | Soft-delete guru (HTTP 200), tolak 409 jika terikat jadwal. |
+| `POST` | `/api/teachers/{id}/assignments` | Waka Kurikulum | Body: `type` (`kesiswaan`/`wali_kelas`), `class_id` | Berikan tugas tambahan guru (HTTP 201). |
+| `DELETE` | `/api/teachers/{id}/assignments/{assignment_id}` | Waka Kurikulum | Path: `id`, `assignment_id` | Cabut penugasan tambahan guru (HTTP 200). |
+| `GET` | `/api/students` | Terautentikasi | Query: `search`, `class_id`, `per_page` | Daftar siswa berpaginasi terfilter (HTTP 200). |
+| `POST` | `/api/students` | Waka Kurikulum | Body: `name`, `nis`, `class_id` | Daftarkan siswa baru + akun orang tua `P-{nis}` (HTTP 201). |
+| `PUT` | `/api/students/{id}` | Waka Kurikulum | Body: `name`, `nis`, `class_id` | Update profil siswa dan sinkronisasi otomatis nama/NIS orang tua (HTTP 200). |
+| `DELETE` | `/api/students/{id}` | Waka Kurikulum | Path: `id` | Soft-delete siswa dan akun orang tuanya sekaligus (HTTP 200). |
+| `POST` | `/api/students/{id}/hold-back` | Waka Kurikulum | Path: `id` | Tandai siswa tinggal kelas (`is_held_back = true`) (HTTP 200). |
+| `GET` | `/api/academic-settings` | Waka Kurikulum | *(None)* | Mengambil data putaran aktif & status upacara (HTTP 200). |
+| `PATCH` | `/api/academic-settings` | Waka Kurikulum | Body: `cycle_type` (`1`/`2`), `password` | Ubah putaran aktif dengan verifikasi password (HTTP 200). |
+| `PATCH` | `/api/academic-settings/monday-status` | Waka Kurikulum | Body: `is_upacara`, `password` | Ubah status upacara Senin dengan verifikasi password (HTTP 200). |
+| `GET` | `/api/cycle-history` | Waka Kurikulum | Query: `per_page` | Daftar riwayat pergantian putaran berpaginasi (HTTP 200). |
+
+---
+
+## 11. Command Terminal yang Dijalankan
+
+| Command | Tujuan & Hasil |
+|---|---|
+| `php artisan make:migration add_is_held_back_to_users_table --table=users` | Menghasilkan file migration untuk kolom `is_held_back`. |
+| `php artisan migrate` | Menjalankan migration skema database baru ke tabel `users`. |
+| `php artisan test --filter=RoomTest` | Menjalankan automated test modul Room (7 test lulus, 22 assertions). |
+| `php artisan test --filter=SubjectTest` | Menjalankan automated test modul Subject (7 test lulus, 22 assertions). |
+| `php artisan test --filter=TeacherManagementTest` | Menjalankan automated test modul Guru & Penugasan (9 test lulus, 31 assertions). |
+| `php artisan test --filter=StudentManagementTest` | Menjalankan automated test modul Siswa & Orang Tua (6 test lulus, 27 assertions). |
+| `php artisan test --filter=ClassPromotionTest` | Menjalankan automated test Promosi Kelas & Kelulusan (4 test lulus, 12 assertions). |
+| `php artisan test --filter=AcademicSettingTest` | Menjalankan automated test Setting Akademik & Putaran (6 test lulus, 22 assertions). |
+| `php artisan test` | Menjalankan seluruh test suite proyek: **73 test lulus (311 assertions)** tanpa regresi. |
+
+---
+
+## 12. Hasil Testing, Kendala & Status Penyelesaian
+
+### 12.1 Hasil Pengujian Automated Test
+Seluruh modul Fase 1 telah diuji menggunakan PHPUnit / Pest Feature Test pada SQLite in-memory dan database PostgreSQL:
+```
+Tests:    73 passed (311 assertions)
+Duration: 2.67s
+```
+Rincian modul uji Fase 1:
+- `RoomTest`: Pengujian pencarian nama ruangan, penambahan, perubahan, soft delete, proteksi 409 jika terikat jadwal aktif, dan otorisasi role ➔ **LULUS (7 test)**
+- `SubjectTest`: Pengujian listing mata pelajaran, pencarian, soft delete, kemampuan reuse nama mapel yang terhapus, proteksi 409 jika terikat jadwal aktif, dan otorisasi role ➔ **LULUS (7 test)**
+- `TeacherManagementTest`: Pengujian CRUD profil guru, integrasi `fet_staff_id`, auto-password 8 karakter, penugasan `wali_kelas` dan `kesiswaan`, proteksi 1 kelas 1 wali kelas aktif, pencabutan penugasan, dan proteksi 409 ➔ **LULUS (9 test)**
+- `StudentManagementTest`: Pengujian listing siswa dengan filter kelas, auto-provisioning akun orang tua ber-prefix `P-{nis}`, update siswa dengan sinkronisasi orang tua, cascade soft-delete orang tua, dan endpoint penandaan tinggal kelas ➔ **LULUS (6 test)**
+- `ClassPromotionTest`: Pengujian konfigurasi relasi `next_class_id`, promosi massal kelas 10 ke 11, proteksi siswa tinggal kelas, dan pencatatan kelulusan kelas 12 ➔ **LULUS (4 test)**
+- `AcademicSettingTest`: Pengujian pembacaan setting, pergantian putaran 1/2 dengan verifikasi kata sandi, proteksi kata sandi salah (422), pencatatan otomatis ke `cycle_history`, dan penyesuaian status upacara Senin ➔ **LULUS (6 test)**
+
+### 12.2 Kendala & Solusi Teknis
+1. **Pencarian Case-Insensitive Lintas Driver (PostgreSQL vs SQLite In-Memory):**
+   - *Masalah:* Operator `ILIKE` yang didukung PostgreSQL tidak didukung oleh driver SQLite yang digunakan PHPUnit saat menjalankan feature test (`near "ILIKE": syntax error`).
+   - *Solusi:* Memanfaatkan deteksi dinamis driver database:
+     `$like = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';`
+     Dengan ini, query pencarian berjalan case-insensitive sempurna baik di environment production (PostgreSQL) maupun pengujian automated (SQLite).
+2. **Fleksibilitas Input NIP / NISN pada Controller Guru:**
+   - *Masalah:* Controller awal mengharapkan field `'nip'`, sedangkan beberapa frontend/client mungkin mengirimkan `'nis_nip'`.
+   - *Solusi:* Menggunakan aturan validasi kondisional `'required_without:nis_nip'` dan fallback `$nip = $request->input('nip') ?? $request->input('nis_nip')` sehingga kompatibel dengan kedua penamaan payload.
+
+### 12.3 Status Penyelesaian Tugas Fase 1
+- [x] **Tugas 1.1** · Master Data Ruangan (`RoomController` & Routes): **SELESAI**
+- [x] **Tugas 1.2** · Master Data Mata Pelajaran (`SubjectController` & Routes): **SELESAI**
+- [x] **Tugas 1.3** · Master Data Kelas, Pemetaan `next_class_id`, dan Promosi Kenaikan Kelas Massal: **SELESAI**
+- [x] **Tugas 1.4** · Master Data Guru, Integrasi `fet_staff_id`, dan Manajemen Penugasan Tambahan: **SELESAI**
+- [x] **Tugas 1.5** · Master Data Siswa, Auto-Provisioning Orang Tua (`P-{nis}`), Cascade Delete & Hold-Back: **SELESAI**
+- [x] **Tugas 1.6** · Pengaturan Siklus Akademik, Pergantian Putaran dengan Password, dan Riwayat Putaran: **SELESAI**
+
+---
+
+## 13. Panduan Testing Endpoint melalui Postman
+
+Panduan berikut dirancang agar developer atau QA dapat menguji seluruh endpoint Fase 1 secara langsung melalui Postman.
+
+### 13.1 Persiapan & Autentikasi (Prerequisites)
+- **Base URL:** `http://127.0.0.1:8000/api`
+- **Headers Umum:**
+  ```http
+  Accept: application/json
+  Content-Type: application/json
+  ```
+- **Langkah Mendapatkan Token Waka Kurikulum:**
+  1. Method: `POST`
+  2. URL: `{{base_url}}/login`
+  3. Body raw JSON:
+     ```json
+     {
+       "identifier": "197001011990011001",
+       "password": "password"
+     }
+     ```
+  4. Ambil token dari `response.data.token`.
+  5. Tambahkan header pada request berikutnya:
+     ```http
+     Authorization: Bearer <token_waka_anda>
+     ```
+
+---
+
+### 13.2 Pengujian Master Data Ruangan (`rooms`)
+
+#### 1. List Ruangan
+- **Method:** `GET`
+- **URL:** `{{base_url}}/rooms?search=Lab&per_page=10`
+- **Headers:** `Accept: application/json`, `Authorization: Bearer {{token}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data ruangan berhasil diambil.",
+    "data": [
+      {
+        "id": 1,
+        "name": "Lab Komputer 1",
+        "capacity": 36,
+        "created_at": "2026-10-20T08:00:00.000000Z",
+        "updated_at": "2026-10-20T08:00:00.000000Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 10,
+      "total": 1,
+      "last_page": 1
+    }
+  }
+  ```
+
+#### 2. Tambah Ruangan Baru
+- **Method:** `POST`
+- **URL:** `{{base_url}}/rooms`
+- **Headers:** `Authorization: Bearer {{token_waka}}`, `Content-Type: application/json`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Lab Jaringan 2",
+    "capacity": 36
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Data ruangan berhasil ditambahkan.",
+    "data": {
+      "id": 2,
+      "name": "Lab Jaringan 2",
+      "capacity": 36
+    }
+  }
+  ```
+- **Skenario Validasi Gagal (422 Unprocessable Entity):**
+  Kirimkan kapasitas `0` atau nama kosong.
+  ```json
+  {
+    "success": false,
+    "message": "The capacity field must be at least 1.",
+    "errors": {
+      "capacity": ["The capacity field must be at least 1."]
+    }
+  }
+  ```
+
+#### 3. Update Ruangan
+- **Method:** `PUT`
+- **URL:** `{{base_url}}/rooms/2`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Lab Cloud Computing",
+    "capacity": 40
+  }
+  ```
+- **Expected Response (200 OK):** Berisi data ruangan terbarui.
+
+#### 4. Hapus Ruangan (Soft Delete & Proteksi 409)
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/rooms/2`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Skenario Sukses (200 OK):** Ruangan belum dipakai di tabel jadwal.
+  ```json
+  {
+    "success": true,
+    "message": "Data ruangan berhasil dihapus.",
+    "data": { "id": 2, "name": "Lab Cloud Computing" }
+  }
+  ```
+- **Skenario Konflik Terikat Jadwal (409 Conflict):**
+  ```json
+  {
+    "success": false,
+    "message": "Ruangan tidak bisa dihapus karena masih digunakan untuk jadwal aktif.",
+    "errors": {
+      "room": ["Hapus atau pindahkan jadwal terkait terlebih dahulu."]
+    }
+  }
+  ```
+
+---
+
+### 13.3 Pengujian Master Data Mata Pelajaran (`subjects`)
+
+#### 1. List Mata Pelajaran
+- **Method:** `GET`
+- **URL:** `{{base_url}}/subjects?search=Matematika`
+- **Headers:** `Authorization: Bearer {{token}}`
+- **Expected Response (200 OK):** Daftar mapel berpaginasi.
+
+#### 2. Tambah Mata Pelajaran
+- **Method:** `POST`
+- **URL:** `{{base_url}}/subjects`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Pemrograman Web Lanjut"
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Data mata pelajaran berhasil ditambahkan.",
+    "data": {
+      "id": 1,
+      "name": "Pemrograman Web Lanjut"
+    }
+  }
+  ```
+
+#### 3. Update Mata Pelajaran
+- **Method:** `PUT`
+- **URL:** `{{base_url}}/subjects/1`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Pemrograman Berbasis Objek"
+  }
+  ```
+- **Expected Response (200 OK):** Data mapel berhasil diperbarui.
+
+#### 4. Hapus Mata Pelajaran
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/subjects/1`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK / 409 Conflict):**
+  Sama seperti ruangan, ditolak HTTP 409 jika terikat jadwal aktif pada Putaran 1/2.
+
+---
+
+### 13.4 Pengujian Master Data Kelas & Promosi Massal (`classes`, `class-promotions`)
+
+#### 1. List Kelas dengan Relasi Next Class
+- **Method:** `GET`
+- **URL:** `{{base_url}}/classes`
+- **Headers:** `Authorization: Bearer {{token}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data kelas berhasil diambil.",
+    "data": [
+      {
+        "id": 1,
+        "name": "X RPL 1",
+        "level": 10,
+        "next_class_id": 2,
+        "next_class": {
+          "id": 2,
+          "name": "XI RPL 1",
+          "level": 11
+        }
+      }
+    ]
+  }
+  ```
+
+#### 2. Konfigurasi Pemetaan Kelas Lanjutan
+- **Method:** `PUT`
+- **URL:** `{{base_url}}/classes/1`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "X RPL 1",
+    "level": 10,
+    "next_class_id": 2
+  }
+  ```
+- **Expected Response (200 OK):** Data kelas berhasil diperbarui.
+- **Skenario Error (422 Unprocessable Entity):** Jika `next_class_id` diisi dengan ID dirinya sendiri (`id = 1`).
+
+#### 3. Eksekusi Kenaikan Kelas & Kelulusan Massal
+- **Method:** `POST`
+- **URL:** `{{base_url}}/class-promotions`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body:** *(Kosong)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Proses kenaikan kelas dan kelulusan berhasil diproses.",
+    "data": {
+      "total_students": 32,
+      "promoted": 30,
+      "held_back": 1,
+      "graduated": 1
+    }
+  }
+  ```
+
+---
+
+### 13.5 Pengujian Master Data Guru & Penugasan Tambahan (`teachers`, `assignments`)
+
+#### 1. List Guru dengan Penugasan
+- **Method:** `GET`
+- **URL:** `{{base_url}}/teachers?search=Budi`
+- **Headers:** `Authorization: Bearer {{token}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data guru berhasil diambil.",
+    "data": [
+      {
+        "id": 3,
+        "name": "Budi Santoso, M.Kom",
+        "nis_nip": "198001012010011002",
+        "fet_staff_id": "BS01",
+        "role": "teacher",
+        "assignments": [
+          {
+            "id": 1,
+            "user_id": 3,
+            "type": "wali_kelas",
+            "class_id": 1,
+            "school_class": {
+              "id": 1,
+              "name": "X RPL 1"
+            }
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+#### 2. Tambah Guru Baru (Auto-Provisioning Password)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/teachers`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Dewi Sartika, S.Pd",
+    "nip": "198802022015032001",
+    "fet_staff_id": "DS02"
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Akun guru berhasil dibuat.",
+    "data": {
+      "teacher": {
+        "id": 5,
+        "name": "Dewi Sartika, S.Pd",
+        "nis_nip": "198802022015032001",
+        "fet_staff_id": "DS02",
+        "role": "teacher",
+        "must_change_password": true
+      },
+      "password": "A8bX19zK"
+    }
+  }
+  ```
+
+#### 3. Berikan Tugas Tambahan Guru
+- **Method:** `POST`
+- **URL:** `{{base_url}}/teachers/5/assignments`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON (Wali Kelas):**
+  ```json
+  {
+    "type": "wali_kelas",
+    "class_id": 1
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Tugas tambahan berhasil diberikan.",
+    "data": {
+      "id": 2,
+      "user_id": 5,
+      "type": "wali_kelas",
+      "class_id": 1
+    }
+  }
+  ```
+- **Skenario Konflik Wali Kelas (422 Unprocessable Entity):**
+  Jika kelas 1 sudah memiliki wali kelas guru lain:
+  ```json
+  {
+    "success": false,
+    "message": "Kelas ini sudah memiliki wali kelas aktif."
+  }
+  ```
+
+#### 4. Cabut Tugas Tambahan Guru
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/teachers/5/assignments/2`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Penugasan guru berhasil dicabut.",
+    "data": null
+  }
+  ```
+
+---
+
+### 13.6 Pengujian Master Data Siswa & Hold-Back (`students`, `hold-back`)
+
+#### 1. Tambah Siswa Baru (Auto-Provisioning Orang Tua)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/students`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "name": "Ahmad Fauzi",
+    "nis": "24001",
+    "class_id": 1
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Data siswa berhasil ditambahkan.",
+    "data": {
+      "student": {
+        "id": 10,
+        "name": "Ahmad Fauzi",
+        "role": "student",
+        "nis_nip": "24001",
+        "class_id": 1
+      },
+      "parent": {
+        "id": 11,
+        "name": "Wali dari Ahmad Fauzi",
+        "role": "parent",
+        "nis_nip": "P-24001",
+        "linked_student_id": 10
+      },
+      "generate_password": "qW83mZ1e"
+    }
+  }
+  ```
+
+#### 2. Tandai Siswa Tinggal Kelas (Hold-Back)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/students/10/hold-back`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body:** *(Kosong)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Siswa berhasil ditandai tinggal kelas.",
+    "data": {
+      "id": 10,
+      "name": "Ahmad Fauzi",
+      "is_held_back": true
+    }
+  }
+  ```
+
+#### 3. Hapus Siswa (Cascade Soft Delete ke Orang Tua)
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/students/10`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data siswa berhasil dihapus.",
+    "data": { "id": 10, "name": "Ahmad Fauzi" }
+  }
+  ```
+  *Verifikasi:* Akun orang tua dengan `id: 11` otomatis ter-soft-delete dari tabel `users`.
+
+---
+
+### 13.7 Pengujian Pengaturan Siklus Akademik (`academic-settings`, `cycle-history`)
+
+#### 1. Ambil Pengaturan Akademik Aktif
+- **Method:** `GET`
+- **URL:** `{{base_url}}/academic-settings`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Pengaturan akademik berhasil diambil.",
+    "data": {
+      "id": 1,
+      "active_cycle": 1,
+      "monday_is_upacara": true
+    }
+  }
+  ```
+
+#### 2. Ganti Putaran Aktif (Switch Cycle)
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/academic-settings`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "cycle_type": 2,
+    "password": "password"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Putaran aktif berhasil diubah.",
+    "data": {
+      "active_cycle": 2,
+      "history": {
+        "id": 3,
+        "cycle_number": 2,
+        "started_at": "2026-10-20T09:00:00.000000Z",
+        "changed_by": 1
+      }
+    }
+  }
+  ```
+- **Skenario Password Salah (422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Validasi Gagal",
+    "errors": {
+      "password": ["Password tidak valid"]
+    }
+  }
+  ```
+
+#### 3. Update Status Upacara Bendera Senin
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/academic-settings/monday-status`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "is_upacara": false,
+    "password": "password"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Status upacara hari senin berhasil diperbarui.",
+    "data": {
+      "monday_is_upacara": false
+    }
+  }
+  ```
+
+#### 4. Ambil Riwayat Pergantian Putaran
+- **Method:** `GET`
+- **URL:** `{{base_url}}/cycle-history?per_page=10`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Riwayat pergantian putaran berhasil diambil.",
+    "data": [
+      {
+        "id": 3,
+        "cycle_number": 2,
+        "started_at": "2026-10-20T09:00:00.000000Z",
+        "ended_at": null,
+        "changed_by": 1,
+        "changed_by_user": {
+          "id": 1,
+          "name": "Waka Kurikulum",
+          "nis_nip": "197001011990011001"
+        }
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 10,
+      "total": 1,
+      "last_page": 1
+    }
+  }
+  ```
+
+---
+
+## 14. Kesiapan Menuju Fase 2
+
+Dengan selesainya seluruh implementasi dan verifikasi Fase 1:
+1. **Master Data Siap 100%**: Ruangan, Mata Pelajaran, Kelas, Guru (dengan `fet_staff_id`), dan Siswa sudah siap digunakan sebagai entitas referensi untuk modul jadwal dan import PDF.
+2. **Siklus Akademik Terkendali**: Pengaturan putaran mingguan (Putaran 1 & Putaran 2) sudah berfungsi aman dengan konfirmasi kata sandi dan audit riwayat `cycle_history`.
+3. **Pengujian Menyeluruh**: Sebanyak **73 automated test** berhasil dilewati dengan tingkat kelulusan 100% tanpa regresi.
+4. Project siap sepenuhnya untuk melanjutkan ke **Fase 2: Jadwal Terpusat, Resolusi Jam Dinamis & Konfirmasi Import PDF**.

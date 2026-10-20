@@ -26,7 +26,8 @@ use Laravel\Sanctum\HasApiTokens;
     'fet_staff_id',
     'google_id',
     'phone_number',
-    'graduation_date'
+    'graduation_date',
+    'is_held_back'
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -45,7 +46,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'must_change_password' => 'boolean',
-            'graduation_date' => 'date'
+            'graduation_date' => 'date',
+            'is_held_back' => 'boolean'
         ];
     }
 

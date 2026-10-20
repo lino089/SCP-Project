@@ -7,6 +7,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\ReportController;
+use App\Http\Controllers\API\RoomController;
 use App\Http\Controllers\API\ScheduleController;
 use App\Http\Controllers\API\ScheduleImportController;
 use App\Http\Controllers\API\SchoolClassController;
@@ -32,9 +33,15 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/classes', [SchoolClassController::class, 'index']);
 
-    // 1. Khusus Waka Kurikulum
+    // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3)
+    Route::get('/classes', [SchoolClassController::class, 'index']);
+    Route::get('/rooms', [RoomController::class, 'index']);
+    Route::get('/subjects', [SubjectController::class, 'index']);
+    Route::get('/teachers', [TeacherController::class, 'index']);
+    Route::get('/students', [StudentController::class, 'index']);
+
+    // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
         Route::get('/waka-only', function () {
             return response()->json([
@@ -43,16 +50,43 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ]);
         });
 
+        // 9.2 Setting Akademik & Riwayat
+        Route::get('/academic-settings', [AcademicSettingController::class, 'index']);
+        Route::patch('/academic-settings', [AcademicSettingController::class, 'updateCycle']);
         Route::patch('/academic-settings/monday-status', [AcademicSettingController::class, 'updateMondayStatus']);
+        Route::get('/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
+        Route::get('/academic-settings/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
 
+        // 9.3 Master Data Classes
         Route::post('/classes', [SchoolClassController::class, 'store']);
+        Route::put('/classes/{id}', [SchoolClassController::class, 'update']);
         Route::delete('/classes/{id}', [SchoolClassController::class, 'destroy']);
+        Route::post('/class-promotions', [SchoolClassController::class, 'promoteClasses']);
 
-        Route::post('/students', [StudentController::class, 'store']);
-        Route::post('/teachers', [TeacherController::class, 'store']);
-        Route::post('/teachers/{id}/assignments', [TeacherController::class, 'assignRole']);
+        // 9.3 Master Data Rooms
+        Route::post('/rooms', [RoomController::class, 'store']);
+        Route::put('/rooms/{id}', [RoomController::class, 'update']);
+        Route::delete('/rooms/{id}', [RoomController::class, 'destroy']);
+
+        // 9.3 Master Data Subjects
         Route::post('/subjects', [SubjectController::class, 'store']);
+        Route::put('/subjects/{id}', [SubjectController::class, 'update']);
+        Route::delete('/subjects/{id}', [SubjectController::class, 'destroy']);
 
+        // 9.3 Master Data Teachers & Assignments
+        Route::post('/teachers', [TeacherController::class, 'store']);
+        Route::put('/teachers/{id}', [TeacherController::class, 'update']);
+        Route::delete('/teachers/{id}', [TeacherController::class, 'destroy']);
+        Route::post('/teachers/{id}/assignments', [TeacherController::class, 'assignRole']);
+        Route::delete('/teachers/{id}/assignments/{assignment_id}', [TeacherController::class, 'revokeRole']);
+
+        // 9.3 Master Data Students & Hold-Back
+        Route::post('/students', [StudentController::class, 'store']);
+        Route::put('/students/{id}', [StudentController::class, 'update']);
+        Route::delete('/students/{id}', [StudentController::class, 'destroy']);
+        Route::post('/students/{id}/hold-back', [StudentController::class, 'holdBack']);
+
+        // Schedules & Imports Waka
         Route::post('/schedules', [ScheduleController::class, 'store']);
         Route::put('/schedules/{id}', [ScheduleController::class, 'update']);
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
