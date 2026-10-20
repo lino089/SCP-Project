@@ -40,6 +40,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/subjects', [SubjectController::class, 'index']);
     Route::get('/teachers', [TeacherController::class, 'index']);
     Route::get('/students', [StudentController::class, 'index']);
+    Route::get('/schedules', [ScheduleController::class, 'index']);
 
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {

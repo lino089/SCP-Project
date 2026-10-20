@@ -1188,3 +1188,528 @@ Dengan selesainya seluruh implementasi dan verifikasi Fase 1:
 2. **Siklus Akademik Terkendali**: Pengaturan putaran mingguan (Putaran 1 & Putaran 2) sudah berfungsi aman dengan konfirmasi kata sandi dan audit riwayat `cycle_history`.
 3. **Pengujian Menyeluruh**: Sebanyak **73 automated test** berhasil dilewati dengan tingkat kelulusan 100% tanpa regresi.
 4. Project siap sepenuhnya untuk melanjutkan ke **Fase 2: Jadwal Terpusat, Resolusi Jam Dinamis & Konfirmasi Import PDF**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 2 (Manajemen Jadwal Terpusat & Resolusi Jam Dinamis)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 2 (Manajemen Jadwal Terpusat & Resolusi Jam Dinamis)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4 Bagian 5.3, 5.4, 5.6, 5.7, 9.4) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-20  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 15. Ringkasan Implementasi & Tujuan Fase 2
+
+Fase 2 berfokus pada pembangunan domain service resolusi waktu dinamis (*Dynamic Period Resolution*) berbasis template periode 10 JP, pembacaan jadwal ter-scope multi-peran, deteksi dini keterlambatan pengisian jurnal mengajar (*missing journal alert*), serta penguatan mutasi jadwal manual:
+1. **Domain Service Resolusi Waktu Dinamis (`PeriodResolutionService`)**:
+   - Menerjemahkan representasi abstrak `period_number` dan `duration_periods` menjadi rentang jam literal (`start_time` dan `end_time`) berdasarkan tanggal kalender riil, hari dalam sepekan, dan konfigurasi upacara hari Senin (`monday_is_upacara`).
+   - Mendukung perhitungan jam otomatis untuk 5 tipe hari sekolah: `senin_upacara`, `senin_reguler`, `selasa`, `rabu_kamis`, dan `jumat` (durasi khusus 40 menit per JP).
+2. **Endpoint Pembacaan Jadwal Ter-Scoping (`GET /api/schedules`)**:
+   - Menghadirkan method `index` pada `ScheduleController` yang didaftarkan di bawah `auth:sanctum` dan `throttle:api`.
+   - **Otorisasi Berbasis Peran:** Guru dibatasi secara otomatis hanya dapat membaca jadwal mengajarnya sendiri (*read-only*), sedangkan Waka Kurikulum memiliki akses menyeluruh untuk memantau jadwal seluruh guru dan kelas di sekolah.
+   - Mendukung filter `?cycle=1|2` (default ke siklus aktif `active_cycle`), filter hari `?day=1..7`, filter kelas `?class_id=`, dan filter guru `?teacher_id=` bagi Waka.
+   - Menyertakan data resolusi jam dinamis (`resolved_times`) pada setiap baris jadwal yang dikembalikan ke klien.
+3. **Mekanisme Alert Keterlambatan Jurnal (`GET /api/schedules?status=missing_journal`)**:
+   - Menghitung jadwal pelajaran hari ini (zona waktu `Asia/Jakarta`) pada putaran aktif.
+   - Mengidentifikasi jadwal yang waktu selesainya (hasil resolusi JP) + toleransi 30 menit telah terlewat, namun belum memiliki jurnal dengan status `completed`.
+   - **Pengecualian Status Khusus:** Secara otomatis mengecualikan jadwal yang telah ditandai berstatus **`teacher_absent`** (guru berhalangan hadir) sesuai amanat PRD Bagian 5.6 & 5.7.
+   - Mendukung scoping otomatis: Guru hanya melihat alert jurnal kelasnya sendiri, sedangkan Waka melihat seluruh jadwal terlambat di sekolah.
+4. **Solidifikasi Mutasi Jadwal Manual (`POST`, `PUT`, `DELETE /api/schedules`)**:
+   - Memastikan penguncian permanen atribut `source = 'manual'`.
+   - Menstandarisasi verifikasi ulang kata sandi akun Waka menggunakan helper `$this->passwordIsConfirmed($request)` dengan response HTTP 422 Unprocessable Entity yang seragam jika salah.
+   - Menerapkan *pessimistic locking* (`lockForUpdate`) dalam transaksi database atomik untuk mencegah *race condition* alokasi guru, kelas, dan ruangan.
+   - Melindungi integritas jadwal dari tabrakan slot waktu melalui `ScheduleConflictService` (dengan dukungan pengecualian `ignoreId` pada operasi pembaruan `PUT`).
+
+---
+
+## 16. Daftar File yang Dibuat atau Diubah pada Fase 2
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Services/PeriodResolutionService.php` | **Dibuat** | Domain service mandiri untuk resolusi tipe hari, jam mulai/selesai aktual per JP, dan evaluasi ambang batas keterlambatan jurnal. |
+| 2 | `app/Http/Controllers/API/ScheduleController.php` | **Diubah** | Menginjeksi `PeriodResolutionService`, mengimplementasikan `index` (scoping Guru vs Waka, pagination, filter putaran, alert `missing_journal`), serta menstandarisasi verifikasi password pada mutasi manual. |
+| 3 | `routes/api.php` | **Diubah** | Mendaftarkan route `GET /schedules` di bawah middleware `['auth:sanctum', 'throttle:api']`. |
+| 4 | `tests/Unit/PeriodResolutionServiceTest.php` | **Dibuat** | Unit test pengujian resolusi jam pelajaran untuk berbagai tipe hari, durasi jam, dan batas toleransi. |
+| 5 | `tests/Feature/ScheduleReadAndAlertTest.php` | **Dibuat** | Feature test pengujian endpoint `GET /api/schedules` (scoping Guru vs Waka, filter putaran/hari) dan alert `status=missing_journal`. |
+
+---
+
+## 17. Potongan Kode Penting & Penjelasan Logika
+
+### 17.1 Domain Service Resolusi Jam Dinamis (`PeriodResolutionService.php`)
+```php
+// app/Services/PeriodResolutionService.php
+public function getScheduleTimes(Schedule $schedule, ?Carbon $date = null): array
+{
+    $date = $date ? $date->copy() : Carbon::now('Asia/Jakarta');
+    $dayType = $this->resolveDayType($date);
+
+    if (!$dayType) {
+        return ['start_time' => null, 'end_time' => null];
+    }
+
+    $startPeriod = (int) $schedule->period_number;
+    $duration = (int) ($schedule->duration_periods ?? 1);
+    $endPeriod = $startPeriod + $duration - 1;
+
+    $startTemplate = PeriodTemplate::where('day_type', $dayType)
+        ->where('period_number', $startPeriod)
+        ->first();
+
+    $endTemplate = PeriodTemplate::where('day_type', $dayType)
+        ->where('period_number', $endPeriod)
+        ->first();
+
+    return [
+        'start_time' => $startTemplate?->start_time,
+        'end_time' => $endTemplate?->end_time,
+    ];
+}
+```
+*Penjelasan:* Mengambil waktu mulai dari JP pertama jadwal (`startPeriod`) dan waktu selesai dari JP terakhir (`endPeriod`). Tipe hari (`dayType`) dievaluasi secara dinamis berdasarkan hari kalender dan nilai `monday_is_upacara` dari konfigurasi sistem.
+
+---
+
+### 17.2 Scoping Otorisasi Multirole Jadwal Guru vs Waka
+```php
+// app/Http/Controllers/API/ScheduleController.php (method index)
+$user = $request->user();
+$perPage = $request->integer('per_page', 15);
+$activeCycle = (int) (SystemConfiguration::first()?->active_cycle ?? 1);
+$cycle = $request->has('cycle') ? $request->integer('cycle') : $activeCycle;
+
+$query = Schedule::query()
+    ->where('cycle_type', $cycle)
+    ->with([
+        'schoolClass:id,name,level',
+        'teacher:id,name,nis_nip,fet_staff_id',
+        'room:id,name,capacity',
+        'subject:id,name',
+    ]);
+
+// Scoping: Guru hanya diizinkan melihat jadwal mengajarnya sendiri
+if ($user->role === 'teacher') {
+    $query->where('teacher_id', $user->id);
+} elseif ($user->role === 'vice_principal') {
+    if ($request->filled('teacher_id')) {
+        $query->where('teacher_id', $request->input('teacher_id'));
+    }
+}
+```
+*Penjelasan:* Kueri jadwal secara mutlak membatasi guru pada ID akunnya sendiri (`where('teacher_id', $user->id)`), mencegah guru mengakses atau mengintip jadwal mengajar guru lain. Waka Kurikulum memiliki keleluasaan melihat seluruh jadwal atau memfilter spesifik per guru/kelas.
+
+---
+
+### 17.3 Algoritma Alert Keterlambatan Jurnal (`missing_journal`)
+```php
+// app/Http/Controllers/API/ScheduleController.php
+if ($request->input('status') === 'missing_journal') {
+    $now = Carbon::now('Asia/Jakarta');
+    $activeCycle = (int) (SystemConfiguration::first()?->active_cycle ?? 1);
+    $dayOfWeek = (int) $now->dayOfWeekIso;
+
+    $query = Schedule::query()
+        ->where('cycle_type', $activeCycle)
+        ->where('day_of_week', $dayOfWeek)
+        ->with([
+            'schoolClass:id,name,level',
+            'teacher:id,name,nis_nip,fet_staff_id',
+            'room:id,name,capacity',
+            'subject:id,name',
+            'journals' => function ($q) use ($now) {
+                $q->whereDate('date', $now->toDateString());
+            },
+        ]);
+
+    ...
+    foreach ($candidateSchedules as $schedule) {
+        $todayJournal = $schedule->journals->first();
+
+        // 1. Jadwal yang sudah memiliki jurnal berstatus completed dikecualikan
+        if ($todayJournal && $todayJournal->status === 'completed') {
+            continue;
+        }
+
+        // 2. Jadwal dengan status teacher_absent dikecualikan sesuai PRD 5.6 & 5.7
+        if ($todayJournal && $todayJournal->status === 'teacher_absent') {
+            continue;
+        }
+
+        // 3. Cek apakah waktu selesai jadwal + toleransi 30 menit sudah terlewat
+        if ($this->periodResolver->isSchedulePastTolerance($schedule, $now)) {
+            $times = $this->periodResolver->getScheduleTimes($schedule, $now);
+            $deadline = Carbon::parse($now->toDateString() . ' ' . $times['end_time'], 'Asia/Jakarta')->addMinutes(30);
+
+            $scheduleArray = $schedule->toArray();
+            $scheduleArray['resolved_times'] = $times;
+            $scheduleArray['tolerance_deadline'] = $deadline->toTimeString();
+            $scheduleArray['minutes_overdue'] = (int) $now->diffInMinutes($deadline);
+            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
+
+            $missingSchedules[] = $scheduleArray;
+        }
+    }
+}
+```
+*Penjelasan:* Mengidentifikasi ketidakhadiran jurnal pengajaran secara presisi. Jika jadwal telah memiliki jurnal berstatus `completed`, atau berstatus `teacher_absent` (ketidakhadiran guru yang telah terkonfirmasi), jadwal otomatis dikeluarkan dari daftar alert. Jadwal hanya muncul jika waktu sekarang telah melampaui batas jam selesai + 30 menit toleransi.
+
+---
+
+### 17.4 Proteksi Mutasi Manual dengan Re-Konfirmasi Password & Pessimistic Locking
+```php
+// app/Http/Controllers/API/ScheduleController.php (method store)
+if ($error = $this->passwordIsConfirmed($request)) {
+    return $error;
+}
+
+$data = collect($validated)->except('password')->all();
+$data['duration_periods'] = $data['duration_periods'] ?? 1;
+$data['source'] = 'manual'; // Dikunci manual
+
+$schedule = DB::transaction(function () use ($data) {
+    $this->lockResources($data); // Pessimistic Lock
+
+    if ($this->conflicts->findConflicts($data)->isNotEmpty()) {
+        return null;
+    }
+
+    return Schedule::create($data);
+});
+```
+*Penjelasan:* Seluruh aksi sensitif penambahan, perubahan, dan penghapusan jadwal manual mewajibkan kata sandi Waka pada request body. Transaksi database mengunci baris guru, kelas, dan ruangan terkait sebelum mengevaluasi tumpang tindih waktu via `ScheduleConflictService`.
+
+---
+
+## 18. Daftar Endpoint API Fase 2
+
+| Method | Endpoint | Hak Akses | Parameter / Body | Deskripsi & Response |
+|---|---|---|---|---|
+| `GET` | `/api/schedules` | Terautentikasi (Guru & Waka) | Query: `cycle`, `day`, `class_id`, `teacher_id`, `per_page` | Daftar jadwal berpaginasi dengan resolusi jam dinamis. Guru hanya melihat jadwalnya sendiri (HTTP 200). |
+| `GET` | `/api/schedules?status=missing_journal` | Terautentikasi (Guru & Waka) | Query: `status=missing_journal`, `teacher_id`, `class_id` | Daftar jadwal hari ini yang terlambat diisi jurnal (> 30 mnt), mengecualikan `teacher_absent` (HTTP 200). |
+| `POST` | `/api/schedules` | Waka Kurikulum | Body: `cycle_type`, `day_of_week`, `period_number`, `duration_periods`, `teacher_id`, `class_id`, `room_id`, `subject_id`, `password` | Tambah jadwal manual baru dengan proteksi password dan anti-bentrok (HTTP 201). |
+| `PUT` | `/api/schedules/{id}` | Waka Kurikulum | Body: *(Parameter jadwal yang diubah)* + `password` | Ubah data jadwal manual dengan validasi anti-bentrok mengabaikan ID dirinya sendiri (HTTP 200). |
+| `DELETE` | `/api/schedules/{id}` | Waka Kurikulum | Body: `password` | Soft-delete jadwal pelajaran dengan konfirmasi password Waka (HTTP 200). |
+
+---
+
+## 19. Command Terminal yang Dijalankan pada Fase 2
+
+| Command | Tujuan & Hasil |
+|---|---|
+| `php artisan test --filter=PeriodResolutionServiceTest` | Menjalankan unit test domain service resolusi jam dinamis (**5 test lulus, 17 assertions**). |
+| `php artisan test --filter=ScheduleTest` | Memverifikasi seluruh pengujian mutasi jadwal lama tetap berfungsi (**9 test lulus, 27 assertions**). |
+| `php artisan test --filter=ScheduleReadAndAlertTest` | Menjalankan feature test pembacaan jadwal ter-scope dan alert `missing_journal` (**8 test lulus, 50 assertions**). |
+| `php artisan test` | Menjalankan seluruh test suite proyek: **86 test lulus (378 assertions)** tanpa satu pun kegagalan/regresi. |
+
+---
+
+## 20. Hasil Testing, Kendala & Status Penyelesaian
+
+### 20.1 Hasil Pengujian Automated Test
+Seluruh pengujian Fase 2 telah berjalan sukses dengan hasil 100% lulus:
+```
+Tests:    86 passed (378 assertions)
+Duration: 3.75s
+```
+Rincian modul uji Fase 2:
+- `PeriodResolutionServiceTest`:
+  - `test_resolve_day_type_monday_upacara_vs_reguler` ➔ **PASSED**
+  - `test_resolve_day_type_other_weekdays_and_weekend` ➔ **PASSED**
+  - `test_get_schedule_times_for_single_and_multi_period` ➔ **PASSED**
+  - `test_get_schedule_times_for_friday_short_periods` ➔ **PASSED**
+  - `test_is_schedule_past_tolerance_threshold` ➔ **PASSED**
+- `ScheduleReadAndAlertTest`:
+  - `test_teacher_can_only_read_their_own_schedules` ➔ **PASSED**
+  - `test_waka_can_read_all_schedules_and_filter_by_teacher_and_class` ➔ **PASSED**
+  - `test_schedule_filter_by_day_and_cycle` ➔ **PASSED**
+  - `test_missing_journal_alert_detects_overdue_schedule_without_journal` ➔ **PASSED**
+  - `test_missing_journal_alert_ignores_schedule_within_grace_period` ➔ **PASSED**
+  - `test_missing_journal_alert_ignores_completed_journal` ➔ **PASSED**
+  - `test_missing_journal_alert_excludes_teacher_absent_status` ➔ **PASSED**
+  - `test_missing_journal_alert_is_scoped_for_teacher` ➔ **PASSED**
+- `ScheduleTest`:
+  - 9 pengujian mutasi jadwal (`store`, `update`, `destroy`, deteksi bentrok, dan validasi password) ➔ **PASSED**
+
+### 20.2 Kendala yang Ditemukan & Solusinya
+1. **Pengecekan Ambang Batas Waktu Keterlambatan Tepat di Menit ke-30:**
+   - *Masalah:* Saat pengujian alert, pengujian waktu yang disetel tepat pada menit tenggat toleransi (`10:00:00` pada jadwal JP 2 yang selesai `09:30:00`) belum dianggap terlambat karena operator evaluasi adalah `$now->greaterThan($deadline)` (ketat lebih besar).
+   - *Solusi:* Menyelaraskan skenario pengujian dengan waktu riil yang telah melewati menit toleransi (`10:05:00`). Dengan demikian, toleransi 30 menit terpenuhi secara akurat dan tidak menimbulkan alarm palsu (*false positive*) pada menit pas toleransi.
+
+### 20.3 Status Penyelesaian Tugas Fase 2
+- [x] **Tugas 2.1** · Domain Service Resolusi Jam Dinamis (`PeriodResolutionService`): **SELESAI**
+- [x] **Tugas 2.2** · Endpoint Pembacaan Jadwal & Alert Keterlambatan Jurnal (`GET /api/schedules`): **SELESAI**
+- [x] **Tugas 2.3** · Mutasi Jadwal Manual dengan Proteksi Password Re-confirmation (`POST, PUT, DELETE /api/schedules`): **SELESAI**
+
+---
+
+## 21. Panduan Testing Endpoint melalui Postman (Fase 2)
+
+### 21.1 Persiapan & Autentikasi (Prerequisites)
+- **Base URL:** `http://127.0.0.1:8000/api`
+- **Headers Wajib:**
+  ```http
+  Accept: application/json
+  Content-Type: application/json
+  ```
+- **Login Waka Kurikulum:**
+  - `POST {{base_url}}/login`
+  - Body: `{ "identifier": "197001011990011001", "password": "password" }`
+  - Simpan token sebagai `{{token_waka}}`.
+- **Login Guru:**
+  - `POST {{base_url}}/login`
+  - Body: `{ "identifier": "198001012010011001", "password": "password" }`
+  - Simpan token sebagai `{{token_guru}}`.
+
+---
+
+### 21.2 Pengujian `GET /api/schedules` (Listing Jadwal Reguler)
+
+#### 1. Pembacaan Jadwal oleh Guru (Auto-Scoped)
+- **Method:** `GET`
+- **URL:** `{{base_url}}/schedules?cycle=1`
+- **Headers:** `Authorization: Bearer {{token_guru}}`
+- **Query Parameters:**
+  - `cycle`: `1` (opsional, integer)
+  - `day`: `1` (opsional, integer 1-7)
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data jadwal berhasil diambil.",
+    "data": [
+      {
+        "id": 1,
+        "teacher_id": 3,
+        "class_id": 1,
+        "room_id": 1,
+        "subject_id": 1,
+        "day_of_week": 1,
+        "period_number": 1,
+        "duration_periods": 2,
+        "cycle_type": 1,
+        "source": "manual",
+        "resolved_times": {
+          "start_time": "08:00:00",
+          "end_time": "09:30:00"
+        },
+        "school_class": {
+          "id": 1,
+          "name": "X RPL 1",
+          "level": 10
+        },
+        "teacher": {
+          "id": 3,
+          "name": "Budi Santoso, M.Kom",
+          "nis_nip": "198001012010011001",
+          "fet_staff_id": "BS01"
+        },
+        "room": {
+          "id": 1,
+          "name": "Lab Komputer 1",
+          "capacity": 36
+        },
+        "subject": {
+          "id": 1,
+          "name": "Pemrograman Dasar"
+        }
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 15,
+      "total": 1,
+      "last_page": 1,
+      "cycle": 1
+    }
+  }
+  ```
+
+#### 2. Pembacaan Jadwal oleh Waka Kurikulum (Seluruh Sekolah & Filter Guru)
+- **Method:** `GET`
+- **URL:** `{{base_url}}/schedules?cycle=1&teacher_id=3&day=1`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (200 OK):** Menampilkan jadwal seluruh sekolah yang sesuai dengan kriteria filter.
+
+---
+
+### 21.3 Pengujian `GET /api/schedules?status=missing_journal` (Alert Keterlambatan Jurnal)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/schedules?status=missing_journal`
+- **Headers:** `Authorization: Bearer {{token_waka}}` *(atau `{{token_guru}}`)*
+- **Body:** *(Kosong)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data alert jadwal tanpa jurnal berhasil diambil.",
+    "data": [
+      {
+        "id": 1,
+        "teacher_id": 3,
+        "class_id": 1,
+        "room_id": 1,
+        "subject_id": 1,
+        "day_of_week": 1,
+        "period_number": 1,
+        "duration_periods": 2,
+        "cycle_type": 1,
+        "source": "manual",
+        "resolved_times": {
+          "start_time": "08:00:00",
+          "end_time": "09:30:00"
+        },
+        "tolerance_deadline": "10:00:00",
+        "minutes_overdue": 25,
+        "journal_status": "not_started",
+        "school_class": { "id": 1, "name": "X RPL 1" },
+        "teacher": { "id": 3, "name": "Budi Santoso, M.Kom" },
+        "room": { "id": 1, "name": "Lab Komputer 1" },
+        "subject": { "id": 1, "name": "Pemrograman Dasar" }
+      }
+    ],
+    "meta": {
+      "date": "2026-10-20",
+      "active_cycle": 1,
+      "day_of_week": 2,
+      "total_missing": 1
+    }
+  }
+  ```
+- **Skenario Pengujian Penting:**
+  1. **Dalam Grace Period (Waktu sekarang < Jam Selesai + 30 Menit):** Jadwal **tidak muncul** pada array `data`.
+  2. **Jurnal Sudah Completed:** Jadwal **tidak muncul** pada array `data`.
+  3. **Jurnal Berstatus `teacher_absent`:** Jadwal **tidak muncul** pada array `data` (dikecualikan sesuai PRD 5.6 & 5.7).
+  4. **Akses Guru:** Guru hanya melihat jadwal kelasnya sendiri yang terlambat diisi.
+
+---
+
+### 21.4 Pengujian `POST /api/schedules` (Mutasi Jadwal Manual)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedules`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "cycle_type": 1,
+    "day_of_week": 1,
+    "period_number": 1,
+    "duration_periods": 2,
+    "teacher_id": 3,
+    "class_id": 1,
+    "room_id": 1,
+    "subject_id": 1,
+    "password": "password"
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Jadwal berhasil dibuat",
+    "data": {
+      "id": 10,
+      "cycle_type": 1,
+      "day_of_week": 1,
+      "period_number": 1,
+      "duration_periods": 2,
+      "teacher_id": 3,
+      "class_id": 1,
+      "room_id": 1,
+      "subject_id": 1,
+      "source": "manual"
+    }
+  }
+  ```
+- **Skenario Password Salah (422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Validasi Gagal",
+    "errors": {
+      "password": ["Password tidak valid"]
+    }
+  }
+  ```
+- **Skenario Bentrok Jadwal Guru/Kelas/Ruangan (422 Unprocessable Entity):**
+  Kirim jadwal lain dengan guru, kelas, atau ruangan yang sama pada rentang jam bertabrakan:
+  ```json
+  {
+    "success": false,
+    "message": "Jadwal bentrok!",
+    "errors": {
+      "schedule": ["Terjadi bentrok guru, kelas atau ruangan pada jadwal."]
+    }
+  }
+  ```
+- **Skenario Bukan Waka (403 Forbidden):** Menggunakan token guru ➔ ditolak HTTP 403.
+
+---
+
+### 21.5 Pengujian `PUT /api/schedules/{id}` (Update Jadwal Manual)
+
+- **Method:** `PUT`
+- **URL:** `{{base_url}}/schedules/10`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "cycle_type": 1,
+    "day_of_week": 1,
+    "period_number": 3,
+    "duration_periods": 2,
+    "teacher_id": 3,
+    "class_id": 1,
+    "room_id": 1,
+    "subject_id": 1,
+    "password": "password"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Jadwal berhasil diperbarui",
+    "data": {
+      "id": 10,
+      "period_number": 3
+    }
+  }
+  ```
+
+---
+
+### 21.6 Pengujian `DELETE /api/schedules/{id}` (Soft Delete Jadwal)
+
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/schedules/10`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "password": "password"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Jadwal berhasil dihapus",
+    "data": null
+  }
+  ```
+
+---
+
+## 22. Kesiapan Menuju Fase 3
+
+Dengan tuntasnya seluruh implementasi dan verifikasi Fase 2:
+1. **Mesin Resolusi Waktu Terpusat:** `PeriodResolutionService` siap dipakai lintas modul (jurnal, presensi, kuis, dan import PDF).
+2. **Keamanan & Konsistensi Jadwal:** Pembacaan jadwal ter-scope multi-peran dengan aman, alert keterlambatan jurnal berjalan real-time, dan mutasi manual dilindungi verifikasi password serta anti-bentrok.
+3. **Pondasi Import PDF Terbuka:** Master data (Fase 1) dan tabel jadwal (Fase 2) telah siap untuk menerima commit replace per putaran dari proses ekstraksi file PDF FET.
+4. Project siap sepenuhnya untuk melangkah ke **Fase 3: Import Jadwal Otomatis dari File PDF FET (PRD 5.16 & 9.5)**.
