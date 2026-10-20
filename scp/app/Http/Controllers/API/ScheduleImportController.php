@@ -5,23 +5,28 @@ namespace App\Http\Controllers\API;
 use App\Jobs\ParseSchedulePdfJob;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Validator;
 use App\Models\ScheduleImport;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
+use App\Models\ScheduleImportRow;
 use App\Models\Schedule;
+use App\Services\ScheduleConflictService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+
 class ScheduleImportController extends Controller
 {
+    /**
+     * Upload 2 PDF files and dispatch asynchronous parsing job.
+     * POST /api/schedule-imports
+     */
     public function store(Request $request)
     {
         $request->validate([
             'cycle_type' => 'required|integer|in:1,2',
-            'file_kelas' => 'required|file|mimes:pdf|max:2048',
-            'file_ruangan' => 'required|file|mimes:pdf|max:2048'
+            'file_kelas' => 'required|file|mimes:pdf|max:10240',
+            'file_ruangan' => 'required|file|mimes:pdf|max:10240',
         ]);
 
-        // Menyimpan file fisik
+        // Simpan file fisik di storage private
         $pathKelas = $request->file('file_kelas')->store('imports/schedules');
         $pathRuangan = $request->file('file_ruangan')->store('imports/schedules');
 
@@ -30,42 +35,155 @@ class ScheduleImportController extends Controller
             'cycle_type' => $request->cycle_type,
             'file_path_kelas' => $pathKelas,
             'file_path_ruangan' => $pathRuangan,
-            'status' => 'uploaded'
+            'status' => 'uploaded',
+            'parser_version' => 'v1.0',
         ]);
 
         ParseSchedulePdfJob::dispatch($import->id);
 
         return response()->json([
             'success' => true,
-            'message' => 'File jadwal diunggah. Sedang memperoses...',
-            'data' => $import
-        ], 201);
+            'message' => 'File jadwal diunggah. Sedang memproses...',
+            'data' => $import,
+        ], 202);
     }
 
+    /**
+     * Preview import results with matched, unmatched, and conflict rows.
+     * GET /api/schedule-imports/{id}
+     */
     public function show($id)
     {
-        $import = ScheduleImport::with('rows')->findOrFail($id);
+        $import = ScheduleImport::with([
+            'rows.matchedClass',
+            'rows.matchedTeacher',
+            'rows.matchedRoom',
+            'rows.matchedSubject',
+        ])->findOrFail($id);
+
+        $totalRows = $import->rows->count();
+        $matchedCount = $import->rows->where('match_status', 'matched')->count();
+        $unmatchedCount = $import->rows->where('match_status', 'unmatched')->count();
+        $conflictCount = $import->rows->where('match_status', 'conflict')->count();
+        $duplicateCount = $import->rows->where('match_status', 'duplicate')->count();
 
         return response()->json([
             'success' => true,
             'message' => 'Detail preview import jadwal.',
-            'data' => $import
-        ]);
+            'data' => $import,
+            'meta' => [
+                'total_rows' => $totalRows,
+                'matched_count' => $matchedCount,
+                'unmatched_count' => $unmatchedCount,
+                'conflict_count' => $conflictCount,
+                'duplicate_count' => $duplicateCount,
+            ],
+        ], 200);
     }
 
+    /**
+     * Resolve single unmatched/conflict row manually or exclude it.
+     * PATCH /api/schedule-imports/{id}/rows/{row_id}
+     */
+    public function resolveRow(Request $request, $id, $row_id)
+    {
+        $import = ScheduleImport::findOrFail($id);
+
+        if ($import->status === 'confirmed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import yang sudah dikonfirmasi tidak dapat diubah.',
+            ], 422);
+        }
+
+        $row = ScheduleImportRow::where('import_id', $import->id)->findOrFail($row_id);
+
+        $validated = $request->validate([
+            'matched_class_id' => 'nullable|exists:classes,id',
+            'matched_teacher_id' => 'nullable|exists:users,id',
+            'matched_room_id' => 'nullable|exists:rooms,id',
+            'matched_subject_id' => 'nullable|exists:subjects,id',
+            'exclude' => 'nullable|boolean',
+        ]);
+
+        if (!empty($validated['exclude'])) {
+            $row->match_status = 'duplicate';
+            $row->resolved_by_waka = true;
+            $row->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Baris jadwal berhasil dikecualikan dari import.',
+                'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
+            ], 200);
+        }
+
+        if ($request->has('matched_class_id')) {
+            $row->matched_class_id = $validated['matched_class_id'];
+        }
+        if ($request->has('matched_teacher_id')) {
+            $row->matched_teacher_id = $validated['matched_teacher_id'];
+        }
+        if ($request->has('matched_room_id')) {
+            $row->matched_room_id = $validated['matched_room_id'];
+        }
+        if ($request->has('matched_subject_id')) {
+            $row->matched_subject_id = $validated['matched_subject_id'];
+        }
+
+        $row->resolved_by_waka = true;
+
+        // Check if all 4 entities are now populated
+        if (
+            $row->matched_class_id &&
+            $row->matched_teacher_id &&
+            $row->matched_room_id &&
+            $row->matched_subject_id
+        ) {
+            $conflictService = new ScheduleConflictService();
+            $conflicts = $conflictService->findConflicts([
+                'teacher_id' => $row->matched_teacher_id,
+                'class_id' => $row->matched_class_id,
+                'room_id' => $row->matched_room_id,
+                'cycle_type' => $import->cycle_type,
+                'day_of_week' => $row->day_of_week,
+                'period_number' => $row->period_number,
+                'duration_periods' => $row->duration_periods,
+            ]);
+
+            $row->match_status = $conflicts->isEmpty() ? 'matched' : 'conflict';
+        } else {
+            $row->match_status = 'unmatched';
+        }
+
+        $row->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Baris import berhasil diupdate.',
+            'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
+        ], 200);
+    }
+
+    /**
+     * Final commit replacing previous schedules per cycle_type.
+     * POST /api/schedule-imports/{id}/confirm
+     */
     public function confirm(Request $request, $id)
     {
         $request->validate(['password' => 'required|string']);
 
-        if ($error = $this->passwordIdConfirmed($request)) {
+        if ($error = $this->passwordIsConfirmed($request)) {
             return $error;
         }
 
         $import = ScheduleImport::with('rows')->where('status', 'preview_ready')->findOrFail($id);
 
-        DB::transaction(function () use ($import) {
-            Schedule::where('cycle_type', $import->cycle_type)->delete();
+        $insertedCount = 0;
 
+        DB::transaction(function () use ($import, &$insertedCount) {
+            // Soft-delete previous schedules on this cycle_type only
+            Schedule::where('cycle_type', $import->cycle_type)->delete();
 
             foreach ($import->rows as $row) {
                 if ($row->match_status === 'matched') {
@@ -79,22 +197,68 @@ class ScheduleImportController extends Controller
                         'duration_periods' => $row->duration_periods,
                         'cycle_type' => $import->cycle_type,
                         'source' => 'imported',
-                        'import_batch_id' => $import->id
+                        'import_batch_id' => $import->id,
                     ]);
+                    $insertedCount++;
                 }
             }
-            Storage::delete([$import->file_path_kelas, $import->file_path_ruangan]);
+
+            // Clean up temporary physical PDF files
+            if ($import->file_path_kelas) {
+                Storage::disk('local')->delete($import->file_path_kelas);
+            }
+            if ($import->file_path_ruangan) {
+                Storage::disk('local')->delete($import->file_path_ruangan);
+            }
 
             $import->update([
                 'status' => 'confirmed',
                 'file_path_kelas' => null,
-                'file_path_ruangan' => null
+                'file_path_ruangan' => null,
             ]);
         });
 
         return response()->json([
             'success' => true,
-            'message' => 'Import jadwal berhasil dikonfirmasi'
+            'message' => 'Import jadwal berhasil dikonfirmasi.',
+            'data' => [
+                'import_id' => $import->id,
+                'cycle_type' => $import->cycle_type,
+                'inserted_schedules_count' => $insertedCount,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Cancel and delete an unconfirmed import draft.
+     * DELETE /api/schedule-imports/{id}
+     */
+    public function destroy($id)
+    {
+        $import = ScheduleImport::findOrFail($id);
+
+        if ($import->status === 'confirmed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import yang sudah dikonfirmasi tidak dapat dibatalkan.',
+            ], 422);
+        }
+
+        // Delete temporary physical files
+        if ($import->file_path_kelas) {
+            Storage::disk('local')->delete($import->file_path_kelas);
+        }
+        if ($import->file_path_ruangan) {
+            Storage::disk('local')->delete($import->file_path_ruangan);
+        }
+
+        // Delete rows and import
+        $import->rows()->delete();
+        $import->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Draft import jadwal berhasil dibatalkan.',
         ], 200);
     }
 }

@@ -1713,3 +1713,674 @@ Dengan tuntasnya seluruh implementasi dan verifikasi Fase 2:
 2. **Keamanan & Konsistensi Jadwal:** Pembacaan jadwal ter-scope multi-peran dengan aman, alert keterlambatan jurnal berjalan real-time, dan mutasi manual dilindungi verifikasi password serta anti-bentrok.
 3. **Pondasi Import PDF Terbuka:** Master data (Fase 1) dan tabel jadwal (Fase 2) telah siap untuk menerima commit replace per putaran dari proses ekstraksi file PDF FET.
 4. Project siap sepenuhnya untuk melangkah ke **Fase 3: Import Jadwal Otomatis dari File PDF FET (PRD 5.16 & 9.5)**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 3 (Import Jadwal Otomatis dari File PDF FET)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 3 (Import Jadwal Otomatis dari File PDF FET)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4 Bagian 5.16 & 9.5), `MD/MASTER_IMPROVEMENT_PLAN.md`, dan `MD/FASE_3_SCHEDULE_IMPORT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-20  
+**Status Fase:** Selesai (100% Lolos Pengujian Otomatis, 96/96 Tests Passed)
+
+---
+
+## 23. Ringkasan Perubahan & Tujuan Fase 3
+
+Fase 3 mengimplementasikan pipeline pemrosesan data asinkron untuk mengimpor jadwal pelajaran secara otomatis dari 2 file PDF keluaran aplikasi generator jadwal FET (v5.44.9) milik Waka Kurikulum SMK Negeri 1 Bantul. Pipeline ini menggantikan script stub/dummy dan hardcoded values lama, dengan karakteristik utama:
+
+1. **Ekstraksi Data Berbasis Koordinat Sel Visual (`script/pdf_parser.py`)**:
+   - Memanfaatkan engine `pdfplumber` (Python 3.11) untuk mengekstrak tabel jadwal kelas (49 halaman, 48 kelas) dan jadwal ruangan (3 halaman landscape, 48 kelas x 5 hari).
+   - Menangani **78 sel anomali pada `Jadwal_Kelas.pdf`** di mana tanda kutip nama guru terpotong tanpa tanda kutip penutup akibat keterbatasan layout FET.
+   - Melakukan kanonisasi dan normalisasi nama kelas (Romawi vs Arab: `10 RPL 1` vs `X RPL 1`) serta normalisasi kode ruang (`LAB 16` vs `L.16`, `OR1` vs `OR`).
+   - Melakukan rekonsiliasi silang (*cross-matching*) antara PDF jadwal kelas (sumber guru, mapel, durasi JP) dan PDF ruangan (sumber alokasi fisik ruangan), serta menandai `room_source_conflict` jika terjadi ketidaksesuaian.
+2. **Worker Pemetaan Master Data & Deteksi Bentrok Asinkron (`app/Jobs/ParseSchedulePdfJob.php`)**:
+   - Menghapus seluruh hardcode (`id=1`) pada queue job lama.
+   - Pre-loading master data ke memori PHP (`Classes`, `User`, `Subject`, `Rooms`) untuk meminimalisir overhead database (mengurangi dari ~2.800 query menjadi 4 query).
+   - Memprioritaskan pencocokan guru menggunakan **`fet_staff_id`** (kunci utama numerik) sebelum fallback ke pencocokan nama dan pembersihan gelar akademik.
+   - Menerapkan heuristik multi-strategi pencocokan ruangan (exact, numeric `Ruang X`, lab komputer `L.X` / `Lab Komputer X`, ruangan khusus `OR`, `L.IPA`, `HALL`).
+   - Menerapkan deteksi tabrakan ganda: bentrok internal antar-baris dalam satu batch import (*intra-batch collisions*) serta bentrok terhadap jadwal eksisting via `ScheduleConflictService`.
+3. **Resolusi Manual & Pembatalan Draft (`ScheduleImportController.php`)**:
+   - Endpoint `PATCH /api/schedule-imports/{id}/rows/{row_id}` untuk mengoreksi baris `unmatched`/`conflict` satu per satu atau mengecualikannya dari proses import (`exclude = true`).
+   - Endpoint `DELETE /api/schedule-imports/{id}` untuk membatalkan draft import yang belum dikonfirmasi dan membersihkan file fisik dari penyimpanan.
+4. **Solidifikasi Final Commit Replace per Putaran (`confirm`)**:
+   - Endpoint `POST /api/schedule-imports/{id}/confirm` mewajibkan verifikasi kata sandi Waka Kurikulum via `$this->passwordIsConfirmed($request)` (HTTP 422 jika salah).
+   - Transaksi database atomik yang meng-soft-delete jadwal lama **hanya pada `cycle_type` terkait**, menjaga jadwal pada putaran lain tetap utuh, dan menjaga integritas relasi historis ke jurnal mengajar.
+   - Melakukan bulk-insert baris berstatus `'matched'` dengan `source = 'imported'` dan `import_batch_id`.
+   - Menghapus file fisik PDF dari storage private demi keamanan dan penghematan kapasitas disk.
+
+---
+
+## 24. Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `script/pdf_parser.py` | Diubah | Script ekstraksi PDF Python berbasis `pdfplumber`, membaca kedua PDF aktual, menangani anomali kutip terbuka, mengekstrak `fet_staff_id`, menghitung durasi sel gabungan multi-JP, merekonsiliasi kode ruang, dan mencetak array JSON ke `stdout`. |
+| 2 | `app/Jobs/ParseSchedulePdfJob.php` | Diubah | Queue job asinkron pemetaan master data dinamis, `fet_staff_id` priority matching, heuristik ruang, deteksi bentrok intra-batch & database, serta pengisian tabel `schedule_import_rows`. |
+| 3 | `app/Http/Controllers/API/ScheduleImportController.php` | Diubah | Controller lengkap import jadwal: upload asinkron (202 Accepted), preview dengan relasi & ringkasan meta, resolusi manual row, pembatalan draft, dan commit final replace per putaran. |
+| 4 | `routes/api.php` | Diubah | Mendaftarkan 5 rute lengkap resource `schedule-imports` di bawah middleware otorisasi `role:vice_principal`. |
+| 5 | `tests/Feature/ScheduleImportTest.php` | Dibuat | Automated test feature mencakup alur upload PDF, proteksi otorisasi, preview import, manual row resolution, row exclusion, password confirmation validation, commit replace per cycle, dan pembatalan draft. |
+| 6 | `tests/Feature/ParseSchedulePdfJobTest.php` | Dibuat | Automated test integrasi end-to-end yang mengeksekusi `ParseSchedulePdfJob` terhadap file PDF riil SMK Negeri 1 Bantul di `MD/PDF/`, memvalidasi ekstraksi >700 baris, pencocokan via `fet_staff_id`, dan tracking room conflict. |
+| 7 | `MD/Development.md` | Diubah | Dokumentasi teknis perkembangan proyek Fase 3 dan panduan lengkap pengujian Postman. |
+
+---
+
+## 25. Potongan Kode Penting & Penjelasan Logika
+
+### 25.1 Penanganan Anomali Kutip Terbuka & Ekstraksi `fet_staff_id` pada `script/pdf_parser.py`
+```python
+def parse_cell(cell_text):
+    if not cell_text or cell_text.strip() in ["-x-", "---", ""]:
+        return None
+    
+    full_text = " ".join([l.strip() for l in cell_text.strip().split("\n") if l.strip()])
+    
+    # Match teacher with or without closing quote (handles 78 unclosed quotes anomaly in FET export)
+    quote_match = re.search(r'"(\d+)\.?\s*([^"\n\r]+?)(?:"|\s+(?:LAB|OR|HALL)\b|$)', full_text)
+    
+    fet_staff_id = None
+    teacher_name = None
+    subject_raw = None
+    room_raw = None
+    
+    if quote_match:
+        fet_staff_id = quote_match.group(1).strip()
+        teacher_name = quote_match.group(2).strip()
+        
+        # Subject is text before quote
+        subject_raw = full_text[:quote_match.start()].strip()
+        
+        # Room is text after teacher name / quote
+        after_text = full_text[quote_match.end():].strip()
+        after_text = re.sub(r'^"\s*', '', after_text).strip()
+        if after_text:
+            room_raw = after_text
+    else:
+        subject_raw = full_text
+        
+    return {
+        "subject": subject_raw,
+        "fet_staff_id": fet_staff_id,
+        "teacher": teacher_name,
+        "room_kelas": room_raw,
+    }
+```
+*Penjelasan:* Menggunakan regular expression non-greedy yang mengenali pola nomor urut staf FET (`fet_staff_id`) dan nama guru, serta mentoleransi ketiadaan tanda kutip penutup akibat batas bounding box sel tabel FET.
+
+---
+
+### 25.2 Deteksi Header Matriks Ruangan Multipage pada `script/pdf_parser.py`
+```python
+# Mencari baris header dinamis yang diawali kata 'HARI' dan 'JAM'
+for r_idx, row in enumerate(table):
+    if len(row) >= 4 and (row[0] or "").strip().upper() == "HARI" and (row[1] or "").strip().upper() == "JAM":
+        header_row_idx = r_idx
+        for c_idx in range(3, len(row)):
+            val = row[c_idx]
+            if val:
+                norm = normalize_class_name(val)
+                if norm:
+                    class_columns[c_idx] = norm
+        break
+```
+*Penjelasan:* Pada file `Jadwal_Ruangan.pdf`, baris header kelas berada pada baris 1 di halaman 1, baris 0 di halaman 2, dan baris 0 pada sub-tabel kedua di halaman 3. Algoritma ini secara dinamis melacak baris header dan memetakan indeks kolom ke nama kelas ternormalisasi.
+
+---
+
+### 25.3 Pre-Loading Master Data & Pencocokan `fet_staff_id` pada `ParseSchedulePdfJob.php`
+```php
+// app/Jobs/ParseSchedulePdfJob.php
+protected function findTeacher($teachers, ?string $fetStaffId, ?string $teacherRaw): ?User
+{
+    // Priority 1: Primary lookup via fet_staff_id
+    if ($fetStaffId !== null && $fetStaffId !== '') {
+        $match = $teachers->first(fn ($t) => (string) $t->fet_staff_id === (string) $fetStaffId);
+        if ($match) {
+            return $match;
+        }
+    }
+
+    // Priority 2: Fallback to teacher name matching
+    if ($teacherRaw) {
+        $cleanRaw = strtoupper(trim($teacherRaw));
+
+        // Exact match
+        $match = $teachers->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
+        if ($match) return $match;
+
+        // Substring match
+        $match = $teachers->first(
+            fn ($t) => stripos($t->name, $cleanRaw) !== false || stripos($cleanRaw, $t->name) !== false
+        );
+        if ($match) return $match;
+
+        // Strip academic titles/degrees (S.Pd, M.Pd, etc.)
+        $cleanNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', $cleanRaw);
+        $cleanNoTitle = trim($cleanNoTitle);
+        if ($cleanNoTitle && $cleanNoTitle !== $cleanRaw) {
+            $match = $teachers->first(function ($t) use ($cleanNoTitle) {
+                $tNameNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', strtoupper($t->name));
+                return stripos($tNameNoTitle, $cleanNoTitle) !== false || stripos($cleanNoTitle, $tNameNoTitle) !== false;
+            });
+            if ($match) return $match;
+        }
+    }
+
+    return null;
+}
+```
+*Penjelasan:* Mengimplementasikan dua lapis pencocokan guru: prioritas utama menggunakan identitas staf FET numerik (`fet_staff_id`), dan prioritas kedua melakukan pembersihan gelar akademik untuk pencocokan toleran (*fuzzy string matching*).
+
+---
+
+### 25.4 Heuristik Pencocokan Ruangan Multi-Strategi pada `ParseSchedulePdfJob.php`
+```php
+protected function findRoom($rooms, ?string $roomCode): ?Rooms
+{
+    if (!$roomCode) return null;
+    $code = strtoupper(trim($roomCode));
+
+    // 1. Exact match
+    $match = $rooms->first(fn ($r) => strtoupper(trim($r->name)) === $code);
+    if ($match) return $match;
+
+    // 2. Numeric room (e.g. "12" -> "Ruang 12", "Ruang Teori 12")
+    if (is_numeric($code)) {
+        $numMatch = $rooms->first(function ($r) use ($code) {
+            $rName = strtoupper($r->name);
+            return preg_match('/(?:RUANG(?:\s+TEORI)?\s+|^)' . preg_quote($code, '/') . '$/i', $rName);
+        });
+        if ($numMatch) return $numMatch;
+    }
+
+    // 3. Lab with number (e.g. "L.16", "LAB 16" -> "Lab Komputer 16", "L.16")
+    if (preg_match('/^(?:LAB\.?|L\.)\s*(\d+)$/i', $code, $m)) {
+        $num = $m[1];
+        $labMatch = $rooms->first(function ($r) use ($num) {
+            $rName = strtoupper($r->name);
+            return preg_match('/(?:LAB(?:ORATORIUM)?(?:\s+KOMPUTER)?|L\.?)\s*' . $num . '$/i', $rName);
+        });
+        if ($labMatch) return $labMatch;
+    }
+
+    // 4. Special rooms
+    if (in_array($code, ['OR', 'OR1', 'OR2', 'OR3', 'LAPANGAN'])) {
+        $orMatch = $rooms->first(fn ($r) => preg_match('/(?:OR|LAPANGAN)/i', $r->name));
+        if ($orMatch) return $orMatch;
+    }
+
+    if (in_array($code, ['L.IPA', 'LAB IPA', 'LAB.IPA'])) {
+        $ipaMatch = $rooms->first(fn ($r) => preg_match('/(?:IPA)/i', $r->name));
+        if ($ipaMatch) return $ipaMatch;
+    }
+
+    if (in_array($code, ['HALL'])) {
+        $hallMatch = $rooms->first(fn ($r) => preg_match('/(?:HALL|MENARI)/i', $r->name));
+        if ($hallMatch) return $hallMatch;
+    }
+
+    // 5. Fallback substring
+    return $rooms->first(
+        fn ($r) => stripos($r->name, $code) !== false || stripos($code, $r->name) !== false
+    );
+}
+```
+*Penjelasan:* Mengakomodasi variasi penamaan ruang di FET vs master data database, mencakup nomor ruang kelas teori biasa, variasi laboratorium komputer, laboratorium IPA, dan lapangan olahraga.
+
+---
+
+### 25.5 Endpoint Resolusi Manual & Pengecualian Baris pada `ScheduleImportController.php`
+```php
+public function resolveRow(Request $request, $id, $row_id)
+{
+    $import = ScheduleImport::findOrFail($id);
+
+    if ($import->status === 'confirmed') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Import yang sudah dikonfirmasi tidak dapat diubah.',
+        ], 422);
+    }
+
+    $row = ScheduleImportRow::where('import_id', $import->id)->findOrFail($row_id);
+
+    $validated = $request->validate([
+        'matched_class_id' => 'nullable|exists:classes,id',
+        'matched_teacher_id' => 'nullable|exists:users,id',
+        'matched_room_id' => 'nullable|exists:rooms,id',
+        'matched_subject_id' => 'nullable|exists:subjects,id',
+        'exclude' => 'nullable|boolean',
+    ]);
+
+    if (!empty($validated['exclude'])) {
+        $row->match_status = 'duplicate';
+        $row->resolved_by_waka = true;
+        $row->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Baris jadwal berhasil dikecualikan dari import.',
+            'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
+        ], 200);
+    }
+
+    if ($request->has('matched_class_id')) $row->matched_class_id = $validated['matched_class_id'];
+    if ($request->has('matched_teacher_id')) $row->matched_teacher_id = $validated['matched_teacher_id'];
+    if ($request->has('matched_room_id')) $row->matched_room_id = $validated['matched_room_id'];
+    if ($request->has('matched_subject_id')) $row->matched_subject_id = $validated['matched_subject_id'];
+
+    $row->resolved_by_waka = true;
+
+    if ($row->matched_class_id && $row->matched_teacher_id && $row->matched_room_id && $row->matched_subject_id) {
+        $conflicts = (new ScheduleConflictService())->findConflicts([
+            'teacher_id' => $row->matched_teacher_id,
+            'class_id' => $row->matched_class_id,
+            'room_id' => $row->matched_room_id,
+            'cycle_type' => $import->cycle_type,
+            'day_of_week' => $row->day_of_week,
+            'period_number' => $row->period_number,
+            'duration_periods' => $row->duration_periods,
+        ]);
+
+        $row->match_status = $conflicts->isEmpty() ? 'matched' : 'conflict';
+    } else {
+        $row->match_status = 'unmatched';
+    }
+
+    $row->save();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Baris import berhasil diupdate.',
+        'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
+    ], 200);
+}
+```
+*Penjelasan:* Mengizinkan Waka Kurikulum memilih ID master data yang valid untuk baris yang belum cocok secara otomatis, atau mengecualikan baris tersebut (`exclude = true`) sehingga tidak masuk ke jadwal definitif.
+
+---
+
+### 25.6 Konfirmasi Atomik Replace per Putaran & Pembersihan Fisik pada `confirm`
+```php
+public function confirm(Request $request, $id)
+{
+    $request->validate(['password' => 'required|string']);
+
+    if ($error = $this->passwordIsConfirmed($request)) {
+        return $error;
+    }
+
+    $import = ScheduleImport::with('rows')->where('status', 'preview_ready')->findOrFail($id);
+
+    $insertedCount = 0;
+
+    DB::transaction(function () use ($import, &$insertedCount) {
+        // Soft-delete previous schedules on this cycle_type only
+        Schedule::where('cycle_type', $import->cycle_type)->delete();
+
+        foreach ($import->rows as $row) {
+            if ($row->match_status === 'matched') {
+                Schedule::create([
+                    'teacher_id' => $row->matched_teacher_id,
+                    'class_id' => $row->matched_class_id,
+                    'room_id' => $row->matched_room_id,
+                    'subject_id' => $row->matched_subject_id,
+                    'day_of_week' => $row->day_of_week,
+                    'period_number' => $row->period_number,
+                    'duration_periods' => $row->duration_periods,
+                    'cycle_type' => $import->cycle_type,
+                    'source' => 'imported',
+                    'import_batch_id' => $import->id,
+                ]);
+                $insertedCount++;
+            }
+        }
+
+        // Clean up temporary physical PDF files
+        if ($import->file_path_kelas) {
+            Storage::disk('local')->delete($import->file_path_kelas);
+        }
+        if ($import->file_path_ruangan) {
+            Storage::disk('local')->delete($import->file_path_ruangan);
+        }
+
+        $import->update([
+            'status' => 'confirmed',
+            'file_path_kelas' => null,
+            'file_path_ruangan' => null,
+        ]);
+    });
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Import jadwal berhasil dikonfirmasi.',
+        'data' => [
+            'import_id' => $import->id,
+            'cycle_type' => $import->cycle_type,
+            'inserted_schedules_count' => $insertedCount,
+        ],
+    ], 200);
+}
+```
+*Penjelasan:* Memastikan proses penggantian jadwal bersifat atomik dan aman: memvalidasi ulang kata sandi Waka (HTTP 422 jika gagal), meng-soft-delete jadwal hanya pada putaran yang di-import, menyimpan baris matched baru dengan `source = 'imported'`, menghapus file PDF fisik dari storage, dan mengunci status import menjadi `'confirmed'`.
+
+---
+
+## 26. Command Terminal yang Dijalankan
+
+| No | Command | Tujuan |
+|---|---|---|
+| 1 | `uv pip install pdfplumber` | Memastikan paket Python `pdfplumber` terpasang di virtual environment aktif. |
+| 2 | `python -c "import pdfplumber; ..."` | Memverifikasi ketersediaan dan versi modul `pdfplumber` (v0.11.10). |
+| 3 | `php artisan route:list --path=schedule-import` | Memeriksa ketersediaan dan keabsahan 5 endpoint rute import jadwal. |
+| 4 | `php artisan test --filter=ScheduleImportTest` | Menjalankan suite pengujian feature controller import jadwal (9 tests passing). |
+| 5 | `php artisan test --filter=ParseSchedulePdfJobTest` | Menjalankan pengujian integrasi queue worker parsing terhadap file PDF aktual (1 test, 11 assertions passing). |
+| 6 | `php artisan test` | Menjalankan seluruh rangkaian automated test proyek untuk memastikan regresi nol (96 tests, 420 assertions passing). |
+
+---
+
+## 27. Hasil Pengujian, Kendala & Status Penyelesaian
+
+### 27.1 Hasil Eksekusi Automated Testing
+```text
+Pass: 96 / 96 tests (100%)
+Assertions: 420 assertions
+Duration: ~10.5 seconds
+Status: OK
+```
+
+### 27.2 Kendala Teknis & Mitigasi yang Diterapkan
+1. **Anomali Kutip Terbuka Tanpa Penutup (78 Kasus pada `Jadwal_Kelas.pdf`):**
+   - *Kendala:* Regex standar `r'"([^"]+)"'` gagal menangkap 78 mata pelajaran karena kutip nama guru tidak ditutup oleh FET.
+   - *Solusi:* Menggunakan regex toleran akhir sel `r'"(\d+)\.?\s*([^"\n\r]+?)(?:"|\s+(?:LAB|OR|HALL)\b|$)'` yang berhasil mengekstrak seluruh 721 jadwal tanpa ada data yang terlewat.
+2. **Struktur Matriks Tabel `Jadwal_Ruangan.pdf` Multipage:**
+   - *Kendala:* Halaman 3 memuat 2 tabel terpisah di mana tabel pertama adalah tabel keterangan legenda ruang dan tanda tangan kepala sekolah.
+   - *Solusi:* Parser memeriksa header baris secara cerdas dengan mendeteksi kemunculan kata `HARI` dan `JAM` pada kolom 0 dan 1, serta hanya mengambil baris jam bernilai numerik 1 s.d. 10.
+3. **Penyelarasan Python Path pada Subprocess Symfony:**
+   - *Kendala:* Panggilan subprocess Windows berpotensi memanggil python launcher default store jika PATH tidak terkonfigurasi.
+   - *Solusi:* Konfigurasi environment memastikan `python` merujuk ke interpreter aktif di mana `pdfplumber` terpasang, dengan timeout proses 180 detik.
+
+---
+
+## 28. Panduan Pengujian Manual via Postman (Fase 3 Complete Guide)
+
+Bagian ini menyediakan dokumentasi cURL dan Postman terperinci untuk seluruh 5 endpoint import jadwal PDF Waka Kurikulum sesuai PRD v4.4 Bagian 5.16 & 9.5.
+
+### Persiapan Variabel Postman:
+- `base_url`: `http://127.0.0.1:8000/api`
+- `token_waka`: Bearer token hasil login akun Waka Kurikulum.
+- `token_guru`: Bearer token akun Guru (untuk uji otorisasi 403).
+
+---
+
+### 28.1 `POST /api/schedule-imports` (Upload & Dispatch Parsing PDF)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedule-imports`
+- **Headers:**
+  - `Authorization: Bearer {{token_waka}}`
+  - `Accept: application/json`
+- **Body:** `form-data`
+  - `cycle_type`: `1` (Text)
+  - `file_kelas`: Pilih file `MD/PDF/Jadwal_Kelas.pdf` (File)
+  - `file_ruangan`: Pilih file `MD/PDF/Jadwal_Ruangan.pdf` (File)
+
+- **Expected Response (HTTP 202 Accepted):**
+  ```json
+  {
+    "success": true,
+    "message": "File jadwal diunggah. Sedang memproses...",
+    "data": {
+      "id": 1,
+      "waka_id": 1,
+      "cycle_type": 1,
+      "file_path_kelas": "imports/schedules/RANDOM_HASH_KELAS.pdf",
+      "file_path_ruangan": "imports/schedules/RANDOM_HASH_RUANGAN.pdf",
+      "status": "uploaded",
+      "parser_version": "v1.0",
+      "created_at": "2026-10-20T12:30:00.000000Z",
+      "updated_at": "2026-10-20T12:30:00.000000Z"
+    }
+  }
+  ```
+
+- **Skenario Hak Akses Ditolak (HTTP 403 Forbidden):**
+  - Menggunakan `Authorization: Bearer {{token_guru}}`
+  - Response:
+    ```json
+    {
+      "success": false,
+      "message": "Akses ditolak, anda tidak memiliki izin."
+    }
+    ```
+
+---
+
+### 28.2 `GET /api/schedule-imports/{id}` (Polling Status & Pratinjau Rows)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/schedule-imports/1`
+- **Headers:**
+  - `Authorization: Bearer {{token_waka}}`
+  - `Accept: application/json`
+
+- **Expected Response saat Status `preview_ready` (HTTP 200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Detail preview import jadwal.",
+    "data": {
+      "id": 1,
+      "waka_id": 1,
+      "cycle_type": 1,
+      "status": "preview_ready",
+      "parser_version": "v1.0",
+      "rows": [
+        {
+          "id": 101,
+          "import_id": 1,
+          "raw_data": {
+            "kelas_mentah": "X RPL 1",
+            "hari_mentah": "Senin",
+            "day_of_week": 1,
+            "period_number": 1,
+            "duration_periods": 3,
+            "mapel_mentah": "Matematika",
+            "fet_staff_id": "34",
+            "guru_mentah": "DWI LESMIYATI, S.Pd.",
+            "ruang_kelas": null,
+            "ruang_jadwal": "12",
+            "ruang_final": "12",
+            "room_source_conflict": false
+          },
+          "matched_class_id": 1,
+          "matched_teacher_id": 2,
+          "matched_room_id": 5,
+          "matched_subject_id": 1,
+          "day_of_week": 1,
+          "period_number": 1,
+          "duration_periods": 3,
+          "match_status": "matched",
+          "room_source_conflict": false,
+          "resolved_by_waka": false,
+          "matched_class": {
+            "id": 1,
+            "name": "X RPL 1"
+          },
+          "matched_teacher": {
+            "id": 2,
+            "name": "Dwi Lesmiyati",
+            "fet_staff_id": "34"
+          },
+          "matched_room": {
+            "id": 5,
+            "name": "Ruang 12"
+          },
+          "matched_subject": {
+            "id": 1,
+            "name": "Matematika"
+          }
+        }
+      ]
+    },
+    "meta": {
+      "total_rows": 721,
+      "matched_count": 680,
+      "unmatched_count": 35,
+      "conflict_count": 6,
+      "duplicate_count": 0
+    }
+  }
+  ```
+
+---
+
+### 28.3 `PATCH /api/schedule-imports/{id}/rows/{row_id}` (Resolusi Manual Baris Jadwal)
+
+#### Skenario A: Mengoreksi ID Master Data
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/schedule-imports/1/rows/102`
+- **Headers:**
+  - `Authorization: Bearer {{token_waka}}`
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+- **Body raw JSON:**
+  ```json
+  {
+    "matched_teacher_id": 2,
+    "matched_room_id": 5,
+    "matched_subject_id": 1
+  }
+  ```
+- **Expected Response (HTTP 200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Baris import berhasil diupdate.",
+    "data": {
+      "id": 102,
+      "import_id": 1,
+      "matched_class_id": 1,
+      "matched_teacher_id": 2,
+      "matched_room_id": 5,
+      "matched_subject_id": 1,
+      "match_status": "matched",
+      "resolved_by_waka": true
+    }
+  }
+  ```
+
+#### Skenario B: Mengecualikan Baris dari Import (Exclude)
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/schedule-imports/1/rows/103`
+- **Body raw JSON:**
+  ```json
+  {
+    "exclude": true
+  }
+  ```
+- **Expected Response (HTTP 200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Baris jadwal berhasil dikecualikan dari import.",
+    "data": {
+      "id": 103,
+      "import_id": 1,
+      "match_status": "duplicate",
+      "resolved_by_waka": true
+    }
+  }
+  ```
+
+---
+
+### 28.4 `POST /api/schedule-imports/{id}/confirm` (Konfirmasi Commit Final Replace per Putaran)
+
+#### Skenario A: Password Salah (HTTP 422)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedule-imports/1/confirm`
+- **Headers:**
+  - `Authorization: Bearer {{token_waka}}`
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+- **Body raw JSON:**
+  ```json
+  {
+    "password": "kata-sandi-salah"
+  }
+  ```
+- **Expected Response (HTTP 422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Validasi Gagal",
+    "errors": {
+      "password": [
+        "Password tidak valid"
+      ]
+    }
+  }
+  ```
+
+#### Skenario B: Password Benar (HTTP 200 OK)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedule-imports/1/confirm`
+- **Body raw JSON:**
+  ```json
+  {
+    "password": "password"
+  }
+  ```
+- **Expected Response (HTTP 200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Import jadwal berhasil dikonfirmasi.",
+    "data": {
+      "import_id": 1,
+      "cycle_type": 1,
+      "inserted_schedules_count": 715
+    }
+  }
+  ```
+
+---
+
+### 28.5 `DELETE /api/schedule-imports/{id}` (Membatalkan Draft Import)
+
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/schedule-imports/2`
+- **Headers:**
+  - `Authorization: Bearer {{token_waka}}`
+  - `Accept: application/json`
+
+- **Expected Response (HTTP 200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Draft import jadwal berhasil dibatalkan."
+  }
+  ```
+
+- **Skenario Import Sudah Dikonfirmasi (HTTP 422):**
+  - Response:
+    ```json
+    {
+      "success": false,
+      "message": "Import yang sudah dikonfirmasi tidak dapat dibatalkan."
+    }
+    ```
+
+---
+
+## 29. Kesiapan Menuju Fase 4
+
+Dengan terselesaikannya seluruh tugas pada **Fase 3: Import Jadwal Otomatis dari File PDF FET**:
+1. **Pipeline Parsing Terverifikasi Penuh:** Ekstraksi 48 kelas dan 721 alokasi jadwal dari PDF resmi SMK Negeri 1 Bantul berjalan stabil tanpa ada baris data yang hilang akibat anomali layout FET.
+2. **Penyelarasan Master Data Otomatis:** Relasi guru (`fet_staff_id`), mata pelajaran, kelas, dan variasi ruangan berhasil dipetakan secara dinamis ke tabel database dengan deteksi bentrok real-time.
+3. **Keamanan & Integritas Jadwal Terjamin:** Penggantian jadwal per putaran dieksekusi secara aman menggunakan soft-delete terisolasi dan re-konfirmasi kata sandi Waka Kurikulum, serta file PDF sementara otomatis dibersihkan dari storage.
+4. **Automated Test Lulus 100% (96/96 Tests, 420 Assertions).**
+5. Project siap melangkah ke **Fase 4: Core Akademik — Presensi Siswa & Jurnal Mengajar Guru (PRD Bagian 5.7 s.d. 5.9)**.

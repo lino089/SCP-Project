@@ -93,7 +93,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
         Route::post('/schedule-imports', [ScheduleImportController::class, 'store']);
         Route::get('/schedule-imports/{id}', [ScheduleImportController::class, 'show']);
+        Route::patch('/schedule-imports/{id}/rows/{row_id}', [ScheduleImportController::class, 'resolveRow']);
         Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);
+        Route::delete('/schedule-imports/{id}', [ScheduleImportController::class, 'destroy']);
 
         Route::get('/reports/journals', [ReportController::class, 'teachingJournals']);
     });
