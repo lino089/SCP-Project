@@ -24,21 +24,26 @@ Dokumen ini adalah **panduan rencana implementasi menyeluruh (end-to-end master 
   ├── Promosi Kelas & Penandaan Siswa Tinggal Kelas (Hold-back)
   └── Pengaturan Siklus Putaran & Log cycle_history
        │
+       ▼ (PRASYARAT MUTLAK: Seluruh Master Data Wajib Diisi Sebelum Fase 2 & 3 Dapat Membuat Jadwal)
 [Fase 2: Jadwal Terpusat & Resolusi Jam Dinamis (PRD 9.4)]
+  ├── MasterDataPrerequisiteService (Pengecekan Kelayakan Master Data)
   ├── PeriodResolutionService (Resolusi Jam Riil Dinamis)
   ├── GET /schedules & Alert missing_journal (30 menit)
   └── Mutasi Jadwal Manual + Password Re-confirmation (422)
        │
 [Fase 3: Import Jadwal Otomatis dari PDF FET (PRD 9.5)]
+  ├── Pre-Upload Gateway Check (Validasi Master Data & fet_staff_id Guru)
   ├── Python PDF Coordinate Parser (script/pdf_parser.py)
   ├── Queue Job ParseSchedulePdfJob (Cross-check FET Staff ID & Ruang)
   ├── Resolusi Manual Baris Unmatched & Pembatalan Import
-  └── Konfirmasi Final: Replace Putaran (Soft-Delete) & Hapus PDF
+  └── Konfirmasi Final: Tolak jika Matched = 0, Replace Putaran & Hapus PDF
        │
-[Fase 4: Jurnal KBM & Presensi Exception-Based (PRD 9.7)]
-  ├── Buka Jurnal & Penanganan teacher_absent
-  ├── Atomic PUT /journals/{id} (Foto JPEG ~800px 30-40% + Materi + Absensi)
-  └── Eliminasi tabel legacy substitute_assignments
+[Fase 4: Jurnal KBM, Presensi Exception-Based & Penggantian Guru Kesiswaan (PRD 9.7)]
+  ├── Buka Jurnal & Hak Eksklusif Pengganti Kesiswaan (Tolak Wali Kelas & Non-Kesiswaan)
+  ├── Penandaan teacher_absent oleh Kesiswaan / Waka
+  ├── Atomic PUT /journals/{id} (Foto JPEG ~800px 30-40% + Materi + Presensi Exception-Based)
+  ├── Monitoring & Auto-Scoping GET /api/journals & GET /api/attendances
+  └── Eliminasi tabel legacy substitute_assignments & penutupan route usang
        │
 [Fase 5: Perizinan Siswa & Sinkronisasi Presensi (PRD 9.6)]
   ├── CRUD leave_requests (tidak_masuk vs keluar_sekolah)
@@ -548,27 +553,32 @@ Tujuan fase ini adalah membangun domain service untuk resolusi jam dinamis, meny
 
 ---
 
-### Tugas 2.3 · Mutasi Jadwal Manual dengan Proteksi Password Re-confirmation (`POST, PUT, DELETE /api/schedules`)
+### Tugas 2.3 · Mutasi Jadwal Manual dengan Proteksi Prasyarat Master Data & Password Re-confirmation (`POST, PUT, DELETE /api/schedules`)
 - **Masalah dan tujuan:**
   - *Kondisi saat ini:* `ScheduleController` sudah memiliki `store`, `update`, dan `destroy`. Namun perlu dipastikan bahwa:
+    - Input jadwal manual wajib memverifikasi bahwa Master Data (kelas, guru, mapel, ruang) telah terisi di database. Jika salah satu master data kosong, pembuatan jadwal wajib ditolak dengan pesan bisnis yang jelas dan status HTTP 422.
     - Input `source` dikunci selalu bernilai `'manual'` (tidak boleh di-override client).
     - `PUT /api/schedules/{id}` memvalidasi bentrok dengan mengabaikan ID jadwal yang sedang diedit (`ignoreId`).
     - Password re-confirmation selalu diverifikasi dan mengembalikan status code konsisten 422 jika gagal.
 - **Solusi:**
-  - Verifikasi dan sempurnakan method `store`, `update`, dan `destroy` pada `ScheduleController.php`.
+  - Verifikasi dan sempurnakan method `store`, `update`, dan `destroy` pada `ScheduleController.php`, dengan mengintegrasikan `MasterDataPrerequisiteService`.
 - **File dan lokasi kode:**
   - `app/Http/Controllers/API/ScheduleController.php`.
+  - `app/Services/MasterDataPrerequisiteService.php`.
 - **Implementasi:**
-  1. Pastikan validasi body menyertakan `'password' => 'required|string'`.
-  2. Panggil `$this->passwordIsConfirmed($request)`.
-  3. Kunci `$data['source'] = 'manual'`.
-  4. Jalankan pengecekan bentrok via `ScheduleConflictService` dalam transaksi database dengan *pessimistic locking* (`lockForUpdate()`).
-  5. Pada `destroy`: lakukan soft-delete (`$schedule->delete()`).
+  1. Validasi prasyarat Master Data via `MasterDataPrerequisiteService::validateForManualSchedule()`. Jika tidak valid, return response JSON 422.
+  2. Pastikan validasi body menyertakan `'password' => 'required|string'`.
+  3. Panggil `$this->passwordIsConfirmed($request)`.
+  4. Kunci `$data['source'] = 'manual'`.
+  5. Jalankan pengecekan bentrok via `ScheduleConflictService` dalam transaksi database dengan *pessimistic locking* (`lockForUpdate()`).
+  6. Pada `destroy`: lakukan soft-delete (`$schedule->delete()`).
 - **Command:**
   - `php artisan test --filter=ScheduleTest`
 - **Testing:**
   - Jalankan test `ScheduleTest.php` yang sudah ada untuk memastikan seluruh skenario bentrok guru, bentrok kelas, bentrok ruangan, dan password salah tetap lulus 100%.
+  - Uji penolakan saat salah satu Master Data kosong ➔ Mengembalikan HTTP 422.
 - **Kriteria keberhasilan:**
+  - Pembuatan jadwal ditolak dengan HTTP 422 jika Master Data masih kosong.
   - Jadwal bentrok ditolak dengan 422 JSON.
   - Password salah ditolak dengan 422 JSON.
 
@@ -678,17 +688,19 @@ Tujuan fase ini adalah membangun alur lengkap import jadwal dari 2 file PDF (jad
 - **Masalah dan tujuan:**
   - *Kondisi saat ini:* Method `confirm()` di `ScheduleImportController` sudah ada, namun perlu diverifikasi:
     - Hanya jadwal pada `cycle_type` yang sama yang di-soft-delete (jadwal putaran lain tidak boleh terhapus).
+    - Memastikan konfirmasi DITOLAK (HTTP 422) jika tidak ada satupun baris hasil import yang berstatus `matched` (`matched_count === 0`), guna mencegah konfirmasi kosong.
     - Insert jadwal baru menyertakan `source = 'imported'` dan `import_batch_id = $import->id`.
     - File fisik PDF dihapus dari storage segera setelah transaksi berhasil.
     - Status import berubah menjadi `confirmed`.
 - **Solusi:**
-  - Pastikan transaksi atomik di `confirm()` membungkus seluruh aksi di atas dan memverifikasi password Waka (422 jika gagal).
+  - Pastikan transaksi atomik di `confirm()` membungkus seluruh aksi di atas, memvalidasi keberadaan baris matched (> 0), dan memverifikasi password Waka (422 jika gagal).
 - **File dan lokasi kode:**
   - `app/Http/Controllers/API/ScheduleImportController.php` (L56–L99).
 - **Implementasi:**
   1. Validasi `'password' => 'required|string'`.
   2. Verifikasi password Waka via `$this->passwordIsConfirmed($request)`.
-  3. `DB::transaction(function () use ($import) { ... })`:
+  3. Periksa `$import->rows()->where('match_status', 'matched')->count() > 0`. Jika 0, tolak dengan response JSON 422.
+  4. `DB::transaction(function () use ($import) { ... })`:
      - `Schedule::where('cycle_type', $import->cycle_type)->delete();` (Soft-delete).
      - Insert seluruh baris `ScheduleImportRow` yang berstatus `matched` ke tabel `schedules`.
      - Hapus file PDF fisik dari storage.
@@ -696,122 +708,235 @@ Tujuan fase ini adalah membangun alur lengkap import jadwal dari 2 file PDF (jad
 - **Command:**
   - `php artisan test --filter=ScheduleImportTest`
 - **Testing:**
-  - Lakukan import pada Putaran 1. Pastikan jadwal Putaran 2 tetap utuh dan jurnal historis yang terhubung ke jadwal lama Putaran 1 tetap bisa diakses (*tidak orphan/rusak*).
+  - Uji konfirmasi pada import dengan 0 baris matched ➔ Ditolak HTTP 422.
+  - Lakukan import pada Putaran 1 dengan baris matched. Pastikan jadwal Putaran 2 tetap utuh dan jurnal historis yang terhubung ke jadwal lama Putaran 1 tetap bisa diakses (*tidak orphan/rusak*).
 - **Kriteria keberhasilan:**
+  - Konfirmasi import ditolak dengan HTTP 422 jika tidak ada baris matched.
   - Acceptance Criteria UKK: "Replace Per Putaran" terpenuhi 100%.
 
 ---
 
-## FASE 4: Alur Jurnal KBM, Presensi Exception-Based & Guru Berhalangan Hadir (PRD 9.7)
-
-Tujuan fase ini adalah menyatukan endpoint penyelesaian jurnal KBM menjadi satu request atomik (`PUT /api/journals/{id}`), menerapkan presensi *exception-based*, mengompresi foto sesuai standar PRD (~800px JPEG quality 30-40%), dan mengeliminasi ketergantungan pada tabel legacy `substitute_assignments`.
-
----
-
-### Tugas 4.1 · Buka Kelas Jurnal & Penanganan Guru Berhalangan Hadir (`POST & PATCH /api/journals`)
+### Tugas 3.5 · Domain Service & Gateway Check Prasyarat Master Data (`MasterDataPrerequisiteService`)
 - **Masalah dan tujuan:**
-  - *Kondisi saat ini:* `JournalController@store` menggunakan model `SubstituteAssignment`. Padahal PRD v4.4 menetapkan bahwa guru berhalangan hadir ditandai dengan status `teacher_absent` pada jurnal oleh Guru Kesiswaan atau Waka, dan presensi kelas tetap diisi oleh guru pengganti/wali kelas.
-  - *Kebutuhan PRD 5.7 & 9.7:*
-    - `POST /api/journals`:
-      - Guru pemilik jadwal membuka kelas ➔ Jurnal dibuat dengan status `ongoing`.
-      - ATAU Kesiswaan/Waka menandai `teacher_absent` pada jadwal hari ini ➔ Jurnal dibuat dengan status `teacher_absent`.
-    - `PATCH /api/journals/{id}`:
-      - Kesiswaan/Waka mengubah status jurnal yang sedang berjalan menjadi `teacher_absent`.
+  - *Kondisi saat ini:* Endpoint `POST /api/schedule-imports` mengizinkan Waka mengunggah PDF jadwal meskipun Master Data (kelas, guru, mapel, ruang) di database masih kosong (0 records). Akibatnya, worker antrean memproses 52 halaman PDF secara sia-sia dan seluruh 721 alokasi jadwal berstatus `unmatched`.
+  - *Kebutuhan Aturan Bisnis Baru:* Waka wajib melengkapi seluruh Master Data prasyarat (kelas, guru dengan `fet_staff_id`, mapel, ruang) sebelum dapat melakukan upload PDF jadwal.
 - **Solusi:**
-  - Refactor `store()` dan tambahkan `markTeacherAbsent()` di `app/Http/Controllers/API/JournalController.php`.
+  - Buat domain service terpusat `App\Services\MasterDataPrerequisiteService` yang menyediakan fungsi evaluasi kesiapan master data.
+  - Pasang verifikasi di awal method `ScheduleImportController@store`: jika master data belum memenuhi syarat, tolak upload dengan status HTTP 422 tanpa menyimpan file fisik ke storage dan tanpa men-dispatch queue worker.
 - **File dan lokasi kode:**
-  - `app/Http/Controllers/API/JournalController.php`.
-  - `routes/api.php`.
+  - `app/Services/MasterDataPrerequisiteService.php` (Baru).
+  - `app/Http/Controllers/API/ScheduleImportController.php` (Method `store`).
+  - `tests/Feature/MasterDataPrerequisiteRuleTest.php` (Baru).
 - **Implementasi:**
-  1. Di `store`:
-     - Validasi `schedule_id` (required, exists).
-     - Cek apakah user adalah guru pemilik jadwal ATAU user memiliki role `vice_principal` / penugasan `kesiswaan`.
-     - Jika Waka/Kesiswaan mengirim payload `{ status: 'teacher_absent' }`, buat jurnal dengan `status = 'teacher_absent'`.
-     - Jika guru pengajar, buat jurnal dengan status `ongoing`.
-     - Saat jurnal dibuka, otomatis cek siswa yang memiliki `leave_requests` approved bertipe `tidak_masuk` untuk hari ini, siapkan draft status absensinya (Sakit/Izin).
-  2. Di `markTeacherAbsent`:
-     - Khusus Waka/Kesiswaan. Ubah status jurnal menjadi `teacher_absent`.
+  1. Buat class `MasterDataPrerequisiteService` dengan method `validateForManualSchedule()` dan `validateForPdfImport()`.
+  2. Periksa ketersediaan record aktif pada model `Classes`, `User` (role teacher & `fet_staff_id`), `Subject`, dan `Rooms`.
+  3. Di `ScheduleImportController@store`: panggil `validateForPdfImport()`. Jika `!$check['is_valid']`, return `response()->json([...], 422)`.
+  4. Buat test feature `MasterDataPrerequisiteRuleTest.php` untuk menguji skenario master data kosong, guru tanpa `fet_staff_id`, kelengkapan master data, serta proteksi otorisasi.
 - **Command:**
-  - `php artisan test --filter=JournalTest`
+  - `php artisan test --filter=MasterDataPrerequisiteRuleTest`
 - **Testing:**
-  - Kesiswaan menandai jadwal guru yang tidak hadir sebagai `teacher_absent` ➔ Status jurnal tersimpan `teacher_absent`.
-  - Verifikasi jadwal tersebut tidak muncul pada alert keterlambatan jurnal `missing_journal`.
+  - Simulasikan upload PDF saat master data kosong ➔ Ditolak HTTP 422, tidak ada file di storage, tidak ada job di queue.
+  - Simulasikan upload PDF saat guru belum memiliki `fet_staff_id` ➔ Ditolak HTTP 422.
+  - Lengkapi seluruh master data ➔ Upload berhasil (HTTP 202 Accepted).
 - **Kriteria keberhasilan:**
-  - Alur `teacher_absent` berfungsi tanpa melibatkan tabel legacy `substitute_assignments`.
+  - Seluruh jalur input jadwal ditolak jika master data prasyarat belum lengkap.
+  - Test suite lulus 100%.
 
 ---
 
-### Tugas 4.2 · Penyelesaian Jurnal Atomik dengan Kompresi Foto & Presensi Exception-Based (`PUT /api/journals/{id}`)
-- **Masalah dan tujuan:**
-  - *Kondisi saat ini:* Penyelesaian jurnal saat ini terpecah menjadi `POST /journals/{id}/complete` dan `POST /journals/{id}/attendance`. Kompresi gambar saat ini diatur ke lebar 1024px WebP kualitas 75% (tidak sesuai PRD 5.11).
-  - *Kebutuhan PRD 5.8, 5.11 & 9.7:*
-    - `PUT /api/journals/{id}`: Endpoint tunggal (multipart) menerima:
-      - `topic_description` (string materi)
-      - `photo` (file gambar KBM)
-      - `exceptions` (array siswa yang TIDAK hadir: student_id dan status Sakit/Izin/Alpa).
-    - Seluruh siswa lain di kelas tersebut yang tidak disebutkan otomatis tercatat **Hadir**.
-    - Kompresi foto: Resize lebar maksimum ~800px, re-encode JPEG quality ~30-40%, target ukuran file di bawah ~150KB.
-    - Status jurnal berubah menjadi `completed`.
-- **Solusi:**
-  - Implementasikan method `update` pada `JournalController.php` yang menjalankan seluruh proses ini dalam satu transaksi database.
-  - Hapus/gabungkan logika dari `AttendanceController.php`.
-- **File dan lokasi kode:**
-  - `app/Http/Controllers/API/JournalController.php`.
-  - `routes/api.php`.
-- **Implementasi:**
-  1. Validasi:
-     - `topic_description => required|string|min:10`
-     - `photo => required|image|mimes:jpg,jpeg,png|max:5120`
-     - `exceptions => nullable|array`
-     - `exceptions.*.student_id => required|exists:users,id`
-     - `exceptions.*.status => required|in:Sakit,Izin,Alpa`
-  2. Proses kompresi gambar via Intervention Image:
+## FASE 4: Alur Jurnal KBM, Presensi Exception-Based & Penggantian Guru Kesiswaan (PRD 9.7)
+
+**Status Fase:** Tahap Perencanaan Selesai (Menunggu Persetujuan Implementasi Pengguna)  
+**Tujuan Utama:**
+Menyatukan alur pencatatan kegiatan belajar mengajar (KBM) menjadi satu pipeline yang aman, efisien, dan terotorisasi ketat:
+1. Menegakkan aturan otorisasi baru bahwa **HANYA guru dengan penugasan Kesiswaan (`teacher_assignments.type = 'kesiswaan'`) yang berhak menjadi guru pengganti (`substitute_teacher_id`)** saat guru utama berhalangan hadir. Wali kelas dan guru non-kesiswaan ditolak tegas di backend (HTTP 403 Forbidden).
+2. Menyatukan penyelesaian jurnal KBM, materi, kompresi foto KBM (~800px JPEG quality 35%), dan pengisian presensi *exception-based* ke dalam satu request atomik (`PUT /api/journals/{id}`).
+3. Menyediakan rekapitulasi jurnal dan presensi siswa yang ter-scoping aman berdasarkan role (`GET /api/journals` dan `GET /api/attendances`).
+4. Mengeliminasi ketergantungan pada model legacy `SubstituteAssignment` dan membersihkan rute-rute usang.
+
+---
+
+### Tugas 4.1 · Buka Kelas Jurnal & Hak Eksklusif Pengganti Kesiswaan (`POST & PATCH /api/journals`)
+- **Masalah dan Kondisi Saat Ini:**
+  - `JournalController@store` saat ini masih menggunakan model legacy `SubstituteAssignment` dan query manual.
+  - Belum ada integrasi dengan penandaan `teacher_absent` oleh Kesiswaan/Waka.
+  - Aturan bisnis baru belum diterapkan: Saat guru berhalangan hadir, hanya guru yang memiliki penugasan `kesiswaan` yang diizinkan bertindak sebagai guru pengganti (`substitute_teacher_id`). Wali kelas dan guru lain saat ini belum diblokir secara eksplisit di backend.
+- **Kebutuhan PRD 5.7 & 9.7:**
+  - `POST /api/journals`:
+    - Guru pemilik jadwal (`schedule.teacher_id === auth()->id()`): Buka kelas KBM normal ➔ Jurnal dibuat dengan status `ongoing`.
+    - Guru Kesiswaan (`auth()->user()->assignments()->where('type', 'kesiswaan')->exists()`):
+      - Jika dikirim payload penggantian ➔ Buka kelas sebagai Guru Pengganti (`substitute_teacher_id = auth()->id()`, status `ongoing`).
+      - Jika dikirim payload `{ "status": "teacher_absent" }` ➔ Jurnal dibuat dengan status `teacher_absent`.
+    - Waka Kurikulum (`role === 'vice_principal'`): Dapat menandai jadwal sebagai `teacher_absent`.
+    - **Wali Kelas & Guru Lain:** Jika bukan guru pemilik jadwal dan tidak memiliki penugasan kesiswaan ➔ **Ditolak HTTP 403 Forbidden** dengan pesan error terstandarisasi.
+    - Siswa / Orang Tua ➔ Ditolak HTTP 403 Forbidden.
+  - `PATCH /api/journals/{id}`:
+    - Khusus Guru Kesiswaan dan Waka Kurikulum. Mengubah status jurnal yang sedang `ongoing` menjadi `teacher_absent`.
+    - Wali kelas / Guru non-kesiswaan ➔ Ditolak HTTP 403 Forbidden.
+- **File dan Lokasi Kode:**
+  - `app/Http/Controllers/API/JournalController.php` (refactor `store`, implementasi `markTeacherAbsent`).
+  - `app/Models/User.php` (tambahkan helper method `$user->hasAssignment('kesiswaan')` atau `$user->isKesiswaan()`).
+  - `routes/api.php` (daftarkan `POST /api/journals` dan `PATCH /api/journals/{id}`).
+- **Implementasi Terencana:**
+  1. Validasi request `POST /api/journals`: `schedule_id` (required, exists:schedules,id), `status` (nullable, in:ongoing,teacher_absent).
+  2. Evaluasi otorisasi pengguna terhadap jadwal:
      ```php
-     $img = Image::read($file);
-     $img->scaleDown(width: 800);
-     $encoded = $img->toJpeg(quality: 35);
-     $filename = 'journals/' . Str::uuid() . '.jpg';
-     Storage::disk('public')->put($filename, (string) $encoded);
+     $schedule = Schedule::findOrFail($request->schedule_id);
+     $user = $request->user();
+     $isOriginalTeacher = ($schedule->teacher_id === $user->id);
+     $isKesiswaan = ($user->role === 'teacher' && $user->assignments()->where('type', 'kesiswaan')->exists());
+     $isWaka = ($user->role === 'vice_principal');
+
+     if (!$isOriginalTeacher && !$isKesiswaan && !$isWaka) {
+         return response()->json([
+             'success' => false,
+             'message' => 'Akses ditolak. Anda tidak memiliki izin untuk membuka atau menggantikan jadwal ini.',
+         ], 403);
+     }
      ```
-  3. Dalam `DB::transaction()`:
-     - Update jurnal: `topic_description`, `photo_path = $filename`, `status = 'completed'`.
-     - Ambil seluruh ID siswa aktif di kelas jadwal tersebut: `$allStudents = User::where('role', 'student')->where('class_id', $classId)->pluck('id')`.
-     - Petakan siswa dalam `exceptions` sesuai status yang dikirim guru.
-     - Sisanya otomatis diberi record status `Hadir`.
-     - Simpan data ke tabel `attendances` dengan `upsert` atau `insert`.
-- **Command:**
-  - `php artisan test --filter=JournalTest`
-- **Testing:**
-  - Kirim 1 siswa Sakit dari kelas beranggotakan 36 siswa ➔ Sistem mencatat 1 Sakit dan 35 Hadir.
-  - Periksa file gambar di storage ➔ Format file JPEG, lebar <= 800px, ukuran file < 150KB.
-- **Kriteria keberhasilan:**
-  - Acceptance Criteria UKK: "Presensi Exception-Based" dan "Kompresi Foto Jurnal" terpenuhi 100%.
+  3. Logika percabangan:
+     - Jika status yang diminta `teacher_absent`: Wajib Kesiswaan atau Waka. Buat/update jurnal dengan `status = 'teacher_absent'`.
+     - Jika pembukaan KBM: Jika `$isOriginalTeacher`, `substitute_teacher_id = null`. Jika `$isKesiswaan` (bukan original teacher), `substitute_teacher_id = $user->id`.
+  4. Ambil dan lampirkan data siswa kelas yang memiliki perizinan approved bertipe `tidak_masuk` hari ini sebagai metadata pendukung pembukaan kelas.
+- **Ketergantungan:** Fondasi untuk seluruh alur jurnal Fase 4.
+- **Pengujian Terencana:**
+  - Guru A membuka jadwal miliknya ➔ Berhasil (HTTP 201, status `ongoing`).
+  - Guru Kesiswaan membuka jadwal Guru A sebagai pengganti ➔ Berhasil (HTTP 201, `substitute_teacher_id` terisi).
+  - Guru Kesiswaan menandai jadwal Guru A `teacher_absent` ➔ Berhasil (HTTP 201, status `teacher_absent`).
+  - Wali Kelas membuka jadwal Guru A ➔ Ditolak HTTP 403 Forbidden.
+  - Guru B (tanpa kesiswaan) membuka jadwal Guru A ➔ Ditolak HTTP 403 Forbidden.
 
 ---
 
-### Tugas 4.3 · Monitoring & Rekap Jurnal Mengajar (`GET /api/journals`)
-- **Masalah dan tujuan:**
-  - *Kondisi saat ini:* Route `GET /api/journals` belum diimplementasikan. Yang ada saat ini adalah `GET /reports/journals` yang tidak terstandarisasi.
-  - *Kebutuhan PRD 9.7:* `GET /api/journals` berpaginasi.
-    - Waka: Dapat melihat seluruh riwayat jurnal sekolah (dengan filter tanggal, kelas, guru).
-    - Guru: Terfilter otomatis hanya melihat jurnal yang diajarnya sendiri.
-- **Solusi:**
-  - Buat method `index` pada `JournalController.php`.
-- **File dan lokasi kode:**
-  - `app/Http/Controllers/API/JournalController.php`.
+### Tugas 4.2 · Penyelesaian Jurnal Atomik dengan Presensi Exception-Based & Kompresi Foto Standar PRD (`PUT /api/journals/{id}`)
+- **Masalah dan Kondisi Saat Ini:**
+  - Penyelesaian jurnal saat ini terpisah antara `/complete` dan `/attendance`.
+  - Kompresi gambar saat ini diatur ke 1024px WebP kualitas 75% (tidak sesuai spesifikasi PRD 5.11).
+  - Otorisasi saat ini belum membatasi guru pengganti secara ketat ke Kesiswaan.
+- **Kebutuhan PRD 5.8, 5.11 & 9.7:**
+  - Endpoint tunggal `PUT /api/journals/{id}` menerima payload multipart/form-data:
+    - `topic_description`: string materi pembahasan KBM (wajib, min 10 karakter).
+    - `photo`: file foto KBM (wajib, image: jpg, jpeg, png, webp, maks 10MB).
+    - `exceptions`: array siswa yang TIDAK hadir (opsional, berisikan `student_id` dan `status` [Sakit, Izin, Alpa]).
+  - **Otorisasi Backend:**
+    - Hanya boleh dieksekusi oleh: Guru pemilik jadwal (`schedule.teacher_id === auth()->id()`) ATAU Guru Kesiswaan yang terdaftar sebagai guru pengganti pada jurnal tersebut (`journal.substitute_teacher_id === auth()->id()`).
+    - Wali Kelas maupun Guru lain tanpa penugasan kesiswaan ➔ **Ditolak HTTP 403 Forbidden**.
+  - **Kompresi Foto Standar PRD 5.11:**
+    - Menggunakan library `Intervention Image`.
+    - Resize lebar maksimum ~800px (`scaleDown(width: 800)`).
+    - Encode format JPEG dengan kualitas 35% (`quality: 35`).
+    - Target ukuran file di bawah 150KB.
+    - Disimpan di disk `public` pada folder `journals/{uuid}.jpg`.
+  - **Presensi Exception-Based:**
+    - Query seluruh siswa aktif di kelas jadwal: `User::where('role', 'student')->where('class_id', $schedule->class_id)->pluck('id')`.
+    - Ambil perizinan disetujui (`leave_requests` approved bertipe `tidak_masuk` untuk hari ini) ➔ otomatis default Sakit/Izin jika belum masuk exceptions.
+    - Petakan siswa dalam `exceptions` sesuai status kiriman guru.
+    - Seluruh sisa siswa kelas otomatis tercatat **Hadir**.
+    - Simpan ke tabel `attendances` secara atomik di dalam `DB::transaction`.
+    - Update jurnal: `status = 'completed'`, `topic_description`, `photo_path`.
+- **File dan Lokasi Kode:**
+  - `app/Http/Controllers/API/JournalController.php` (implementasi method `update`).
+  - `routes/api.php` (daftarkan `PUT /api/journals/{id}`).
+- **Ketergantungan:** Bergantung pada Tugas 4.1 (jurnal harus sudah dibuka / berstatus `ongoing`).
+- **Pengujian Terencana:**
+  - Guru jadwal mengirim update foto + 2 siswa Sakit/Izin dari kelas 36 siswa ➔ Jurnal `completed`, 2 siswa tercatat Sakit/Izin, 34 siswa tercatat Hadir (HTTP 200).
+  - Guru Kesiswaan (pengganti sah) mengirim update ➔ Berhasil diselesaikan (HTTP 200).
+  - Wali kelas mencoba memanggil `PUT /api/journals/{id}` ➔ Ditolak HTTP 403 Forbidden.
+  - Cek dimensi dan ukuran file foto di storage ➔ Lebar <= 800px, format JPEG, ukuran < 150KB.
+
+---
+
+### Tugas 4.3 · Monitoring & Rekapitulasi Jurnal Mengajar Ter-scoped (`GET /api/journals` & `GET /api/journals/{id}`)
+- **Masalah dan Kondisi Saat Ini:**
+  - Belum ada endpoint terstandarisasi `GET /api/journals` sesuai PRD 9.7.
+  - Endpoint `GET /reports/journals` saat ini tidak mendukung paginasi dinamis dan scoping role yang konsisten.
+- **Kebutuhan PRD 9.7:**
+  - `GET /api/journals`:
+    - Waka Kurikulum & Guru Kesiswaan: Dapat memantau seluruh riwayat jurnal sekolah (filter tanggal, kelas, guru, status KBM).
+    - Guru biasa: Auto-scoped hanya melihat jurnal yang diajarnya sendiri (`schedule.teacher_id = auth()->id()`) atau jurnal yang pernah digantikannya (`substitute_teacher_id = auth()->id()`).
+    - Siswa / Orang Tua: Ditolak atau di-scope sesuai kebutuhan spesifikasi.
+  - `GET /api/journals/{id}`:
+    - Menampilkan detail jurnal lengkap dengan data jadwal, guru utama, guru pengganti (jika ada), materi, link foto KBM, dan ringkasan presensi.
+- **File dan Lokasi Kode:**
+  - `app/Http/Controllers/API/JournalController.php` (implementasi `index` dan `show`).
   - `routes/api.php`.
-- **Implementasi:**
-  1. Scope query: Jika role user `teacher`, batasi `$query->whereHas('schedule', fn($q) => $q->where('teacher_id', $user->id))`.
-  2. Dukung filter `date`, `start_date`, `end_date`, `class_id`.
-  3. Load relasi `schedule.subject`, `schedule.schoolClass`, `schedule.teacher`.
-  4. Return paginated response standar.
-- **Command:**
-  - `php artisan test --filter=JournalTest`
-- **Testing:**
-  - Guru A memanggil `GET /api/journals` ➔ Hanya melihat jurnalnya sendiri.
-  - Waka memanggil `GET /api/journals` ➔ Melihat jurnal seluruh guru.
-- **Kriteria keberhasilan:**
-  - Endpoint monitoring jurnal berjalan dengan auto-scoping role yang aman.
+- **Ketergantungan:** Bergantung pada data yang tersimpan dari Tugas 4.1 & 4.2.
+- **Pengujian Terencana:**
+  - Guru A memanggil `GET /api/journals` ➔ Hanya melihat jurnal kelasnya.
+  - Kesiswaan/Waka memanggil `GET /api/journals` ➔ Melihat seluruh jurnal sekolah.
+  - Filter `status=teacher_absent` ➔ Menampilkan rekap guru yang tidak hadir.
+
+---
+
+### Tugas 4.4 · Rekapitulasi Presensi Multi-Role (`GET /api/attendances`) (PRD 9.6)
+- **Masalah dan Kondisi Saat Ini:**
+  - Saat ini belum ada endpoint `GET /api/attendances` berpaginasi di `routes/api.php`.
+- **Kebutuhan PRD 9.6:**
+  - `GET /api/attendances`:
+    - Waka & Kesiswaan: Melihat rekap presensi seluruh sekolah dengan filter (`date`, `start_date`, `end_date`, `class_id`, `status`).
+    - Wali Kelas: Dapat melihat rekap presensi khusus kelas yang diampunya (`class_id` dari penugasan wali kelas).
+    - Siswa / Orang Tua: Auto-scoped hanya riwayat presensi mandiri / anak.
+- **File dan Lokasi Kode:**
+  - `app/Http/Controllers/API/AttendanceController.php` (implementasi `index`).
+  - `routes/api.php`.
+- **Ketergantungan:** Bergantung pada data presensi yang dihasilkan dari Tugas 4.2.
+- **Pengujian Terencana:**
+  - Wali Kelas X RPL 1 memanggil `GET /api/attendances` ➔ Otomatis hanya melihat presensi siswa X RPL 1.
+  - Siswa memanggil `GET /api/attendances` ➔ Otomatis hanya melihat presensi dirinya sendiri.
+  - Kesiswaan memanggil dengan filter `status=Alpa` ➔ Menampilkan seluruh data alpa sekolah.
+
+---
+
+### Tugas 4.5 · Deprekasi & Pembersihan Route/Controller Usang
+- **Masalah dan Kondisi Saat Ini:**
+  - Endpoint `POST /api/substitute` pada `SubstituteAssignmentController` bertentangan dengan aturan baru karena mengizinkan penugasan guru non-kesiswaan.
+  - Endpoint terpisah `POST /journals/{id}/complete` dan `POST /journals/{id}/attendance` sudah usang dan digantikan oleh `PUT /api/journals/{id}`.
+- **Solusi Terencana:**
+  - Rapikan atau tandai endpoint lama sebagai deprecated/redirected ke implementasi baru.
+  - Pastikan tidak ada controller lain yang memanggil `SubstituteAssignment`.
+- **File dan Lokasi Kode:**
+  - `routes/api.php`.
+  - `app/Http/Controllers/API/SubstituteAssignmentController.php`.
+  - `app/Http/Controllers/API/AttendanceController.php`.
+
+---
+
+### Tugas 4.6 · Automated Feature Test Suite Phase 4 (`tests/Feature/JournalAndAttendanceTest.php`)
+- **Tujuan:**
+  Membuat suite pengujian otomatis komprehensif untuk memastikan 100% kriteria keberhasilan dan aturan bisnis Fase 4 terpenuhi tanpa regresi.
+- **Skenario Pengujian yang Direncanakan:**
+  1. `test_original_teacher_can_open_journal_session`: Guru jadwal membuka KBM ➔ Status `ongoing`, `substitute_teacher_id` null.
+  2. `test_kesiswaan_can_open_journal_as_substitute_teacher`: Guru berpenugasan Kesiswaan membuka jadwal guru lain ➔ Berhasil, `substitute_teacher_id` tercatat ID Kesiswaan.
+  3. `test_kesiswaan_or_waka_can_mark_teacher_absent`: Kesiswaan/Waka menandai `teacher_absent` ➔ Status tersimpan `teacher_absent`.
+  4. `test_wali_kelas_is_forbidden_from_opening_or_substituting_journal`: **Wali Kelas mencoba membuka/menggantikan jadwal guru lain ➔ Ditolak HTTP 403 Forbidden.**
+  5. `test_regular_teacher_without_kesiswaan_is_forbidden_from_substituting`: **Guru mapel reguler mencoba membuka jadwal guru lain ➔ Ditolak HTTP 403 Forbidden.**
+  6. `test_student_or_parent_cannot_open_journal`: Siswa / Ortu mencoba membuka jurnal ➔ Ditolak HTTP 403 Forbidden.
+  7. `test_atomic_put_journal_completion_with_exception_based_attendance`: Guru mengirim materi + foto + 1 Sakit dari 36 siswa ➔ Jurnal `completed`, 1 Sakit, 35 Hadir.
+  8. `test_kesiswaan_as_substitute_can_complete_journal_and_attendance`: Guru Kesiswaan (pengganti sah) menyelesaikan jurnal ➔ Berhasil (HTTP 200).
+  9. `test_wali_kelas_cannot_complete_journal`: **Wali Kelas mencoba memanggil `PUT /api/journals/{id}` ➔ Ditolak HTTP 403 Forbidden.**
+  10. `test_photo_compression_conforms_to_prd_specs`: Verifikasi file foto hasil kompresi berformat JPEG, lebar <= 800px, dan ukuran file < 150KB.
+  11. `test_approved_leave_requests_are_synced_to_attendance`: Siswa dengan izin `tidak_masuk` approved otomatis ter-prefill Sakit/Izin.
+  12. `test_journal_index_scoping`: Guru hanya melihat jurnalnya sendiri, Waka & Kesiswaan melihat semua jurnal.
+  13. `test_attendance_index_scoping`: Wali kelas melihat kelasnya, Siswa melihat dirinya, Kesiswaan melihat seluruh sekolah.
+- **Kriteria Keberhasilan:** Seluruh 13 skenario lulus 100% dengan status pass.
+
+---
+
+### Kriteria Keberhasilan & Definisi Selesai (DoD) Fase 4
+
+1. **Penegakan Hak Akses Guru Pengganti:**
+   - HANYA Guru Kesiswaan yang dapat menjadi guru pengganti (`substitute_teacher_id`) dan mengisi jurnal guru yang berhalangan hadir.
+   - Percobaan oleh Wali Kelas maupun Guru tanpa penugasan Kesiswaan ditolak tegas oleh backend dengan **HTTP 403 Forbidden**.
+2. **Penyelesaian Jurnal Atomik:**
+   - Request tunggal `PUT /api/journals/{id}` berhasil menyimpan materi, foto terkompresi, dan presensi *exception-based* dalam satu transaksi database.
+3. **Standar Kompresi Foto (PRD 5.11):**
+   - Foto tersimpan dalam format JPEG, lebar maksimal 800px, kualitas ~35%, ukuran berkas di bawah 150KB.
+4. **Presensi Exception-Based:**
+   - Siswa aktif yang tidak tercantum dalam `exceptions` otomatis berstatus `Hadir`. Siswa dengan izin `tidak_masuk` yang disetujui otomatis tersinkronisasi.
+5. **Scoping Data Aman:**
+   - Endpoint `GET /api/journals` dan `GET /api/attendances` mengisolasi data sesuai kewenangan setiap role.
+6. **Zero Regression & Automated Tests Pass:**
+   - Seluruh test baru di `JournalAndAttendanceTest.php` lulus dan 105 tests lama tetap lulus 100%.
 
 ---
 

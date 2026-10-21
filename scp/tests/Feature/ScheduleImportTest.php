@@ -412,8 +412,8 @@ class ScheduleImportTest extends TestCase
             'file_path_ruangan' => null,
         ]);
 
-        Storage::disk('local')->assertMissing('imports/schedules/test_kelas.pdf');
-        Storage::disk('local')->assertMissing('imports/schedules/test_ruangan.pdf');
+        Storage::assertMissing('imports/schedules/test_kelas.pdf');
+        Storage::assertMissing('imports/schedules/test_ruangan.pdf');
     }
 
     public function test_waka_can_cancel_draft_import(): void
@@ -450,8 +450,8 @@ class ScheduleImportTest extends TestCase
 
         $this->assertDatabaseMissing('schedule_imports', ['id' => $import->id]);
         $this->assertDatabaseMissing('schedule_import_rows', ['import_id' => $import->id]);
-        Storage::disk('local')->assertMissing('imports/schedules/cancel_kelas.pdf');
-        Storage::disk('local')->assertMissing('imports/schedules/cancel_ruangan.pdf');
+        Storage::assertMissing('imports/schedules/cancel_kelas.pdf');
+        Storage::assertMissing('imports/schedules/cancel_ruangan.pdf');
     }
 
     public function test_cannot_cancel_already_confirmed_import(): void

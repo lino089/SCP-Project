@@ -2384,3 +2384,917 @@ Dengan terselesaikannya seluruh tugas pada **Fase 3: Import Jadwal Otomatis dari
 3. **Keamanan & Integritas Jadwal Terjamin:** Penggantian jadwal per putaran dieksekusi secara aman menggunakan soft-delete terisolasi dan re-konfirmasi kata sandi Waka Kurikulum, serta file PDF sementara otomatis dibersihkan dari storage.
 4. **Automated Test Lulus 100% (96/96 Tests, 420 Assertions).**
 5. Project siap melangkah ke **Fase 4: Core Akademik — Presensi Siswa & Jurnal Mengajar Guru (PRD Bagian 5.7 s.d. 5.9)**.
+
+
+---
+
+# Dokumentasi Pembaruan Aturan Bisnis: Prasyarat Master Data Sebelum Pengelolaan Jadwal
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Modul Terdampak:** Master Data, Jadwal Manual (PRD 5.3.1 & 9.4), Import Jadwal PDF FET (PRD 5.16 & 9.5)  
+**Acuan Spesifikasi:** `MD/PRD.md` (Catatan Revisi, Bagian 5.3.1 & 5.16), `MD/MASTER_IMPROVEMENT_PLAN.md`, dan `MD/MASTER_DATA_PREREQUISITE_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-20  
+**Status Dokumentasi:** Disetujui (Dokumen Acuan Resmi)
+
+---
+
+## 30. Ringkasan Latar Belakang & Analisis Masalah Riil
+
+### 30.1 Kasus Temuan Riil pada Database PostgreSQL Development
+Saat pengujian langsung dilakukan di lingkungan PostgreSQL lokal, ditemukan anomali perilaku sistem:
+1. Waka Kurikulum dapat mengunggah 2 file PDF FET melalui `POST /api/schedule-imports` meskipun tabel `classes` (0 record) dan tabel `users` untuk guru (0 guru) masih kosong melompong.
+2. Worker `ParseSchedulePdfJob` tetap berjalan memproses 52 halaman PDF dan mengekstrak 721 alokasi jadwal ke tabel `schedule_import_rows`. Namun, karena master data kosong, **100% baris (721 dari 721 baris) berstatus `unmatched`**.
+3. Saat Waka memanggil endpoint `POST /api/schedule-imports/{id}/confirm` dengan password yang benar, sistem mengembalikan status HTTP 200 OK dengan data `"inserted_schedules_count": 0`. Di mata pengguna, proses tampak berhasil, namun tabel `schedules` tetap kosong karena sistem hanya memasukkan baris `matched`.
+4. Pada jalur manual (`POST /api/schedules`), ketiadaan master data hanya ditangkap oleh validasi foreign key generik Laravel (`The selected class id is invalid.`), bukan pesan bisnis yang jelas bahwa Master Data sekolah belum dikonfigurasi.
+
+### 30.2 Penetapan Aturan Bisnis Baru
+Untuk menjamin integritas data dan efisiensi sistem, disepakati aturan bisnis baru:
+> **"Waka Kurikulum wajib melengkapi seluruh Master Data prasyarat (Kelas, Guru beserta `fet_staff_id`, Mata Pelajaran, dan Ruangan) terlebih dahulu sebelum dapat menginput jadwal. Jika sistem mendeteksi bahwa salah satu Master Data masih kosong atau belum memenuhi persyaratan kelayakan, seluruh proses input jadwal (baik manual maupun upload PDF) wajib ditolak langsung di gerbang awal request dengan status HTTP 422 Unprocessable Entity."**
+
+Selain itu, ditambahkan aturan pencegahan konfirmasi kosong:
+> **"Endpoint `POST /api/schedule-imports/{id}/confirm` wajib menolak eksekusi (HTTP 422) jika tidak ada satupun baris jadwal hasil import yang berstatus `matched` (`matched_count === 0`)."**
+
+---
+
+## 31. Spesifikasi Teknis & Rencana Perubahan Kode
+
+### 31.1 Komponen Domain Service: `MasterDataPrerequisiteService`
+Akan diimplementasikan class service terpusat di `app/Services/MasterDataPrerequisiteService.php` dengan tanggung jawab:
+- `validateForManualSchedule(): array`: Memastikan tabel `classes`, `users` (guru), `subjects`, dan `rooms` masing-masing memiliki $\ge 1$ record aktif (`deleted_at IS NULL`).
+- `validateForPdfImport(): array`: Memeriksa 4 tabel di atas, ditambah syarat bahwa setidaknya ada $\ge 1$ akun guru yang telah diisi nomor staf FET-nya (`fet_staff_id IS NOT NULL`), karena FET mengandalkan ID numerik tersebut sebagai kunci utama pencocokan.
+- Mengembalikan array struktur hasil evaluasi:
+  ```php
+  [
+      'is_valid' => false,
+      'missing' => ['classes', 'teachers'],
+      'errors' => [
+          'classes' => ['Master data kelas masih kosong. Waka wajib mendaftarkan kelas terlebih dahulu.'],
+          'teachers' => ['Master data guru masih kosong. Waka wajib mendaftarkan guru terlebih dahulu.']
+      ]
+  ]
+  ```
+
+### 31.2 Titik Validasi Gerbang Awal (Pre-Upload Gateway Check)
+1. **`ScheduleController@store`:**
+   - Memanggil `MasterDataPrerequisiteService::validateForManualSchedule()`.
+   - Jika tidak valid, mengembalikan HTTP 422 dengan daftar error detail.
+2. **`ScheduleImportController@store`:**
+   - Memanggil `MasterDataPrerequisiteService::validateForPdfImport()`.
+   - Jika tidak valid, mengembalikan HTTP 422 langsung. File PDF fisik **tidak disimpan ke storage** dan queue worker **tidak di-dispatch**.
+3. **`ScheduleImportController@confirm`:**
+   - Memeriksa `$import->rows()->where('match_status', 'matched')->count() > 0`.
+   - Jika bernilai 0, tolak konfirmasi dengan HTTP 422 dan pesan bahwa seluruh baris masih unmatched/conflict sehingga belum siap dimasukkan ke jadwal aktif.
+
+---
+
+## 32. Standar Respons API Penolakan Master Data (HTTP 422)
+
+```json
+{
+  "success": false,
+  "message": "Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.",
+  "errors": {
+    "classes": [
+      "Master data kelas masih kosong. Waka wajib mendaftarkan kelas terlebih dahulu."
+    ],
+    "teachers": [
+      "Master data guru masih kosong. Waka wajib mendaftarkan guru terlebih dahulu."
+    ],
+    "fet_staff_id": [
+      "Belum ada guru yang memiliki nomor staf FET (fet_staff_id). Waka wajib melengkapi fet_staff_id guru untuk import PDF."
+    ]
+  },
+  "meta": {
+    "missing_entities": [
+      "classes",
+      "teachers",
+      "fet_staff_id"
+    ]
+  }
+}
+```
+
+---
+
+## 33. Rencana Pengujian Otomatis
+
+Akan dibuat suite pengujian feature baru pada `tests/Feature/MasterDataPrerequisiteRuleTest.php` untuk menguji:
+1. `POST /api/schedules` ditolak 422 saat tabel master data kosong.
+2. `POST /api/schedules` diizinkan 201 saat seluruh master data terisi.
+3. `POST /api/schedule-imports` ditolak 422 saat master data kosong (file storage & queue bersih).
+4. `POST /api/schedule-imports` ditolak 422 saat guru ada tetapi belum memiliki `fet_staff_id`.
+5. `POST /api/schedule-imports` diizinkan 202 saat master data lengkap dan siap.
+6. `POST /api/schedule-imports/{id}/confirm` ditolak 422 jika `matched_count === 0`.
+7. Seluruh endpoint memvalidasi otorisasi `role:vice_principal` (401 unauthenticated, 403 non-waka).
+
+---
+
+## 34. Realisasi Implementasi & Hasil Pengujian Aktual
+
+### 34.1 File yang Dibuat dan Diubah
+| No | File | Tipe Perubahan | Deskripsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Services/MasterDataPrerequisiteService.php` | Baru | Service layer untuk validasi ketersediaan Master Data (Kelas, Guru, Mata Pelajaran, Ruangan, serta `fet_staff_id` untuk PDF import). |
+| 2 | `app/Http/Controllers/API/ScheduleController.php` | Diperbarui | Menginjeksi `MasterDataPrerequisiteService` dan menambahkan guard validasi pada `store()` sebelum aturan request diproses. |
+| 3 | `app/Http/Controllers/API/ScheduleImportController.php` | Diperbarui | Menambahkan guard validasi pada `store()` sebelum penyimpanan file ke storage/dispatch job, serta menambahkan guard pada `confirm()` yang menolak commit jika `matched_count === 0`. |
+| 4 | `tests/Feature/MasterDataPrerequisiteRuleTest.php` | Baru | Automated feature test suite berisikan 9 skenario pengujian komprehensif untuk aturan bisnis baru ini. |
+
+---
+
+### 34.2 Potongan Kode Utama yang Diimplementasikan
+
+#### 1. `app/Services/MasterDataPrerequisiteService.php`
+```php
+namespace App\Services;
+
+use App\Models\Classes;
+use App\Models\Rooms;
+use App\Models\Subject;
+use App\Models\User;
+
+class MasterDataPrerequisiteService
+{
+    public function validateForManualSchedule(): array
+    {
+        return $this->evaluate([
+            'classes' => Classes::whereNull('deleted_at')->exists(),
+            'teachers' => User::where('role', 'teacher')->whereNull('deleted_at')->exists(),
+            'subjects' => Subject::whereNull('deleted_at')->exists(),
+            'rooms' => Rooms::whereNull('deleted_at')->exists(),
+        ], isPdfImport: false);
+    }
+
+    public function validateForPdfImport(): array
+    {
+        $hasTeachers = User::where('role', 'teacher')->whereNull('deleted_at')->exists();
+        $hasTeachersWithFetId = User::where('role', 'teacher')
+            ->whereNull('deleted_at')
+            ->whereNotNull('fet_staff_id')
+            ->where('fet_staff_id', '!=', '')
+            ->exists();
+
+        return $this->evaluate([
+            'classes' => Classes::whereNull('deleted_at')->exists(),
+            'teachers' => $hasTeachers,
+            'fet_staff_id' => $hasTeachersWithFetId,
+            'subjects' => Subject::whereNull('deleted_at')->exists(),
+            'rooms' => Rooms::whereNull('deleted_at')->exists(),
+        ], isPdfImport: true);
+    }
+
+    private function evaluate(array $checks, bool $isPdfImport): array
+    {
+        $missing = [];
+        $errors = [];
+
+        if (!$checks['classes']) {
+            $missing[] = 'classes';
+            $errors['classes'] = ['Master data kelas masih kosong. Waka wajib mendaftarkan kelas terlebih dahulu.'];
+        }
+
+        if (!$checks['teachers']) {
+            $missing[] = 'teachers';
+            $errors['teachers'] = ['Master data guru masih kosong. Waka wajib mendaftarkan guru terlebih dahulu.'];
+        } elseif ($isPdfImport && isset($checks['fet_staff_id']) && !$checks['fet_staff_id']) {
+            $missing[] = 'fet_staff_id';
+            $errors['fet_staff_id'] = ['Belum ada guru yang memiliki nomor staf FET (fet_staff_id). Waka wajib melengkapi fet_staff_id guru untuk import PDF.'];
+        }
+
+        if (!$checks['subjects']) {
+            $missing[] = 'subjects';
+            $errors['subjects'] = ['Master data mata pelajaran masih kosong. Waka wajib mendaftarkan mata pelajaran terlebih dahulu.'];
+        }
+
+        if (!$checks['rooms']) {
+            $missing[] = 'rooms';
+            $errors['rooms'] = ['Master data ruangan masih kosong. Waka wajib mendaftarkan ruangan terlebih dahulu.'];
+        }
+
+        return [
+            'is_valid' => empty($missing),
+            'missing' => $missing,
+            'errors' => $errors,
+        ];
+    }
+}
+```
+
+#### 2. Guarding pada `ScheduleController.php`
+```php
+public function store(Request $request): JsonResponse
+{
+    $prerequisiteCheck = $this->prerequisites->validateForManualSchedule();
+    if (!$prerequisiteCheck['is_valid']) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+            'errors' => $prerequisiteCheck['errors'],
+            'meta' => [
+                'missing_entities' => $prerequisiteCheck['missing'],
+            ],
+        ], 422);
+    }
+
+    $validated = $request->validate([
+        // ... validasi request
+    ]);
+    // ... logic pembuatan jadwal
+}
+```
+
+#### 3. Guarding pada `ScheduleImportController.php`
+```php
+public function store(Request $request)
+{
+    $prerequisiteCheck = $this->prerequisites->validateForPdfImport();
+    if (!$prerequisiteCheck['is_valid']) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+            'errors' => $prerequisiteCheck['errors'],
+            'meta' => [
+                'missing_entities' => $prerequisiteCheck['missing'],
+            ],
+        ], 422);
+    }
+
+    // Hanya jika lolos, file disimpan dan job diantrekan
+    $request->validate([
+        'cycle_type' => 'required|integer|in:1,2',
+        'file_kelas' => 'required|file|mimes:pdf|max:10240',
+        'file_ruangan' => 'required|file|mimes:pdf|max:10240',
+    ]);
+
+    $pathKelas = $request->file('file_kelas')->store('imports/schedules');
+    $pathRuangan = $request->file('file_ruangan')->store('imports/schedules');
+    // ...
+}
+
+public function confirm(Request $request, $id)
+{
+    $request->validate(['password' => 'required|string']);
+
+    if ($error = $this->passwordIsConfirmed($request)) {
+        return $error;
+    }
+
+    $import = ScheduleImport::with('rows')->where('status', 'preview_ready')->findOrFail($id);
+
+    $matchedCount = $import->rows->where('match_status', 'matched')->count();
+    if ($matchedCount === 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Konfirmasi gagal. Tidak ada baris jadwal yang berstatus matched untuk dimasukkan ke jadwal aktif.',
+            'errors' => [
+                'import' => ['Seluruh baris import masih berstatus unmatched atau conflict. Harap lengkapi master data atau lakukan resolusi baris terlebih dahulu.'],
+            ],
+        ], 422);
+    }
+
+    // ... commit schedules ke tabel schedules
+}
+```
+
+---
+
+### 34.3 Hasil Verifikasi Automated Testing Aktual
+
+Perintah eksekusi pengujian rule baru:
+```bash
+php artisan test --filter=MasterDataPrerequisiteRuleTest
+```
+**Hasil Eksekusi:**
+```
+PASS  Tests\Feature\MasterDataPrerequisiteRuleTest
+✓ manual schedule creation is rejected when master data is completely empty
+✓ manual schedule creation is rejected when some master data is missing
+✓ manual schedule creation is allowed when master data is complete
+✓ pdf import upload is rejected when master data is empty
+✓ pdf import upload is rejected when teachers lack fet staff id
+✓ pdf import upload is allowed when master data and fet staff id are present
+✓ confirm import is rejected when matched count is zero
+✓ confirm import is allowed when matched rows exist
+✓ non waka users cannot access schedule store and import
+
+Tests:    9 passed (59 assertions)
+Duration: 0.94s
+```
+
+Perintah eksekusi regression test keseluruhan:
+```bash
+php artisan test
+```
+**Hasil Eksekusi Keseluruhan:**
+```
+Tests:    105 passed (479 assertions)
+Duration: 12.43s
+Result:   100% Passed (Zero Failures, Zero Errors)
+```
+
+---
+
+### 34.4 Panduan Pengujian Postman untuk Skenario Prasyarat Master Data
+
+#### Skenario 1: Upload Import PDF Ditolak Karena Master Data Kosong / Belum Ada Guru Ber-FET ID
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedule-imports`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_waka}}`
+- **Body (form-data):**
+  - `cycle_type`: `1`
+  - `file_kelas`: `(pilih file PDF)`
+  - `file_ruangan`: `(pilih file PDF)`
+- **Expected Response (422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.",
+    "errors": {
+      "fet_staff_id": [
+        "Belum ada guru yang memiliki nomor staf FET (fet_staff_id). Waka wajib melengkapi fet_staff_id guru untuk import PDF."
+      ]
+    },
+    "meta": {
+      "missing_entities": [
+        "fet_staff_id"
+      ]
+    }
+  }
+  ```
+
+#### Skenario 2: Pembuatan Jadwal Manual Ditolak Karena Master Data Kosong
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedules`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "cycle_type": 1,
+    "day_of_week": 1,
+    "period_number": 1,
+    "duration_periods": 2,
+    "teacher_id": 1,
+    "class_id": 1,
+    "room_id": 1,
+    "subject_id": 1,
+    "password": "password"
+  }
+  ```
+- **Expected Response (422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.",
+    "errors": {
+      "classes": [
+        "Master data kelas masih kosong. Waka wajib mendaftarkan kelas terlebih dahulu."
+      ],
+      "rooms": [
+        "Master data ruangan masih kosong. Waka wajib mendaftarkan ruangan terlebih dahulu."
+      ]
+    },
+    "meta": {
+      "missing_entities": [
+        "classes",
+        "rooms"
+      ]
+    }
+  }
+  ```
+
+#### Skenario 3: Konfirmasi Import Ditolak Jika Matched Count = 0
+- **Method:** `POST`
+- **URL:** `{{base_url}}/schedule-imports/{{import_id}}/confirm`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_waka}}`
+- **Body raw JSON:**
+  ```json
+  {
+    "password": "password"
+  }
+  ```
+- **Expected Response (422 Unprocessable Entity):**
+  ```json
+  {
+    "success": false,
+    "message": "Konfirmasi gagal. Tidak ada baris jadwal yang berstatus matched untuk dimasukkan ke jadwal aktif.",
+    "errors": {
+      "import": [
+        "Seluruh baris import masih berstatus unmatched atau conflict. Harap lengkapi master data atau lakukan resolusi baris terlebih dahulu."
+      ]
+    }
+  }
+  ```
+
+---
+
+# Dokumentasi Perencanaan Fase 4: Alur Jurnal KBM, Presensi Exception-Based & Hak Eksklusif Guru Pengganti Kesiswaan
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Modul Terdampak:** Jurnal Mengajar Guru (PRD 5.7, 5.8, 5.11, 9.7), Presensi Siswa (PRD 9.6), dan Otorisasi Penugasan Kesiswaan vs Wali Kelas  
+**Acuan Spesifikasi:** `MD/PRD.md` (Catatan Revisi, Bagian 3, 5.7, 5.8, 9.7) dan `MD/MASTER_IMPROVEMENT_PLAN.md` (Fase 4)  
+**Status Fase 4:** **Selesai Diimplementasikan & Terverifikasi Pengujian Otomatis 100% (122 Tests Pass)**  
+
+---
+
+## 35. Ringkasan Implementasi Fase 4
+
+### 35.1 Analisis & Realisasi Masalah
+1. **Penegakan Hak Eksklusif Guru Pengganti (Kesiswaan Only):**
+   - Diimplementasikan di `JournalController@store` dan `JournalController@update`.
+   - Hanya guru yang memiliki penugasan struktural `kesiswaan` (`teacher_assignments.type = 'kesiswaan'`) yang berhak bertindak sebagai Guru Pengganti (`substitute_teacher_id`) untuk membuka dan menyelesaikan jurnal mengajar serta presensi KBM kelas saat guru utama berhalangan hadir.
+   - Wali Kelas dari kelas terkait maupun guru mata pelajaran reguler lainnya tanpa penugasan Kesiswaan secara tegas **DITOLAK LANGSUNG DENGAN STATUS HTTP 403 FORBIDDEN**.
+2. **Penyatuan Endpoint Jurnal Atomik (`PUT /api/journals/{id}`):**
+   - Menggantikan alur lama yang terpecah (`/attendance` dan `/complete`).
+   - Menerima `topic_description`, berkas gambar `photo`, dan array `exceptions` presensi siswa.
+   - Seluruh mutasi dijalankan dalam satu transaksi database `DB::transaction()`.
+3. **Standarisasi Kompresi Foto (PRD 5.11):**
+   - Menggunakan `Intervention Image` untuk resize lebar maksimum ~800px (`scaleDown(width: 800)`) dan encode ke JPEG dengan kualitas 35% (`encodeUsingFileExtension('jpg', quality: 35)`).
+   - Target ukuran file di bawah 150KB tercapai dan terverifikasi via automated testing.
+4. **Presensi Exception-Based & Sinkronisasi Perizinan (PRD 5.8 & 5.9):**
+   - Siswa yang tidak disebutkan dalam array `exceptions` otomatis tercatat sebagai **Hadir**.
+   - Terintegrasi langsung dengan tabel `leave_requests` approved bertipe `tidak_masuk` (Sakit otomatis menjadi status `Sakit`, lainnya menjadi status `Izin`).
+5. **Endpoint Monitoring Ter-scoped (PRD 9.6 & 9.7):**
+   - `GET /api/journals`: Waka & Kesiswaan dapat melihat rekap seluruh sekolah; Guru biasa hanya melihat jurnal miliknya atau yang digantikannya.
+   - `GET /api/attendances`: Waka & Kesiswaan melihat seluruh sekolah; Wali Kelas otomatis ter-scoped pada kelas binaannya; Siswa & Orang Tua auto-scoped pada data mandiri / anak.
+
+---
+
+## 36. File yang Dibuat & Diubah
+
+| No | File | Tipe | Deskripsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Models/User.php` | Diperbarui | Menambahkan helper method `hasAssignment(string $type)`, `isKesiswaan()`, dan `isWaliKelas(?int $classId)`. |
+| 2 | `app/Http/Controllers/API/JournalController.php` | Diperbarui Penuh | Menangani `index` (rekap jurnal ter-scoped), `show` (detail jurnal & presensi), `store` (buka sesi KBM / tandai `teacher_absent`), `markTeacherAbsent` (patch `teacher_absent`), dan `update` (penyelesaian jurnal atomik + kompresi foto + presensi exception-based). |
+| 3 | `app/Http/Controllers/API/AttendanceController.php` | Diperbarui | Menambahkan method `index` untuk `GET /api/attendances` dengan scoping multi-role (Waka, Kesiswaan, Wali Kelas, Guru Mapel, Siswa, Orang Tua), serta menyelaraskan validasi perizinan `LeaveRequest`. |
+| 4 | `app/Http/Controllers/API/SubstituteAssignmentController.php` | Diperbarui | Menambahkan validasi ketat bahwa guru pengganti yang ditugaskan wajib berstatus Kesiswaan. |
+| 5 | `routes/api.php` | Diperbarui | Mendaftarkan route `GET /attendances`, `GET /journals`, `GET /journals/{id}`, `POST /journals`, `PATCH /journals/{id}`, dan `PUT/POST /journals/{id}` dengan middleware otorisasi yang presisi. |
+| 6 | `tests/Feature/JournalAndAttendanceTest.php` | Baru | Suite pengujian feature komprehensif berisikan 17 skenario pengujian Fase 4 (lulus 100%). |
+
+---
+
+## 37. Potongan Kode Utama yang Diimplementasikan
+
+### 37.1 Otorisasi Eksklusif Pengganti Kesiswaan pada `JournalController.php`
+```php
+// app/Http/Controllers/API/JournalController.php (method store)
+$isOriginalTeacher = ($schedule->teacher_id === $user->id);
+$isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
+$isWaka = ($user->role === 'vice_principal');
+
+// Penegakan Otorisasi Baru: Wali Kelas dan Guru reguler dilarang keras membuka/menggantikan jadwal guru lain
+if (!$isOriginalTeacher && !$isKesiswaan && !$isWaka) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Akses ditolak. Hanya guru pengajar jadwal atau Guru Kesiswaan yang berhak membuka atau menggantikan jadwal ini.',
+    ], 403);
+}
+
+// Skenario 1: Menandai status teacher_absent
+if ($request->input('status') === 'teacher_absent') {
+    if (!$isKesiswaan && !$isWaka) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Hanya Guru Kesiswaan atau Waka Kurikulum yang berhak menandai status guru berhalangan hadir (teacher_absent).',
+        ], 403);
+    }
+    // Update atau buat jurnal dengan status teacher_absent
+}
+
+// Skenario 2: Membuka sesi KBM ongoing
+// Jika bukan original teacher, maka wajib Kesiswaan yang menjadi substitute_teacher_id
+$substituteTeacherId = (!$isOriginalTeacher && $isKesiswaan) ? $user->id : null;
+$journal = Journal::firstOrCreate(
+    ['schedule_id' => $schedule->id, 'date' => $today],
+    ['status' => 'ongoing', 'substitute_teacher_id' => $substituteTeacherId]
+);
+```
+
+### 37.2 Penyelesaian Jurnal Atomik & Kompresi Foto Standar PRD 5.11
+```php
+// app/Http/Controllers/API/JournalController.php (method update)
+$journal = Journal::with('schedule')->findOrFail($id);
+$user = $request->user();
+
+$isOriginalTeacher = ($journal->schedule->teacher_id === $user->id);
+$isAuthorizedSubstitute = ($journal->substitute_teacher_id === $user->id && $user->isKesiswaan());
+
+if (!$isOriginalTeacher && !$isAuthorizedSubstitute) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Akses ditolak. Anda tidak memiliki izin untuk mengisi atau menyelesaikan jurnal ini.',
+    ], 403);
+}
+
+// Kompresi Gambar: Lebar maks ~800px, JPEG quality 35% (< 150KB)
+$file = $request->file('photo');
+$img = Image::decode($file);
+$img->scaleDown(width: 800);
+$encoded = $img->encodeUsingFileExtension('jpg', quality: 35);
+
+$filename = 'journals/' . Str::uuid() . '.jpg';
+Storage::disk('public')->put($filename, (string) $encoded);
+
+DB::transaction(function () use ($journal, $request, $filename, $journalDate, $classId, &$insertedCount) {
+    // 1. Ambil seluruh siswa aktif di kelas
+    $allStudents = User::where('role', 'student')->where('class_id', $classId)->get();
+
+    // 2. Ambil izin approved tidak_masuk hari ini (PRD 5.9)
+    $approvedLeaves = LeaveRequest::where('status_approval', 'approved')
+        ->where('type', 'tidak_masuk')
+        ->whereDate('start_date', '<=', $journalDate)
+        ->whereDate('end_date', '>=', $journalDate)
+        ->get()->keyBy('student_id');
+
+    // 3. Susun presensi: exceptions -> approved leaves -> sisa default Hadir
+    $manualExceptions = collect($request->input('exceptions', []))->keyBy('student_id');
+    // ...
+    Attendance::where('journal_id', $journal->id)->delete();
+    Attendance::insert($attendanceData);
+
+    $journal->update([
+        'topic_description' => $request->topic_description,
+        'photo_path' => $filename,
+        'status' => 'completed',
+    ]);
+});
+```
+
+---
+
+## 38. Hasil Eksekusi Automated Testing Aktual
+
+### 38.1 Test Suite Khusus Fase 4 (`JournalAndAttendanceTest`)
+```bash
+php artisan test --filter=JournalAndAttendanceTest
+```
+**Output Eksekusi:**
+```
+PASS  Tests\Feature\JournalAndAttendanceTest
+✓ original teacher can open journal session
+✓ kesiswaan can open journal as substitute teacher
+✓ kesiswaan can mark teacher absent via store
+✓ waka can mark teacher absent via store
+✓ wali kelas is forbidden from opening or substituting journal
+✓ regular teacher without kesiswaan is forbidden from substituting
+✓ student and parent cannot open journal
+✓ kesiswaan or waka can mark ongoing journal as teacher absent via patch
+✓ wali kelas cannot patch journal to teacher absent
+✓ atomic put journal completion with exception based attendance
+✓ kesiswaan as substitute can complete journal and attendance
+✓ wali kelas cannot complete journal of other teacher
+✓ approved leave requests are synced to attendance
+✓ journal index scoping
+✓ attendance index scoping
+✓ photo compression conforms to prd specs
+✓ journal show scoping
+
+Tests:    17 passed (70 assertions)
+Duration: 3.71s
+```
+
+### 38.2 Regression Test Menyeluruh (Full Test Suite)
+```bash
+php artisan test
+```
+**Output Eksekusi:**
+```
+Tests:    122 passed (549 assertions)
+Duration: 14.48s
+Result:   100% Passed (Zero Failures, Zero Errors)
+```
+
+---
+
+## 39. Panduan Pengujian Endpoint melalui Postman (Fase 4)
+
+### 39.1 Prasyarat & Autentikasi Pengujian
+
+Untuk melakukan pengujian endpoint Fase 4 di Postman, siapkan environment variable:
+- `base_url`: `http://127.0.0.1:8000/api`
+- Dapatkan token autentikasi melalui `POST {{base_url}}/login`:
+  - **Akun Waka Kurikulum:** Body: `{ "nis_nip": "197001011990011001", "password": "password" }` ➔ Simpan token ke variable `token_waka`.
+  - **Akun Guru Utama:** Body: `{ "nis_nip": "198001012010011001", "password": "password" }` ➔ Simpan token ke variable `token_guru_utama`.
+  - **Akun Guru Kesiswaan:** Akun guru yang memiliki record di `teacher_assignments` bertipe `kesiswaan` ➔ Simpan token ke variable `token_kesiswaan`.
+  - **Akun Guru Wali Kelas:** Akun guru yang memiliki record di `teacher_assignments` bertipe `wali_kelas` ➔ Simpan token ke variable `token_wali_kelas`.
+  - **Akun Siswa:** Body: `{ "nis_nip": "12345", "password": "password" }` ➔ Simpan token ke variable `token_siswa`.
+
+---
+
+### 39.2 Endpoint 1: Buka Sesi Jurnal KBM (`POST /api/journals`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/journals`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru_utama}}` *(atau `{{token_kesiswaan}}`)*
+- **Body raw JSON (Kasus 1: Buka KBM Normal):**
+  ```json
+  {
+    "schedule_id": 1
+  }
+  ```
+- **Expected Response (201 Created - Dibuka Guru Utama):**
+  ```json
+  {
+    "success": true,
+    "message": "Jurnal KBM berhasil dibuka.",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "date": "2026-10-21",
+      "status": "ongoing",
+      "substitute_teacher_id": null,
+      "schedule": {
+        "id": 1,
+        "subject": { "id": 2, "name": "Pemrograman Berorientasi Objek" },
+        "school_class": { "id": 1, "name": "XII RPL 1", "level": 12 }
+      }
+    },
+    "meta": {
+      "approved_leaves": []
+    }
+  }
+  ```
+
+- **Body raw JSON (Kasus 2: Dibuka oleh Kesiswaan sebagai Guru Pengganti):**
+  Gunakan header `Authorization: Bearer {{token_kesiswaan}}` dengan body yang sama:
+  - **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Jurnal KBM berhasil dibuka.",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "date": "2026-10-21",
+      "status": "ongoing",
+      "substitute_teacher_id": 3
+    }
+  }
+  ```
+
+- **Body raw JSON (Kasus 3: Kesiswaan/Waka Menandai `teacher_absent`):**
+  ```json
+  {
+    "schedule_id": 1,
+    "status": "teacher_absent"
+  }
+  ```
+  - **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Jadwal berhasil ditandai sebagai guru berhalangan hadir (teacher_absent).",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "date": "2026-10-21",
+      "status": "teacher_absent",
+      "substitute_teacher_id": null
+    }
+  }
+  ```
+
+- **Skenario Penolakan Wali Kelas & Guru Reguler (403 Forbidden):**
+  Kirim request menggunakan token Wali Kelas (`Bearer {{token_wali_kelas}}`) untuk jadwal guru lain:
+  - **Expected Response (403 Forbidden):**
+  ```json
+  {
+    "success": false,
+    "message": "Akses ditolak. Hanya guru pengajar jadwal atau Guru Kesiswaan yang berhak membuka atau menggantikan jadwal ini."
+  }
+  ```
+
+---
+
+### 39.3 Endpoint 2: Penyelesaian Jurnal Atomik & Presensi (`PUT /api/journals/{id}`)
+
+- **Method:** `POST` *(dengan method spoofing `_method=PUT`)* atau `PUT`
+- **URL:** `{{base_url}}/journals/15`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_guru_utama}}` *(atau `{{token_kesiswaan}}` jika terdaftar sebagai pengganti)*
+- **Body (form-data):**
+  - `_method`: `PUT`
+  - `topic_description`: `Implementasi encapsulation, inheritance, dan polymorphism pada controller Laravel.`
+  - `photo`: `(Pilih berkas foto kegiatan belajar mengajar: jpg/jpeg/png)`
+  - `exceptions[0][student_id]`: `10`
+  - `exceptions[0][status]`: `Sakit`
+  - `exceptions[1][student_id]`: `12`
+  - `exceptions[1][status]`: `Izin`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Jurnal KBM dan presensi berhasil diselesaikan.",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "date": "2026-10-21",
+      "topic_description": "Implementasi encapsulation, inheritance, dan polymorphism pada controller Laravel.",
+      "photo_path": "journals/4b568726-0e12-4cf0-8b1b-85fae44dbba1.jpg",
+      "status": "completed",
+      "substitute_teacher_id": null
+    },
+    "meta": {
+      "total_students_attendance": 36
+    }
+  }
+  ```
+
+- **Skenario Penolakan Wali Kelas / Guru Lain (403 Forbidden):**
+  Jika Wali Kelas mencoba menyelesaikan jurnal ini:
+  ```json
+  {
+    "success": false,
+    "message": "Akses ditolak. Anda tidak memiliki izin untuk mengisi atau menyelesaikan jurnal ini."
+  }
+  ```
+
+- **Skenario Validasi Materi Terlalu Pendek (422 Unprocessable Entity):**
+  Jika `topic_description` kurang dari 10 karakter:
+  ```json
+  {
+    "success": false,
+    "message": "Validasi gagal.",
+    "errors": {
+      "topic_description": [
+        "The topic description field must be at least 10 characters."
+      ]
+    }
+  }
+  ```
+
+---
+
+### 39.4 Endpoint 3: Menandai `teacher_absent` pada Jurnal Aktif (`PATCH /api/journals/{id}`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/journals/15`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_kesiswaan}}` *(atau `{{token_waka}}`)*
+- **Body:** Kosong (tidak membutuhkan request body).
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Status jurnal berhasil diubah menjadi guru berhalangan hadir (teacher_absent).",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "status": "teacher_absent",
+      "substitute_teacher_id": null
+    }
+  }
+  ```
+- **Skenario Akses Bukan Kesiswaan/Waka (403 Forbidden):**
+  ```json
+  {
+    "success": false,
+    "message": "Akses ditolak. Hanya Guru Kesiswaan atau Waka Kurikulum yang berhak menandai status guru berhalangan hadir."
+  }
+  ```
+
+---
+
+### 39.5 Endpoint 4: Monitoring Riwayat Jurnal (`GET /api/journals`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/journals?status=completed&per_page=10`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_waka}}` *(melihat semua)* atau `Bearer {{token_guru_utama}}` *(auto-scoped miliknya)*
+- **Query Parameters (Opsional):**
+  - `date`: `2026-10-21` (filter tanggal spesifik)
+  - `start_date` & `end_date`: rentang tanggal
+  - `class_id`: ID kelas
+  - `teacher_id`: ID guru
+  - `status`: `ongoing` / `completed` / `teacher_absent`
+  - `per_page`: `10`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data jurnal berhasil diambil.",
+    "data": [
+      {
+        "id": 15,
+        "schedule_id": 1,
+        "date": "2026-10-21",
+        "topic_description": "Implementasi encapsulation, inheritance, dan polymorphism pada controller Laravel.",
+        "photo_path": "journals/4b568726-0e12-4cf0-8b1b-85fae44dbba1.jpg",
+        "status": "completed",
+        "schedule": {
+          "id": 1,
+          "subject": { "id": 2, "name": "Pemrograman Berorientasi Objek" },
+          "school_class": { "id": 1, "name": "XII RPL 1", "level": 12 },
+          "teacher": { "id": 2, "name": "Guru A (Utama)", "nis_nip": "198001012010011001" }
+        },
+        "substitute_teacher": null
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 10,
+      "total": 1,
+      "last_page": 1
+    }
+  }
+  ```
+
+---
+
+### 39.6 Endpoint 5: Detail Jurnal & Presensi Kelas (`GET /api/journals/{id}`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/journals/15`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_guru_utama}}` *(atau Kesiswaan/Waka)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Detail jurnal berhasil diambil.",
+    "data": {
+      "id": 15,
+      "schedule_id": 1,
+      "date": "2026-10-21",
+      "topic_description": "Implementasi encapsulation, inheritance, dan polymorphism.",
+      "photo_path": "journals/4b568726-0e12-4cf0-8b1b-85fae44dbba1.jpg",
+      "status": "completed",
+      "schedule": { ... },
+      "attendances": [
+        {
+          "id": 101,
+          "student_id": 10,
+          "status": "Sakit",
+          "student": { "id": 10, "name": "Siswa Satu", "nis_nip": "1001" }
+        },
+        {
+          "id": 102,
+          "student_id": 11,
+          "status": "Hadir",
+          "student": { "id": 11, "name": "Siswa Dua", "nis_nip": "1002" }
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 39.7 Endpoint 6: Rekapitulasi Presensi Multi-Role (`GET /api/attendances`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/attendances?status=Alpa`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_wali_kelas}}` *(melihat kelasnya)* atau `Bearer {{token_kesiswaan}}` *(melihat sekolah)* atau `Bearer {{token_siswa}}` *(melihat diri sendiri)*
+- **Query Parameters (Opsional):**
+  - `date`: `2026-10-21`
+  - `class_id`: ID kelas
+  - `student_id`: ID siswa
+  - `status`: `Hadir` / `Sakit` / `Izin` / `Alpa`
+  - `per_page`: `15`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data presensi berhasil diambil.",
+    "data": [
+      {
+        "id": 101,
+        "journal_id": 15,
+        "student_id": 10,
+        "status": "Alpa",
+        "date": "2026-10-21",
+        "student": {
+          "id": 10,
+          "name": "Siswa Satu",
+          "nis_nip": "1001",
+          "school_class": { "id": 1, "name": "XII RPL 1" }
+        },
+        "journal": {
+          "id": 15,
+          "topic_description": "Implementasi encapsulation, inheritance, dan polymorphism."
+        }
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 15,
+      "total": 1,
+      "last_page": 1
+    }
+  }
+  ```

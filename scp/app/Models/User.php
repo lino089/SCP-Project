@@ -51,12 +51,45 @@ class User extends Authenticatable
         ];
     }
 
-/**
+    /**
      * Relasi ke penugasan tambahan guru (Kesiswaan / Wali Kelas)
      */
     public function assignments(): HasMany
     {
         return $this->hasMany(TeacherAssignment::class, 'user_id');
+    }
+
+    /**
+     * Memeriksa apakah guru memiliki penugasan tertentu
+     */
+    public function hasAssignment(string $type): bool
+    {
+        return $this->role === 'teacher' && $this->assignments()->where('type', $type)->exists();
+    }
+
+    /**
+     * Memeriksa apakah guru memiliki penugasan Kesiswaan
+     */
+    public function isKesiswaan(): bool
+    {
+        return $this->hasAssignment('kesiswaan');
+    }
+
+    /**
+     * Memeriksa apakah guru adalah Wali Kelas (opsional: untuk kelas tertentu)
+     */
+    public function isWaliKelas(?int $classId = null): bool
+    {
+        if ($this->role !== 'teacher') {
+            return false;
+        }
+
+        $query = $this->assignments()->where('type', 'wali_kelas');
+        if ($classId !== null) {
+            $query->where('class_id', $classId);
+        }
+
+        return $query->exists();
     }
 
     /**

@@ -38,6 +38,14 @@ class SubstituteAssignmentController extends Controller
             ], 422);
         }
 
+        $substituteTeacher = \App\Models\User::findOrFail($request->substitute_teacher_id);
+        if (!$substituteTeacher->isKesiswaan()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Guru dengan penugasan Kesiswaan yang dapat ditugaskan sebagai guru pengganti.',
+            ], 422);
+        }
+
         $assignment = SubstituteAssignment::create([
             'schedule_id' => $schedule->id,
             'original_teacher_id' => $schedule->teacher_id,

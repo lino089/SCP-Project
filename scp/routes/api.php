@@ -34,13 +34,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3)
+    // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3 & 9.6)
     Route::get('/classes', [SchoolClassController::class, 'index']);
     Route::get('/rooms', [RoomController::class, 'index']);
     Route::get('/subjects', [SubjectController::class, 'index']);
     Route::get('/teachers', [TeacherController::class, 'index']);
     Route::get('/students', [StudentController::class, 'index']);
     Route::get('/schedules', [ScheduleController::class, 'index']);
+    Route::get('/attendances', [AttendanceController::class, 'index']);
 
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
@@ -100,14 +101,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/reports/journals', [ReportController::class, 'teachingJournals']);
     });
 
-    // 2. Waka Kurikulum & Guru (Shared Read/Verification)
+    // 2. Waka Kurikulum & Guru (Shared Read/Verification & Journals: PRD 9.7)
     Route::middleware('role:vice_principal,teacher')->group(function () {
         Route::get('/attendance-warnings', [AttendanceWarningController::class, 'index']);
+        Route::get('/journals', [JournalController::class, 'index']);
+        Route::get('/journals/{id}', [JournalController::class, 'show']);
+        Route::post('/journals', [JournalController::class, 'store']);
+        Route::patch('/journals/{id}', [JournalController::class, 'markTeacherAbsent']);
     });
 
     // 3. Khusus Guru (termasuk Kesiswaan & Wali Kelas)
     Route::middleware('role:teacher')->group(function () {
-        Route::post('/journals', [JournalController::class, 'store']);
+        Route::match(['put', 'post'], '/journals/{id}', [JournalController::class, 'update']);
         Route::post('/journals/{id}/attendance', [AttendanceController::class, 'store']);
         Route::post('/journals/{id}/complete', [JournalController::class, 'complete']);
 

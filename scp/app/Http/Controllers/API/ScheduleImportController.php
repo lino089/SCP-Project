@@ -9,17 +9,36 @@ use App\Models\ScheduleImport;
 use App\Models\ScheduleImportRow;
 use App\Models\Schedule;
 use App\Services\ScheduleConflictService;
+use App\Services\MasterDataPrerequisiteService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ScheduleImportController extends Controller
 {
+    public function __construct(
+        private ?MasterDataPrerequisiteService $prerequisites = null
+    ) {
+        $this->prerequisites = $prerequisites ?? new MasterDataPrerequisiteService();
+    }
+
     /**
      * Upload 2 PDF files and dispatch asynchronous parsing job.
      * POST /api/schedule-imports
      */
     public function store(Request $request)
     {
+        $prerequisiteCheck = $this->prerequisites->validateForPdfImport();
+        if (!$prerequisiteCheck['is_valid']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+                'errors' => $prerequisiteCheck['errors'],
+                'meta' => [
+                    'missing_entities' => $prerequisiteCheck['missing'],
+                ],
+            ], 422);
+        }
+
         $request->validate([
             'cycle_type' => 'required|integer|in:1,2',
             'file_kelas' => 'required|file|mimes:pdf|max:10240',
@@ -178,6 +197,17 @@ class ScheduleImportController extends Controller
         }
 
         $import = ScheduleImport::with('rows')->where('status', 'preview_ready')->findOrFail($id);
+
+        $matchedCount = $import->rows->where('match_status', 'matched')->count();
+        if ($matchedCount === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Konfirmasi gagal. Tidak ada baris jadwal yang berstatus matched untuk dimasukkan ke jadwal aktif.',
+                'errors' => [
+                    'import' => ['Seluruh baris import masih berstatus unmatched atau conflict. Harap lengkapi master data atau lakukan resolusi baris terlebih dahulu.'],
+                ],
+            ], 422);
+        }
 
         $insertedCount = 0;
 

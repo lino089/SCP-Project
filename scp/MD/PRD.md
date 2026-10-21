@@ -24,6 +24,12 @@ Tabel master baru: subjects (mata pelajaran), menggantikan pendekatan teks bebas
 
 Fitur Lock Schedule (is_schedule_locked) DIHAPUS — digantikan mekanisme password re-confirmation pada seluruh aksi mutasi jadwal (edit/hapus manual, konfirmasi import, ubah status upacara mingguan).
 
+Prasyarat Mutlak Master Data — Waka wajib mengisi seluruh Master Data (Kelas, Guru beserta fet_staff_id, Mata Pelajaran, dan Ruangan) terlebih dahulu sebelum dapat menginput jadwal. Jika salah satu Master Data masih kosong atau belum memenuhi persyaratan, seluruh proses input jadwal (baik manual maupun upload PDF) ditolak langsung di gerbang awal request (HTTP 422).
+
+Proteksi Konfirmasi Import Kosong — Konfirmasi import PDF (confirm) ditolak (HTTP 422) apabila tidak ada satupun baris jadwal yang berstatus 'matched' (matched_count = 0).
+
+Hak Eksklusif Penggantian Guru Berhalangan Hadir (Phase 4) — Hanya Guru dengan penugasan Kesiswaan (`teacher_assignments.type = 'kesiswaan'`) yang berhak menggantikan guru yang berhalangan hadir dalam pembukaan dan pengisian jurnal mengajar serta presensi KBM (`substitute_teacher_id`). Wali Kelas secara tegas TIDAK memiliki hak untuk melakukan penggantian pengisian jurnal/presensi guru lain. Penegakan otorisasi diimplementasikan ketat pada sisi backend (HTTP 403 Forbidden).
+
 Re-import jadwal bersifat replace penuh, namun di-scope PER PUTARAN (cycle_type) dan dieksekusi via soft-delete — bukan hard-delete — agar riwayat jurnal yang merujuk jadwal lama tidak rusak.
 
 File PDF mentah dihapus dari Supabase Storage segera setelah proses import dikonfirmasi berhasil; metadata & hasil parsing tetap disimpan sebagai audit log.
@@ -58,6 +64,8 @@ Proses yang memanggil layanan eksternal/berat (AI generate/koreksi kuis, parsing
 
 PENGELOLAAN JADWAL SEPENUHNYA MILIK WAKA. Guru tidak memiliki hak input/edit/hapus jadwal dalam bentuk apapun — baik manual maupun otomatis. Waka memasukkan jadwal lewat input manual atau import PDF, untuk Putaran 1 dan Putaran 2 secara terpisah.
 
+PRASYARAT MASTER DATA MUTLAK SEBELUM INPUT JADWAL. Sistem memberlakukan aturan dependensi ketat: Waka wajib mengisi seluruh Master Data (Classes, Users/Teachers, Subjects, Rooms) sebelum dapat menginput jadwal (manual maupun PDF import). Jika salah satu Master Data kosong atau tidak memenuhi syarat (misal belum ada guru dengan fet_staff_id untuk import PDF), sistem menolak proses input di awal request (HTTP 422).
+
 Jadwal sekolah mengikuti struktur PDF yang selalu konsisten dari aplikasi FET milik Waka — struktur tabel tetap sama antar periode, hanya isinya (guru/mapel/ruang/kelas) yang berubah.
 
 # 3. Role & Hak Akses API
@@ -66,8 +74,8 @@ Jadwal sekolah mengikuti struktur PDF yang selalu konsisten dari aplikasi FET mi
 | --- | --- | --- |
 | Waka Kurikulum | Semua jadwal (Put 1 & 2), rekap jurnal, rekap presensi, seluruh master data, log siklus, hasil preview import jadwal. | CRUD Master Data (termasuk mapel), input/edit/hapus jadwal manual (password wajib), import & konfirmasi jadwal dari PDF (password wajib), kelola penugasan guru, kenaikan kelas & kelulusan, toggle Putaran & status upacara mingguan (password wajib). |
 | Guru (dasar) | Jadwal mandiri (read-only), siswa di kelasnya, submission & soal Kuis AI miliknya. | Buka kelas & presensi, jurnal, buat/review/publish Kuis AI, override skor AI. TIDAK ADA hak mutasi jadwal. |
-| Guru + assignment Kesiswaan/BK | Seluruh pengajuan izin, bukti surat, rekap presensi siswa sekolah. | Verifikasi status izin, menandai jurnal teacher_absent. |
-| Guru + assignment Wali Kelas | Data kelas yang diampu. | Mengisi presensi pengganti saat teacher_absent pada kelasnya. |
+| Guru + assignment Kesiswaan/BK | Seluruh pengajuan izin, bukti surat, rekap presensi siswa sekolah, rekap seluruh jurnal sekolah. | Verifikasi status izin, menandai status jurnal teacher_absent, dan SATU-SATUNYA peran yang berhak menjadi Guru Pengganti (substitute_teacher_id) untuk membuka sesi KBM, mengisi materi, upload foto KBM, dan mengisi presensi saat guru utama berhalangan hadir. |
+| Guru + assignment Wali Kelas | Data kelas yang diampu, monitoring presensi dan peringatan kehadiran (attendance warnings) siswa kelasnya. | Monitoring kelas yang diampu. Secara tegas TIDAK MEMILIKI HAK untuk menggantikan guru yang berhalangan hadir dalam pengisian jurnal mengajar / presensi KBM kelas. |
 | Siswa | Rekap absen mandiri, status izin mandiri, nilai & feedback kuis mandiri. | Ajukan/edit/batalkan izin (selama pending), mengerjakan Kuis AI, tautkan email/Google/HP. |
 | Orang Tua | Rekap absen, status izin, & nilai kuis anak (via linked_student_id). | Read-only atas data anak. Bisa tautkan email/Google/HP akun sendiri. |
 
@@ -113,6 +121,14 @@ Status Senin (upacara/reguler) ditentukan oleh SATU setting tunggal system_confi
 
 Setiap perubahan day_of_week + period_number pada suatu schedule di-resolve ke waktu aktual saat dibutuhkan (tampilan jadwal, perhitungan alert keterlambatan jurnal 5.6, dsb) dengan melihat period_templates sesuai day_type yang berlaku saat itu.
 
+## 5.3.1 Prasyarat Master Data Mutlak Sebelum Input Jadwal
+
+Jadwal sekolah memiliki ketergantungan relasional penuh terhadap empat entitas Master Data utama: `classes`, `users` (guru), `subjects`, dan `rooms`. Sebelum Waka Kurikulum dapat membuat jadwal (baik input manual maupun import PDF), sistem memvalidasi ketersediaan data pada keempat tabel tersebut:
+
+1. **Pemeriksaan Holistik Master Data:** Sistem memastikan tidak ada satupun tabel dari keempat pilar Master Data yang kosong (`count() > 0` dan tidak terhapus / soft-deleted).
+2. **Kondisi Khusus Import PDF FET:** Khusus pada jalur import PDF, sistem juga memastikan telah terdapat minimal satu akun guru yang memiliki atribut `fet_staff_id`, karena pencocokan otomatis FET mengandalkan ID numerik tersebut sebagai kunci utama.
+3. **Penolakan di Gerbang Awal (Pre-condition Rejection):** Jika salah satu Master Data kosong atau tidak memenuhi syarat, request pembuatan jadwal langsung ditolak dengan status HTTP 422 Unprocessable Entity, mengembalikan daftar spesifik entitas yang belum dilengkapi tanpa mengeksekusi operasi insert atau parsing file.
+
 ## 5.4 Password Re-confirmation untuk Aksi Sensitif Jadwal
 
 Menggantikan fitur Lock Schedule (dihapus di versi ini, lihat Catatan Revisi). Karena hanya Waka yang memegang hak mutasi jadwal, perlindungan dipindah dari mekanisme lock/unlock global menjadi verifikasi ulang password Waka pada titik aksi yang sensitif:
@@ -133,17 +149,20 @@ Setiap perubahan active_cycle lewat PATCH /api/academic-settings otomatis tercat
 
 GET /api/schedules?status=missing_journal mencari jadwal hari ini (WIB) yang waktu selesainya (hasil resolusi period_templates) + 30 menit sudah lewat namun jurnal belum completed. Jadwal berstatus teacher_absent dikecualikan.
 
-## 5.7 Penanganan Guru Berhalangan Hadir
+## 5.7 Penanganan Guru Berhalangan Hadir & Penggantian Mengajar
 
-journals.status mendukung teacher_absent, ditandai oleh Guru dengan assignment Kesiswaan/BK atau Waka.
+journals.status mendukung `teacher_absent`, ditandai oleh Guru dengan assignment Kesiswaan/BK atau Waka Kurikulum.
 
-Presensi kelas tersebut tetap wajib diisi (default Hadir kecuali ditandai) oleh Guru dengan assignment terkait kelas tersebut.
-
-Query alert (5.6) mengecualikan status ini.
+**Ketentuan Mutlak Hak Akses Penggantian Guru:**
+1. **Hak Eksklusif Role Kesiswaan:** HANYA guru dengan penugasan struktural Kesiswaan (`teacher_assignments.type = 'kesiswaan'`) yang berhak menggantikan guru yang berhalangan hadir dalam pembukaan dan pengisian jurnal mengajar serta presensi KBM. Ketika bertindak sebagai guru pengganti, ID user Kesiswaan dicatat pada kolom `journals.substitute_teacher_id`.
+2. **Larangan Bagi Wali Kelas & Guru Lain:** Wali Kelas dari kelas terkait maupun guru mata pelajaran lain yang tidak memiliki penugasan Kesiswaan secara tegas **TIDAK MEMILIKI HAK** untuk membuka, menggantikan, atau mengisi jurnal/presensi KBM jadwal guru lain.
+3. **Penolakan di Level Backend:** Seluruh pembatasan hak akses di atas ditegakkan di sisi backend (Authorization Guard / Policy). Percobaan pembukaan atau pengisian jurnal guru lain oleh pihak selain guru utama jadwal atau Guru Kesiswaan wajib langsung ditolak dengan kode status **HTTP 403 Forbidden**.
+4. **Penandaan Tanpa Pengganti (`teacher_absent`):** Jika jam pelajaran dibiarkan kosong karena guru berhalangan hadir dan tidak ada guru pengganti Kesiswaan yang mengajar, Guru Kesiswaan atau Waka menandai status jurnal sebagai `teacher_absent`.
+5. **Pengecualian Alert:** Query alert keterlambatan jurnal (5.6) secara otomatis mengecualikan jadwal yang berstatus `teacher_absent`.
 
 ## 5.8 Presensi: Payload Ringkas (Exception-Based)
 
-Guru hanya mengirim siswa yang TIDAK hadir di PUT /api/journals/{id}. Sisanya otomatis Hadir. attendances.status ENUM: Hadir, Sakit, Izin, Alpa.
+Pengisian presensi disatukan secara atomik ke dalam endpoint penyelesaian jurnal KBM (`PUT /api/journals/{id}`). Guru pengajar yang sah (guru utama jadwal atau Guru Kesiswaan selaku guru pengganti) hanya mengirim daftar siswa yang TIDAK hadir pada field `exceptions` (array berisikan `student_id` dan `status`: Sakit, Izin, atau Alpa). Seluruh siswa aktif lainnya di kelas tersebut otomatis tercatat sebagai **Hadir**. Nilai kolom `attendances.status` adalah ENUM: `Hadir`, `Sakit`, `Izin`, `Alpa`.
 
 ## 5.9 Sinkronisasi Perizinan ke Presensi
 
@@ -204,7 +223,7 @@ Fitur inti baru versi ini. Waka mengunggah 2 file PDF sekaligus per satu batch i
 
 ## Alur Proses:
 
-1) Upload — Waka mengunggah kedua PDF + memilih cycle_type (Putaran 1/2) yang dituju. File disimpan sementara di Supabase Storage. Record schedule_imports dibuat, status uploaded.
+1) Upload — Backend terlebih dahulu memverifikasi kelayakan Master Data (classes, teachers beserta fet_staff_id, subjects, rooms). Jika ada Master Data yang kosong atau belum memenuhi syarat, upload langsung DITOLAK dengan status HTTP 422 (file fisik tidak disimpan dan queue worker tidak dijalankan). Jika valid, Waka mengunggah kedua PDF + memilih cycle_type (Putaran 1/2) yang dituju. File disimpan sementara di Supabase Storage / disk private. Record schedule_imports dibuat, status uploaded.
 
 2) Parsing asinkron — Job queue Laravel memanggil script Python sebagai subprocess (Symfony Process), mengirim path kedua file. Python mengekstrak tabel berdasarkan koordinat/struktur sel (bukan urutan teks linear) agar tidak tercampur akibat sel gabungan. Output: JSON terstruktur per baris (kelas, hari, nomor jam, durasi slot, mapel, guru + fet_staff_id jika ada, kode ruang dari kedua sumber). Status -> parsing lalu preview_ready.
 
@@ -216,7 +235,7 @@ Fitur inti baru versi ini. Waka mengunggah 2 file PDF sekaligus per satu batch i
 
 6) Resolusi manual — Waka mengoreksi baris unmatched satu per satu lewat PATCH /api/schedule-imports/{id}/rows/{row_id}, atau meng-exclude baris tertentu.
 
-7) Konfirmasi — Waka memanggil POST /api/schedule-imports/{id}/confirm dengan password. Backend re-validasi sekali lagi, lalu dalam satu transaksi: seluruh schedules existing pada cycle_type yang sama di-soft-delete (deleted_at diisi, TIDAK dihapus permanen agar journals lama tetap valid), dan seluruh baris hasil resolusi final di-insert sebagai schedules baru (source=imported, import_batch_id terisi).
+7) Konfirmasi — Waka memanggil POST /api/schedule-imports/{id}/confirm dengan password. Backend re-validasi password Waka dan memastikan terdapat setidaknya satu baris berstatus 'matched' (jika matched_count === 0, konfirmasi DITOLAK dengan status HTTP 422). Lalu dalam satu transaksi database atomik: seluruh schedules existing pada cycle_type yang sama di-soft-delete (deleted_at diisi, TIDAK dihapus permanen agar journals lama tetap valid), dan seluruh baris hasil resolusi final yang berstatus 'matched' di-insert sebagai schedules baru (source=imported, import_batch_id terisi).
 
 8) Pembersihan — setelah commit sukses, kedua file PDF dihapus dari Supabase Storage (file_path dikosongkan); record schedule_imports & schedule_import_rows tetap disimpan sebagai audit log hasil parsing.
 
@@ -322,19 +341,19 @@ GET /api/schedules | Auth | Query: ?cycle=1|2, ?day=. Guru melihat jadwalnya (re
 
 GET /api/schedules?status=missing_journal | Auth (Guru/Waka) | Alert jurnal terlambat berbasis waktu hasil resolusi period_templates, mengecualikan teacher_absent.
 
-POST /api/schedules | Auth (Waka) | Body termasuk password. Input manual satu baris jadwal (di luar alur import PDF), cek bentrok berbasis rentang period_number -> 201 atau 422.
+POST /api/schedules | Auth (Waka) | Body termasuk password. Input manual satu baris jadwal (di luar alur import PDF); cek kelengkapan Master Data (classes, teachers, subjects, rooms) -> ditolak 422 jika kosong; cek bentrok berbasis rentang period_number -> 201 atau 422.
 
 PUT & DELETE /api/schedules/{id} | Auth (Waka) | Body/param termasuk password (5.4).
 
 ## 9.5 Import Jadwal dari PDF (Baru)
 
-POST /api/schedule-imports | Auth (Waka) | Multipart: { cycle_type, file_kelas, file_ruangan } -> memicu parsing asinkron, 202 Accepted.
+POST /api/schedule-imports | Auth (Waka) | Multipart: { cycle_type, file_kelas, file_ruangan }. Cek kelayakan Master Data (classes, teachers beserta fet_staff_id, subjects, rooms) -> ditolak 422 jika belum lengkap; jika valid -> simpan file dan memicu parsing asinkron, 202 Accepted.
 
 GET /api/schedule-imports/{id} | Auth (Waka) | Polling status & hasil preview (matched/unmatched/conflict rows).
 
 PATCH /api/schedule-imports/{id}/rows/{row_id} | Auth (Waka) | Resolusi manual satu baris (pilih class_id/teacher_id/room_id/subject_id yang benar, atau exclude).
 
-POST /api/schedule-imports/{id}/confirm | Auth (Waka) | Body: { password } -> commit final: soft-delete schedules lama pada cycle_type terkait, insert baris final, hapus file PDF dari storage.
+POST /api/schedule-imports/{id}/confirm | Auth (Waka) | Body: { password }. Re-verifikasi password Waka dan cek matched_count > 0 (ditolak 422 jika 0 baris matched) -> commit final: soft-delete schedules lama pada cycle_type terkait, insert baris final matched, hapus file PDF dari storage.
 
 DELETE /api/schedule-imports/{id} | Auth (Waka) | Membatalkan proses import yang belum dikonfirmasi.
 
@@ -352,13 +371,13 @@ GET /api/attendances | Auth (Waka/Kesiswaan: semua + filter; Siswa/Ortu: auto-sc
 
 ## 9.7 Jurnal (KBM)
 
-GET /api/journals | Auth (Waka: semua; Guru: milik sendiri) | Pagination.
+GET /api/journals | Auth (Waka/Kesiswaan: seluruh riwayat sekolah; Guru: auto-scoped hanya jurnal miliknya dan jadwal yang digantikannya) | Pagination, filter tanggal, kelas, guru, dan status.
 
-POST /api/journals | Auth (Guru: buka kelas & sync presensi; Kesiswaan/Waka: menandai teacher_absent).
+POST /api/journals | Auth (Guru pengajar: buka kelas ongoing; Guru Kesiswaan: buka kelas sebagai guru pengganti atau tandai teacher_absent; Waka: tandai teacher_absent. Wali Kelas / Guru lain ditolak 403 Forbidden).
 
-PUT /api/journals/{id} | Auth (Guru pemilik) | Multipart: foto (dikompresi), topik, attendances (exception-based).
+PUT /api/journals/{id} | Auth (Guru pemilik jadwal ATAU Guru Kesiswaan selaku guru pengganti substitute_teacher_id. Wali Kelas / Guru lain ditolak 403 Forbidden) | Multipart: foto (dikompresi ~800px JPEG quality 35%), topik, exceptions presensi (Sakit/Izin/Alpa). Mengubah status menjadi completed secara atomik.
 
-PATCH /api/journals/{id} | Auth (Kesiswaan/Waka) | Menandai teacher_absent pada jurnal yang sudah dibuka.
+PATCH /api/journals/{id} | Auth (Khusus Guru Kesiswaan / Waka. Wali Kelas / Guru lain ditolak 403 Forbidden) | Menandai status teacher_absent pada jurnal yang sudah dibuat/dibuka.
 
 ## 9.8 Evaluasi Kuis AI
 

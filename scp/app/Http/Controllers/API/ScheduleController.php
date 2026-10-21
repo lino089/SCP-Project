@@ -11,6 +11,7 @@ use App\Models\SystemConfiguration;
 use App\Models\User;
 use App\Services\PeriodResolutionService;
 use App\Services\ScheduleConflictService;
+use App\Services\MasterDataPrerequisiteService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,8 @@ class ScheduleController extends Controller
 {
     public function __construct(
         private ScheduleConflictService $conflicts,
-        private PeriodResolutionService $periodResolver
+        private PeriodResolutionService $periodResolver,
+        private MasterDataPrerequisiteService $prerequisites
     ) {
     }
 
@@ -178,6 +180,18 @@ class ScheduleController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $prerequisiteCheck = $this->prerequisites->validateForManualSchedule();
+        if (!$prerequisiteCheck['is_valid']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+                'errors' => $prerequisiteCheck['errors'],
+                'meta' => [
+                    'missing_entities' => $prerequisiteCheck['missing'],
+                ],
+            ], 422);
+        }
+
         $validated = $request->validate([
             'cycle_type' => 'required|integer|in:1,2',
             'period_number' => 'required|integer|min:1',
