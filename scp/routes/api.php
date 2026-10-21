@@ -5,6 +5,7 @@ use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AttendanceWarningController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\JournalController;
+use App\Http\Controllers\API\LeaveRequestController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\ReportController;
 use App\Http\Controllers\API\RoomController;
@@ -42,6 +43,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/students', [StudentController::class, 'index']);
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'index']);
+
+    // 9.6 Perizinan Siswa (Leave Requests)
+    Route::get('/leave-requests', [LeaveRequestController::class, 'index']);
+    Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
+    Route::patch('/leave-requests/{id}', [LeaveRequestController::class, 'update']);
 
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
@@ -129,6 +135,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // 4. Siswa & Orang Tua
     Route::middleware('role:student,parent')->group(function () {
+        Route::post('/leave-requests', [LeaveRequestController::class, 'store']);
+        Route::delete('/leave-requests/{id}', [LeaveRequestController::class, 'destroy']);
+
         Route::post('/permissions', [StudentPermisionController::class, 'store']);
         Route::get('/students/{id}/attendance/summary', [StudentController::class, 'attendanceSummary']);
         Route::post('/quizzes/{id}/submissions', [QuizController::class, 'submit']);

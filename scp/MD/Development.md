@@ -3298,3 +3298,775 @@ Untuk melakukan pengujian endpoint Fase 4 di Postman, siapkan environment variab
     }
   }
   ```
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 5 (Manajemen Perizinan Siswa / `leave_requests` & Sinkronisasi Presensi)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 5 (Manajemen Perizinan Siswa / `leave_requests`)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4, Bagian 5.9, 5.10, 6, 9.6) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-21  
+**Status Fase:** Selesai (100% Lolos Pengujian Otomatis, 139/139 Tests Passed)
+
+---
+
+## 40. Ringkasan Perubahan & Tujuan Fase 5
+
+Fase 5 berfokus pada implementasi menyeluruh sistem pengajuan, verifikasi, monitoring, pembatalan, dan sinkronisasi perizinan siswa berbasis model resmi `leave_requests` (menggantikan legacy `student_permisions` secara permanen). Sistem ini mengintegrasikan seluruh alur bisnis yang diamanatkan dalam PRD v4.4:
+
+1. **Siklus Hidup Lengkap Perizinan Siswa (`leave_requests`)**:
+   - Mendukung 2 Tipe Perizinan x 2 Kategori:
+     - Tipe `tidak_masuk`: Berlaku multi-hari (`start_date`, `end_date`), kolom jam keluar/kembali otomatis diset `null`.
+     - Tipe `keluar_sekolah`: Berlaku dalam satu hari yang sama (`start_date` = `end_date`), wajib mencantumkan jam keluar sekolah (`departure_time`) dan perkiraan kembali (`expected_return_time`).
+     - Kategori `sakit`: Wajib melampirkan berkas bukti pendukung (misal: surat keterangan dokter).
+     - Kategori `lainnya`: Lampiran bukti dokumen bersifat opsional.
+2. **Fleksibilitas Pemohon Ganda (Dual-Applicant)**:
+   - Pengajuan dapat dilakukan oleh **Siswa** (untuk dirinya sendiri) atau oleh **Orang Tua** (`role: parent`) atas nama anaknya.
+   - Sistem memvalidasi kaitan akun orang tua dengan siswa melalui kolom `users.linked_student_id`. Jika orang tua belum ditautkan dengan siswa, sistem menolak pengajuan dengan response 422 Unprocessable Content.
+3. **Penyimpanan Berkas Lampiran yang Aman**:
+   - Mendukung format file gambar (`jpg, jpeg, png`) dan dokumen digital (`pdf`) dengan batas ukuran maksimal 2MB.
+   - Disimpan secara aman pada disk storage `public` di direktori `leaves/` dengan penamaan hash acak unik.
+4. **Alur Kerja Verifikasi & Audit Trail Dua Arah (`PATCH /api/leave-requests/{id}`)**:
+   - **Verifikasi oleh Staf Berwenang**: Hanya Guru dengan penugasan `kesiswaan` atau Waka Kurikulum (`waka`) yang berhak memverifikasi izin menjadi `approved` (disetujui) atau `rejected` (ditolak). Saat diverifikasi, sistem secara otomatis mencatat audit trail identitas verifikator (`verified_by = auth()->id()`) dan stempel waktu persetujuan (`verified_at = now()`).
+   - **Pembaruan oleh Pemohon**: Siswa atau Orang Tua pemohon dapat memperbarui informasi pengajuan (alasan/kategori, tanggal, jam, maupun berkas dokumen) selama status izin masih `pending`. Apabila izin sudah diverifikasi (status `approved` atau `rejected`), sistem menolak modifikasi dengan HTTP 422.
+5. **Pembatalan Aman & Pembersihan Berkas (`DELETE /api/leave-requests/{id}`)**:
+   - Pemohon (Siswa atau Orang Tua) berhak membatalkan perizinan yang masih berstatus `pending`.
+   - Proses pembatalan menghapus baris database sekaligus secara otomatis menghapus berkas dokumen fisik dari storage disk (`Storage::disk('public')->delete(...)`), mencegah penumpukan file sampah (*storage leak*).
+   - Pengajuan yang telah disetujui atau ditolak tidak dapat dihapus/dibatalkan oleh pemohon.
+6. **Otorisasi & Scoping Data Berbasis Peran (`GET /api/leave-requests`)**:
+   - **Waka Kurikulum & Guru Kesiswaan**: Dapat memantau seluruh daftar pengajuan izin se-sekolah.
+   - **Wali Kelas**: Hanya dapat melihat daftar perizinan dari siswa-siswi yang terdaftar di kelas binaannya (`school_classes.teacher_id = auth()->id()`).
+   - **Siswa**: Terkunci secara otomatis (*auto-scoped*) hanya dapat melihat data perizinan miliknya sendiri.
+   - **Orang Tua**: Terkunci secara otomatis (*auto-scoped*) hanya dapat melihat perizinan atas nama anak yang terhubung dengannya.
+   - **Guru Biasa**: Ditolak dengan HTTP 403 Forbidden.
+7. **Penyelarasan Format Tanggal Eloquent**:
+   - Menstandarkan casting atribut `start_date` dan `end_date` pada model `LeaveRequest` menggunakan `date:Y-m-d` agar output serialisasi JSON seragam berupa string `YYYY-MM-DD` dan tidak bergeser akibat konversi timezone UTC (`T00:00:00.000000Z`).
+
+---
+
+## 41. Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Http/Controllers/API/LeaveRequestController.php` | Dibuat | Controller utama RESTful perizinan siswa: `index`, `show`, `store`, `update`, dan `destroy` dengan integrasi validasi multi-tipe/kategori, otorisasi peran, scoping wali kelas/kesiswaan/pemohon, upload berkas, dan audit verifikasi. |
+| 2 | `app/Models/LeaveRequest.php` | Diubah | Memperbarui casting atribut `start_date` dan `end_date` ke format `date:Y-m-d` untuk konsistensi serialisasi JSON REST API. |
+| 3 | `routes/api.php` | Diubah | Mendaftarkan route API perizinan: `POST` dan `DELETE` di bawah middleware `role:student,parent`, serta `GET` (index, show) dan `PATCH` (update/verifikasi) di bawah grup terautentikasi dengan pengamanan granular di controller. |
+| 4 | `tests/Feature/LeaveRequestFeatureTest.php` | Dibuat | Test suite otomatis komprehensif mencakup 17 skenario pengujian: pembuatan izin multi-hari & same-day, upload berkas, validasi gagal, proteksi hak akses peran, scoping wali kelas/siswa/ortu, verifikasi kesiswaan, edit pemohon, dan pembatalan aman beserta penghapusan berkas fisik. |
+
+---
+
+## 42. Potongan Kode Penting & Penjelasan Logika
+
+### 42.1 Resolusi Pemohon Ganda & Validasi Pengajuan (`LeaveRequestController@store`)
+
+```php
+// app/Http/Controllers/API/LeaveRequestController.php
+public function store(Request $request): JsonResponse
+{
+    $user = $request->user();
+
+    // Resolusi student_id & applicant_id
+    if ($user->role === 'student') {
+        $studentId = $user->id;
+    } elseif ($user->role === 'parent') {
+        if (!$user->linked_student_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun orang tua belum terhubung dengan data siswa.',
+            ], 422);
+        }
+        $studentId = $user->linked_student_id;
+    } else {
+        return response()->json([
+            'success' => false,
+            'message' => 'Akses ditolak. Pengajuan izin hanya dapat dilakukan oleh Siswa atau Orang Tua.',
+        ], 403);
+    }
+
+    $isKeluarSekolah = $request->input('type') === 'keluar_sekolah';
+    $isSakit = $request->input('category') === 'sakit';
+
+    $rules = [
+        'type' => ['required', 'string', Rule::in(['tidak_masuk', 'keluar_sekolah'])],
+        'category' => ['required', 'string', Rule::in(['sakit', 'lainnya'])],
+        'start_date' => ['required', 'date_format:Y-m-d'],
+        'end_date' => [$isKeluarSekolah ? 'nullable' : 'required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+        'departure_time' => [$isKeluarSekolah ? 'required' : 'nullable', 'date_format:H:i'],
+        'expected_return_time' => [$isKeluarSekolah ? 'required' : 'nullable', 'date_format:H:i', 'after:departure_time'],
+        'document' => [$isSakit ? 'required' : 'nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
+    ];
+
+    $validated = $request->validate($rules);
+    ...
+}
+```
+*Penjelasan:* Logika di atas secara dinamis menyesuaikan aturan validasi berdasarkan kombinasi tipe dan kategori:
+- Jika `parent`, diverifikasi bahwa akun orang tua memiliki relasi `linked_student_id` yang valid.
+- Jika `type === 'keluar_sekolah'`, tanggal akhir otomatis diselaraskan dengan tanggal awal (`$endDate = $validated['start_date']`), serta mewajibkan jam keluar dan perkiraan kembali.
+- Jika `category === 'sakit'`, dokumen surat keterangan dokter diwajibkan (`required`), sedangkan pada `lainnya` berkas bersifat opsional.
+
+---
+
+### 42.2 Penanganan Upload Dokumen & Persistensi Data (`LeaveRequestController@store`)
+
+```php
+// app/Http/Controllers/API/LeaveRequestController.php
+$documentPath = null;
+if ($request->hasFile('document')) {
+    $documentPath = $request->file('document')->store('leaves', 'public');
+}
+
+$leaveRequest = LeaveRequest::create([
+    'student_id' => $studentId,
+    'applicant_id' => $user->id,
+    'type' => $validated['type'],
+    'category' => $validated['category'],
+    'start_date' => $validated['start_date'],
+    'end_date' => $endDate,
+    'departure_time' => $isKeluarSekolah ? $validated['departure_time'] : null,
+    'expected_return_time' => $isKeluarSekolah ? $validated['expected_return_time'] : null,
+    'status_approval' => 'pending',
+    'document_path' => $documentPath,
+]);
+
+$leaveRequest->load(['student.schoolClass', 'applicant']);
+```
+*Penjelasan:* Berkas disimpan secara terisolasi pada direktori `leaves/` disk `public`. Seluruh nilai jam pada izin bertipe `tidak_masuk` secara konsisten dinolkan (`null`) dan status awal selalu diset `'pending'`.
+
+---
+
+### 42.3 Otorisasi & Scoping Role pada Monitoring (`LeaveRequestController@index`)
+
+```php
+// app/Http/Controllers/API/LeaveRequestController.php
+public function index(Request $request): JsonResponse
+{
+    $user = $request->user();
+    $query = LeaveRequest::with(['student.schoolClass', 'applicant', 'verifier']);
+
+    // Otorisasi & Scoping berdasarkan role
+    if ($user->role === 'waka') {
+        // Full access se-sekolah
+    } elseif ($user->role === 'teacher') {
+        $isKesiswaan = $user->assignments()->where('type', 'kesiswaan')->exists();
+        $isWaliKelas = $user->assignments()->where('type', 'wali_kelas')->exists();
+
+        if ($isKesiswaan) {
+            // Full access se-sekolah untuk staf Kesiswaan
+        } elseif ($isWaliKelas) {
+            $assignedClassIds = SchoolClass::where('teacher_id', $user->id)->pluck('id');
+            $query->whereHas('student', function ($q) use ($assignedClassIds) {
+                $q->whereIn('class_id', $assignedClassIds);
+            });
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat daftar perizinan.',
+            ], 403);
+        }
+    } elseif ($user->role === 'student') {
+        $query->where('student_id', $user->id);
+    } elseif ($user->role === 'parent') {
+        $query->where('student_id', $user->linked_student_id);
+    } else {
+        return response()->json([
+            'success' => false,
+            'message' => 'Akses ditolak.',
+        ], 403);
+    }
+    ...
+}
+```
+*Penjelasan:* Menjamin privasi dan keamanan data presensi siswa:
+- Waka dan Guru Kesiswaan memiliki visibilitas global sekolah.
+- Wali Kelas hanya dapat melihat data siswa di kelas yang berada di bawah perwaliannya.
+- Siswa dan Orang Tua hanya melihat data keluarga mereka sendiri.
+- Guru mata pelajaran tanpa penugasan struktural ditolak dengan HTTP 403 Forbidden.
+
+---
+
+### 42.4 Verifikasi Dua Arah & Audit Trail (`LeaveRequestController@update`)
+
+```php
+// app/Http/Controllers/API/LeaveRequestController.php
+public function update(Request $request, $id): JsonResponse
+{
+    $leaveRequest = LeaveRequest::findOrFail($id);
+    $user = $request->user();
+
+    $isKesiswaan = $user->role === 'teacher' && $user->assignments()->where('type', 'kesiswaan')->exists();
+    $isWaka = $user->role === 'waka';
+    $isApplicant = $leaveRequest->applicant_id === $user->id;
+
+    // Skenario 1: Verifikasi Persetujuan oleh Kesiswaan / Waka
+    if ($request->has('status') || $request->has('status_approval')) {
+        if (!$isKesiswaan && !$isWaka) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Hanya Guru Kesiswaan atau Waka Kurikulum yang berhak memverifikasi perizinan.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['nullable', 'string', Rule::in(['approved', 'rejected'])],
+            'status_approval' => ['nullable', 'string', Rule::in(['approved', 'rejected'])],
+        ]);
+
+        $newStatus = $validated['status'] ?? $validated['status_approval'];
+
+        $leaveRequest->update([
+            'status_approval' => $newStatus,
+            'verified_by' => $user->id,
+            'verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status perizinan berhasil diperbarui menjadi ' . $newStatus . '.',
+            'data' => $leaveRequest->fresh(['student.schoolClass', 'applicant', 'verifier']),
+        ], 200);
+    }
+
+    // Skenario 2: Pembaruan Data Izin oleh Siswa / Orang Tua Pemohon
+    if (!$isApplicant) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Akses ditolak. Hanya pemohon yang berhak mengubah isi pengajuan perizinan.',
+        ], 403);
+    }
+
+    if ($leaveRequest->status_approval !== 'pending') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Pengajuan izin yang sudah diproses (' . $leaveRequest->status_approval . ') tidak dapat diubah kembali.',
+        ], 422);
+    }
+    ...
+}
+```
+*Penjelasan:* Endpoint `PATCH` mengenali konteks aktor secara cerdas:
+- Jika membawa payload perubahan status persetujuan, sistem memeriksa otoritas verifikator (Kesiswaan/Waka), lalu otomatis mengisi kolom audit `verified_by` dan `verified_at`.
+- Jika dipanggil oleh pemohon untuk mengedit data, sistem memastikan status pengajuan masih `pending`. Setiap upaya mengubah izin yang sudah diverifikasi akan ditolak dengan HTTP 422.
+
+---
+
+### 42.5 Pembatalan Izin & Pembersihan Berkas Fisik (`LeaveRequestController@destroy`)
+
+```php
+// app/Http/Controllers/API/LeaveRequestController.php
+public function destroy(Request $request, $id): JsonResponse
+{
+    $leaveRequest = LeaveRequest::findOrFail($id);
+    $user = $request->user();
+
+    if ($leaveRequest->applicant_id !== $user->id) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Akses ditolak. Anda hanya dapat membatalkan pengajuan izin yang Anda buat sendiri.',
+        ], 403);
+    }
+
+    if ($leaveRequest->status_approval !== 'pending') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Pengajuan izin yang sudah diverifikasi (' . $leaveRequest->status_approval . ') tidak dapat dibatalkan atau dihapus.',
+        ], 422);
+    }
+
+    // Bersihkan file dokumen fisik jika ada
+    if ($leaveRequest->document_path && Storage::disk('public')->exists($leaveRequest->document_path)) {
+        Storage::disk('public')->delete($leaveRequest->document_path);
+    }
+
+    $leaveRequest->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Pengajuan izin berhasil dibatalkan dan dihapus.',
+    ], 200);
+}
+```
+*Penjelasan:* Menghindari penumpukan berkas yatim (*orphaned files*) pada disk storage server dengan memastikan berkas fisik dihapus bersamaan dengan baris data izin.
+
+---
+
+## 43. Endpoint API yang Dibuat atau Diubah
+
+| No | Method | URL Endpoint | Autentikasi & Middleware | Parameter / Payload Utama | Status Code | Deskripsi & Peran Aktor |
+|---|---|---|---|---|---|---|
+| 1 | `POST` | `/api/leave-requests` | `auth:sanctum`, `role:student,parent` | `type`, `category`, `start_date`, `end_date`, `departure_time`, `expected_return_time`, `document` (multipart/form-data) | 201 Created / 422 Unprocessable | Siswa atau Orang Tua mengajukan perizinan baru (`tidak_masuk` atau `keluar_sekolah`). |
+| 2 | `GET` | `/api/leave-requests` | `auth:sanctum` | Query params: `status`, `type`, `category`, `class_id`, `date`, `start_date`, `end_date`, `student_id`, `per_page` | 200 OK / 403 Forbidden | Monitoring perizinan dengan scoping otomatis (Waka/Kesiswaan se-sekolah, Wali Kelas se-kelas, Siswa/Ortu milik sendiri). |
+| 3 | `GET` | `/api/leave-requests/{id}` | `auth:sanctum` | URL Param: `{id}` | 200 OK / 403 Forbidden / 404 Not Found | Melihat rincian lengkap satu perizinan beserta informasi siswa, kelas, pemohon, dan verifikator. |
+| 4 | `PATCH` | `/api/leave-requests/{id}` | `auth:sanctum` | Body JSON: `{ "status": "approved" \| "rejected" }` (Verifikator) ATAU `{ "category": "...", "start_date": "...", ... }` (Pemohon) | 200 OK / 403 Forbidden / 422 Unprocessable | Verifikasi status persetujuan oleh Kesiswaan/Waka ATAU pembaruan data izin oleh pemohon selama masih `pending`. |
+| 5 | `DELETE` | `/api/leave-requests/{id}` | `auth:sanctum`, `role:student,parent` | URL Param: `{id}` | 200 OK / 403 Forbidden / 422 Unprocessable | Pembatalan pengajuan izin oleh Siswa/Orang Tua pemohon selama status masih `pending` sekaligus pembersihan berkas fisik. |
+
+---
+
+## 44. Command yang Dijalankan, Hasil Automated Testing, & Kendala
+
+### 44.1 Command yang Dijalankan
+
+1. **Uji Coba Fitur Perizinan Siswa Spesifik (`LeaveRequestFeatureTest`)**:
+   ```bash
+   php artisan test --filter=LeaveRequestFeatureTest
+   ```
+   *Tujuan:* Menjalankan seluruh 17 skenario automated test untuk memastikan semua cabang logika controller, otorisasi, upload dokumen, edit, dan pembatalan berfungsi sesuai spesifikasi PRD v4.4.
+   *Hasil:* **17 passed** dari 17 tests (62 assertions, durasi 1.59s).
+
+2. **Uji Coba Regresi Penuh Seluruh Test Suite Project (`All Tests`)**:
+   ```bash
+   php artisan test
+   ```
+   *Tujuan:* Memastikan penambahan modul perizinan siswa tidak menyebabkan efek samping atau mematahkan 122 test sebelumnya dari Fase 0 hingga Fase 4.
+   *Hasil:* **139 passed** dari 139 tests (611 assertions, durasi 12.91s, 0 failed, 100% lolos).
+
+### 44.2 Kendala yang Ditemukan dan Solusinya
+
+- **Kendala Serialisasi ISO 8601 Tanggal**:
+  - *Deskripsi Masalah:* Pada model `LeaveRequest`, casting `'start_date' => 'date'` secara bawaan memformat tanggal menggunakan format standar datetime Laravel dengan zona waktu UTC (`2026-10-24T17:00:00.000000Z` dari basis data tanggal `2026-10-25` di zona Asia/Jakarta). Hal ini mengakibatkan ketidaksesuaian perbandingan JSON pada pengujian unit dan berpotensi membingungkan frontend mobile/web yang menerima tanggal dengan selisih -1 hari akibat konversi UTC.
+  - *Solusi:* Memperbarui atribut casting pada `app/Models/LeaveRequest.php` menjadi `'start_date' => 'date:Y-m-d'` dan `'end_date' => 'date:Y-m-d'`. Dengan demikian, nilai tanggal diekspor secara konsisten dalam format ISO `YYYY-MM-DD` (`2026-10-25`) murni tanpa distorsi jam dan zona waktu.
+
+---
+
+## 45. Panduan Pengujian Endpoint melalui Postman (Fase 5)
+
+Berikut adalah panduan langkah demi langkah pengujian seluruh endpoint Fase 5 melalui Postman:
+
+### 45.1 Pengujian 1: Pengajuan Izin Siswa Sakit Multi-Hari (`tidak_masuk`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/leave-requests`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Body:** `form-data` (Multipart)
+  | Key | Type | Value | Keterangan |
+  |---|---|---|---|
+  | `type` | Text | `tidak_masuk` | Wajib (`tidak_masuk` atau `keluar_sekolah`) |
+  | `category` | Text | `sakit` | Wajib (`sakit` atau `lainnya`) |
+  | `start_date` | Text | `2026-10-25` | Format YYYY-MM-DD |
+  | `end_date` | Text | `2026-10-27` | Format YYYY-MM-DD (>= start_date) |
+  | `document` | File | `[Pilih file surat_dokter.pdf atau .jpg]` | Wajib untuk kategori sakit (max 2MB) |
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Pengajuan perizinan berhasil dikirim.",
+    "data": {
+      "id": 1,
+      "student_id": 10,
+      "applicant_id": 10,
+      "type": "tidak_masuk",
+      "category": "sakit",
+      "start_date": "2026-10-25",
+      "end_date": "2026-10-27",
+      "departure_time": null,
+      "expected_return_time": null,
+      "status_approval": "pending",
+      "document_path": "leaves/u10_abc123.pdf",
+      "verified_by": null,
+      "verified_at": null,
+      "created_at": "2026-10-21T06:17:48.000000Z",
+      "student": {
+        "id": 10,
+        "name": "Siswa Satu",
+        "nis_nip": "1001",
+        "class_id": 1,
+        "school_class": { "id": 1, "name": "XII RPL 1", "level": "12" }
+      },
+      "applicant": {
+        "id": 10,
+        "name": "Siswa Satu",
+        "role": "student"
+      }
+    }
+  }
+  ```
+
+---
+
+### 45.2 Pengujian 2: Pengajuan Izin Keluar Sekolah Same-Day (`keluar_sekolah`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/leave-requests`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Body:** `form-data` (Multipart)
+  | Key | Type | Value | Keterangan |
+  |---|---|---|---|
+  | `type` | Text | `keluar_sekolah` | Tipe izin keluar sementara |
+  | `category` | Text | `lainnya` | Kategori |
+  | `start_date` | Text | `2026-10-25` | Tanggal izin keluar |
+  | `departure_time` | Text | `09:30` | Format HH:mm (Wajib untuk keluar_sekolah) |
+  | `expected_return_time` | Text | `11:30` | Format HH:mm (Wajib, setelah departure_time) |
+  | `document` | File | `[Opsional]` | Dapat dikosongkan untuk kategori lainnya |
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Pengajuan perizinan berhasil dikirim.",
+    "data": {
+      "id": 2,
+      "student_id": 10,
+      "applicant_id": 10,
+      "type": "keluar_sekolah",
+      "category": "lainnya",
+      "start_date": "2026-10-25",
+      "end_date": "2026-10-25",
+      "departure_time": "09:30",
+      "expected_return_time": "11:30",
+      "status_approval": "pending",
+      "document_path": null
+    }
+  }
+  ```
+
+---
+
+### 45.3 Pengujian 3: Pengajuan Izin oleh Orang Tua untuk Anaknya
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/leave-requests`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_orang_tua}}`
+- **Body:** `form-data` (Multipart)
+  | Key | Type | Value |
+  |---|---|---|
+  | `type` | Text | `tidak_masuk` |
+  | `category` | Text | `lainnya` |
+  | `start_date` | Text | `2026-10-28` |
+  | `end_date` | Text | `2026-10-28` |
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Pengajuan perizinan berhasil dikirim.",
+    "data": {
+      "id": 3,
+      "student_id": 10,
+      "applicant_id": 25,
+      "type": "tidak_masuk",
+      "category": "lainnya",
+      "status_approval": "pending",
+      "student": {
+        "id": 10,
+        "name": "Siswa Satu"
+      },
+      "applicant": {
+        "id": 25,
+        "name": "Bapak Siswa Satu",
+        "role": "parent"
+      }
+    }
+  }
+  ```
+
+---
+
+### 45.4 Pengujian 4: Validasi Gagal (Kategori Sakit Tanpa Berkas / Waktu Salah)
+
+- **Kasus A: Kategori `sakit` tanpa mengunggah berkas `document`**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "message": "The document field is required when category is sakit.",
+      "errors": {
+        "document": [
+          "The document field is required when category is sakit."
+        ]
+      }
+    }
+    ```
+- **Kasus B: Tipe `keluar_sekolah` tanpa menyertakan `departure_time`**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "message": "The departure time field is required when type is keluar sekolah.",
+      "errors": {
+        "departure_time": [
+          "The departure time field is required when type is keluar sekolah."
+        ]
+      }
+    }
+    ```
+- **Kasus C: Orang tua belum ditautkan dengan data siswa (`linked_student_id = null`)**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "success": false,
+      "message": "Akun orang tua belum terhubung dengan data siswa."
+    }
+    ```
+
+---
+
+### 45.5 Pengujian 5: Verifikasi Persetujuan oleh Guru Kesiswaan (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/leave-requests/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru_kesiswaan}}` *(atau token Waka Kurikulum)*
+- **Body (raw JSON):**
+  ```json
+  {
+    "status": "approved"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Status perizinan berhasil diperbarui menjadi approved.",
+    "data": {
+      "id": 1,
+      "student_id": 10,
+      "applicant_id": 10,
+      "status_approval": "approved",
+      "verified_by": 3,
+      "verified_at": "2026-10-21T06:25:00.000000Z",
+      "verifier": {
+        "id": 3,
+        "name": "Guru Kesiswaan",
+        "nis_nip": "198505052010011002"
+      }
+    }
+  }
+  ```
+
+---
+
+### 45.6 Pengujian 6: Verifikasi Penolakan oleh Kesiswaan / Waka (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/leave-requests/2`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_waka}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "status": "rejected"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Status perizinan berhasil diperbarui menjadi rejected.",
+    "data": {
+      "id": 2,
+      "status_approval": "rejected",
+      "verified_by": 1,
+      "verified_at": "2026-10-21T06:26:00.000000Z"
+    }
+  }
+  ```
+- **Skenario Akses Verifikasi Ditolak (Guru Biasa):**
+  - **Expected Response (403 Forbidden):**
+    ```json
+    {
+      "success": false,
+      "message": "Akses ditolak. Hanya Guru Kesiswaan atau Waka Kurikulum yang berhak memverifikasi perizinan."
+    }
+    ```
+
+---
+
+### 45.7 Pengujian 7: Pembaruan Isi Pengajuan oleh Siswa Pemohon (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/leave-requests/1` *(Ketika status masih `pending`)*
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "category": "lainnya",
+    "start_date": "2026-10-26",
+    "end_date": "2026-10-28"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data pengajuan perizinan berhasil diperbarui.",
+    "data": {
+      "id": 1,
+      "category": "lainnya",
+      "start_date": "2026-10-26",
+      "end_date": "2026-10-28",
+      "status_approval": "pending"
+    }
+  }
+  ```
+
+---
+
+### 45.8 Pengujian 8: Ditolak Mengedit Pengajuan yang Sudah Diverifikasi (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/leave-requests/1` *(Setelah status menjadi `approved`)*
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "category": "sakit"
+  }
+  ```
+- **Expected Response (422 Unprocessable Content):**
+  ```json
+  {
+    "success": false,
+    "message": "Pengajuan izin yang sudah diproses (approved) tidak dapat diubah kembali."
+  }
+  ```
+
+---
+
+### 45.9 Pengujian 9: Monitoring & Filtering Daftar Perizinan (`GET`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/leave-requests?status=pending&type=tidak_masuk&per_page=10`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_kesiswaan}}` *(melihat se-sekolah)* ATAU `Bearer {{token_wali_kelas}}` *(melihat kelas binaannya)* ATAU `Bearer {{token_siswa}}` *(melihat izin sendiri)*
+- **Query Parameters (Opsional):**
+  - `status`: `pending` / `approved` / `rejected`
+  - `type`: `tidak_masuk` / `keluar_sekolah`
+  - `category`: `sakit` / `lainnya`
+  - `class_id`: ID kelas siswa (khusus Kesiswaan/Waka)
+  - `student_id`: ID siswa
+  - `date`: Filter tanggal spesifik
+  - `start_date` & `end_date`: Filter rentang tanggal
+  - `per_page`: Jumlah pagination per halaman (default 15)
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data perizinan berhasil diambil.",
+    "data": [
+      {
+        "id": 1,
+        "student_id": 10,
+        "applicant_id": 10,
+        "type": "tidak_masuk",
+        "category": "sakit",
+        "start_date": "2026-10-25",
+        "end_date": "2026-10-27",
+        "departure_time": null,
+        "expected_return_time": null,
+        "status_approval": "pending",
+        "document_path": "leaves/u10_abc123.pdf",
+        "verified_by": null,
+        "verified_at": null,
+        "student": {
+          "id": 10,
+          "name": "Siswa Satu",
+          "nis_nip": "1001",
+          "school_class": {
+            "id": 1,
+            "name": "XII RPL 1",
+            "level": "12"
+          }
+        },
+        "applicant": {
+          "id": 10,
+          "name": "Siswa Satu",
+          "role": "student"
+        },
+        "verifier": null
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 10,
+      "total": 1,
+      "last_page": 1
+    }
+  }
+  ```
+
+---
+
+### 45.10 Pengujian 10: Detail Pengajuan Perizinan (`GET /api/leave-requests/{id}`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/leave-requests/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}` *(pemohon / verifikator / wali kelas)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Detail perizinan berhasil diambil.",
+    "data": {
+      "id": 1,
+      "student_id": 10,
+      "applicant_id": 10,
+      "type": "tidak_masuk",
+      "category": "sakit",
+      "start_date": "2026-10-25",
+      "end_date": "2026-10-27",
+      "departure_time": null,
+      "expected_return_time": null,
+      "status_approval": "pending",
+      "document_path": "leaves/u10_abc123.pdf",
+      "student": {
+        "id": 10,
+        "name": "Siswa Satu",
+        "school_class": { "id": 1, "name": "XII RPL 1" }
+      },
+      "applicant": {
+        "id": 10,
+        "name": "Siswa Satu"
+      },
+      "verifier": null
+    }
+  }
+  ```
+
+---
+
+### 45.11 Pengujian 11: Pembatalan Pengajuan oleh Pemohon (`DELETE`)
+
+- **Method:** `DELETE`
+- **URL:** `{{base_url}}/leave-requests/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}` *(atau token orang tua pemohon)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Pengajuan izin berhasil dibatalkan dan dihapus."
+  }
+  ```
+- **Skenario Pembatalan Gagal (Bukan Pemohon):**
+  - **Expected Response (403 Forbidden):**
+    ```json
+    {
+      "success": false,
+      "message": "Akses ditolak. Anda hanya dapat membatalkan pengajuan izin yang Anda buat sendiri."
+    }
+    ```
+- **Skenario Pembatalan Gagal (Sudah Diverifikasi `approved`/`rejected`):**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "success": false,
+      "message": "Pengajuan izin yang sudah diverifikasi (approved) tidak dapat dibatalkan atau dihapus."
+    }
+    ```
