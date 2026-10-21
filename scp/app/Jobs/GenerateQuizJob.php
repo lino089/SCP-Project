@@ -2,71 +2,91 @@
 
 namespace App\Jobs;
 
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use App\Models\Journal;
 use App\Models\Quiz;
 use App\Models\QuizQuestion;
-use Symfony\Component\Process\Process;
+use App\Services\AIService;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class GenerateQuizJob implements ShouldQueue
 {
-    use Queueable, Dispatchable, InteractsWithQueue, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $journalId;
+    public int $tries = 2;
+    public int $timeout = 90;
+
+    protected $targetId;
+    protected ?string $topic;
 
     /**
      * Create a new job instance.
      */
-    public function __construct($journalId)
+    public function __construct($targetId, ?string $topic = null)
     {
-        $this->journalId = $journalId;
+        $this->targetId = $targetId;
+        $this->topic = $topic;
     }
 
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(AIService $aiService): void
     {
-        $journal = Journal::findOrFail($this->journalId);
+        // Cek apakah targetId adalah Quiz ID atau Journal ID
+        $quiz = Quiz::find($this->targetId);
 
-        if(!$journal){
-            return;
-        }
-
-        $topic  = $journal->topic_description ?? 'Materi Umum';
-        $scriptPath = base_path('script/quiz_generator.py');
-
-        $process = new Process(['python', $scriptPath, $topic]);
-        $process->run();
-
-        if(!$process->isSuccessful()){
-            Log::error('Quiz Generator Error: ' . $process->getErrorOutput());
-            return;
-        }
-
-        $output = $process->getOutput();
-        $quizData = json_decode($output, true);
-
-        if(is_array($quizData)){
-            $quiz = Quiz::create([
-                'journal_id' => $journal->id,
-                'title' => 'Kuis: ' . ($journal->topic_description ?? 'Materi Pembelajaran'),
-                'status' => 'draft'
-            ]);
-
-            foreach ($quizData as $item) {
-                QuizQuestion::create([
-                    'quiz_id' => $quiz->id,
-                    'question_text' => $item['question'],
-                    'options' => $item['options'],
-                    'correct_answer' => $item['answer']
+        if (!$quiz) {
+            $journal = Journal::find($this->targetId);
+            if ($journal) {
+                $topic = $this->topic ?? $journal->topic_description ?? 'Materi Pembelajaran';
+                $quiz = Quiz::create([
+                    'teacher_id' => $journal->schedule?->teacher_id ?? auth()->id() ?? 1,
+                    'class_id' => $journal->schedule?->class_id ?? 1,
+                    'title' => 'Kuis: ' . $topic,
+                    'status' => 'generating',
+                    'due_date' => now()->addDays(2),
+                    'max_attempts' => 1,
                 ]);
             }
+        }
+
+        if (!$quiz) {
+            Log::warning("GenerateQuizJob: Quiz or Journal not found for ID {$this->targetId}.");
+            return;
+        }
+
+        $topic = $this->topic ?? $quiz->title ?? 'Materi Pembelajaran';
+
+        try {
+            $questions = $aiService->generateFromPrompt(
+                prompt: $topic,
+                total: 5,
+                type: 'combination',
+                essayCount: 2,
+                mcCount: 3
+            );
+
+            foreach ($questions as $q) {
+                QuizQuestion::create([
+                    'quiz_id' => $quiz->id,
+                    'question_text' => $q['question_text'] ?? 'Pertanyaan',
+                    'question_type' => $q['question_type'] ?? 'multiple_choice',
+                    'options' => $q['options'] ?? null,
+                    'correct_answer' => $q['correct_answer'] ?? '',
+                ]);
+            }
+
+            $quiz->update(['status' => 'draft_review']);
+            Log::info("GenerateQuizJob: Generated " . count($questions) . " questions for Quiz {$quiz->id}.");
+        } catch (Throwable $e) {
+            Log::error("GenerateQuizJob Error for Quiz {$quiz->id}: " . $e->getMessage());
+            $quiz->update(['status' => 'draft_review']);
         }
     }
 }

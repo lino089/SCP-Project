@@ -4070,3 +4070,709 @@ Berikut adalah panduan langkah demi langkah pengujian seluruh endpoint Fase 5 me
       "message": "Pengajuan izin yang sudah diverifikasi (approved) tidak dapat dibatalkan atau dihapus."
     }
     ```
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 6 (Sistem Kuis Berbantuan AI & Evaluasi Asinkron)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 6 (Sistem Kuis Berbantuan AI & Evaluasi Asinkron)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4, Bagian 5.14, 9.8, 10) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-21  
+**Status Fase:** Selesai (100% Lolos Pengujian Otomatis, 156/156 Tests Passed & Live E2E Verified)
+
+---
+
+## 46. Ringkasan Perubahan & Tujuan Fase 6
+
+Fase 6 mengimplementasikan modul Kuis Berbantuan AI yang beroperasi sepenuhnya secara asinkron (*non-blocking*) via Laravel Queue Worker, mengintegrasikan model AI resmi `ag/gemini-3.8-flash` melalui 9router API Gateway, serta menyediakan tiga metode pembuatan soal yang fleksibel dengan kendali mutu penuh bagi guru sebelum kuis dibuka untuk siswa:
+
+1. **Tiga Metode Pembuatan Soal**:
+   - **Metode 1 (Prompt AI dengan Konfigurasi Wajib)**: Guru memasukkan instruksi materi dalam bahasa sehari-hari. Sebelum prompt dikirim, guru wajib melengkapi konfigurasi soal: `total_questions`, `question_types` (`multiple_choice`, `essay`, atau `combination`), `essay_count`, dan `mc_count`. Sistem menerapkan validasi ketat di mana jumlah soal pilihan ganda dan esai harus sama persis dengan total soal.
+   - **Metode 2 (Ekstraksi Dokumen Berbantuan AI)**: Guru dapat mengunggah berkas soal (.pdf atau .txt, maksimal 5MB). Sistem mengekstrak teks dokumen dan meminta AI menyusunnya ke dalam butir-butir soal terstruktur. Prinsip utama metode ini adalah melestarikan isi, konteks, dan kunci jawaban asli tanpa mengarang soal baru. Jika terdapat teks buram atau kunci jawaban tidak ditemukan secara pasti, AI menandai butir soal dengan `needs_review: true` beserta catatan `review_note`.
+   - **Metode 3 (Pembuatan Soal Manual)**: Guru dapat menambah, mengedit, atau menghapus butir soal secara manual satu per satu tanpa ketergantungan pada AI.
+2. **Tahap Preview & Konfirmasi Wajib (Status `draft_review`)**:
+   - Setiap butir soal—baik dari prompt AI, ekstraksi dokumen, maupun manual—wajib masuk ke tahap preview.
+   - Guru dapat melihat seluruh soal, opsi jawaban, dan kunci jawaban/rubrik esai, mengoreksi kekeliruan teks, menghapus soal yang tidak sesuai, atau membatalkan proses.
+   - Kuis hanya dapat diakses oleh siswa setelah guru melakukan konfirmasi publikasi (`PATCH /api/quizzes/{id}/publish` atau update status `published`).
+3. **Penyembunyian Kunci Jawaban (*Data Hiding*)**:
+   - Ketika siswa membuka detail kuis (`GET /api/quizzes/{id}`), atribut `correct_answer` otomatis disembunyikan (*hidden*) oleh model Eloquent.
+4. **Pengerjaan Siswa & Penilaian Asinkron Hybrid**:
+   - Siswa mengirim jawaban via `POST /api/quizzes/{id}/submissions`. Sistem menegakkan batasan tenggat waktu (`due_date`) dan batas percobaan (`max_attempts`).
+   - Sistem mengembalikan response HTTP **202 Accepted** dan men-dispatch queue job `GradeQuizSubmissionJob` di latar belakang:
+     - Soal Pilihan Ganda dikoreksi secara instan oleh logika sistem (pencocokan opsi A–D).
+     - Soal Esai dievaluasi secara semantik oleh model `ag/gemini-3.8-flash` berdasarkan rubrik kata kunci, menghasilkan skor 0–100 dan umpan balik edukatif.
+     - Akumulasi nilai gabungan disimpan ke kolom `ai_score` dan umpan balik ke `ai_feedback`.
+5. **Kendali Guru, Override Nilai & Audit Trail**:
+   - Guru dapat memantau seluruh submission siswa via `GET /api/quizzes/{id}/submissions`.
+   - Guru berhak meng-override skor maupun umpan balik AI via `PATCH /api/quiz-submissions/{id}`. Setiap tindakan override otomatis mencatat audit trail: `is_overridden = true`, `overridden_by = auth()->id()`, dan `overridden_at = now()`.
+   - Siswa dan orang tua hanya dapat melihat nilai akhir dan umpan balik pengerjaan via `GET /api/quizzes/{id}/submissions/me` setelah guru merilis status kuis menjadi `published_result`.
+
+---
+
+## 47. Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `config/services.php` | Diubah | Mendaftarkan konfigurasi `ai` (base_url, api_key, model `ag/gemini-3.8-flash`, timeout, dan verify_ssl). |
+| 2 | `.env` & `.env.example` | Diubah | Menambahkan variabel konfigurasi AI gateway secara aman. |
+| 3 | `script/pdf_doc_extractor.py` | Dibuat | Skrip Python berbasis `pdfplumber` untuk mengekstrak isi teks seluruh halaman berkas PDF secara akurat. |
+| 4 | `app/Services/AIService.php` | Dibuat | Service layer komunikasi HTTP ke 9router AI gateway: `generateFromPrompt`, `extractFromDocumentText`, `gradeEssay`, ekstraksi teks dokumen, sanitasi markdown block, dan pembersihan JSON. |
+| 5 | `app/Jobs/GenerateQuizFromPromptJob.php` | Dibuat | Queue job background untuk mengeksekusi generasi soal via prompt AI dan menyimpannya ke `quiz_questions`. |
+| 6 | `app/Jobs/ExtractQuizFromDocumentJob.php` | Dibuat | Queue job background untuk mengeksekusi ekstraksi butir soal dari dokumen teks/PDF dan menandai `needs_review` pada soal ambigu. |
+| 7 | `app/Jobs/GenerateQuizJob.php` | Diubah | Menyelaraskan job generasi kuis umum agar menggunakan `AIService` dan skema database `ai_quizzes` terbaru. |
+| 8 | `app/Jobs/GradeQuizSubmissionJob.php` | Dibuat | Queue job background untuk penilaian hybrid (koreksi PG otomatis + evaluasi esai via AI terhadap rubrik kata kunci). |
+| 9 | `app/Http/Controllers/API/QuizController.php` | Diubah | Controller RESTful kuis: index (scoping role), store, show (hidden kunci untuk siswa), generatePrompt (202), extractDocument (202), questions (preview), CRUD butir soal manual, publish, submit (202), submissions review, override nilai dengan audit trail, dan mySubmission. |
+| 10 | `routes/api.php` | Diubah | Pendaftaran 16 rute API Kuis AI terautentikasi dan terproteksi middleware peran guru, siswa, dan orang tua. |
+| 11 | `tests/Feature/QuizFeatureTest.php` | Dibuat | Suite pengujian otomatis komprehensif mencakup 17 skenario: inisialisasi kuis, CRUD manual, validasi ketat konfigurasi prompt, generasi prompt AI, ekstraksi dokumen, preview, publikasi, submit pengerjaan, batas due date & attempt, penilaian hybrid, override nilai, dan rilis hasil. |
+
+---
+
+## 48. Potongan Kode Penting & Penjelasan Logika
+
+### 48.1 Komunikasi HTTP 9router & Sanitasi JSON (`app/Services/AIService.php`)
+
+```php
+// app/Services/AIService.php
+protected function sendChatCompletion(array $messages, float $temperature = 0.5): string
+{
+    $url = rtrim($this->baseUrl, '/') . '/chat/completions';
+
+    $payload = [
+        'model' => $this->model, // 'ag/gemini-3.8-flash'
+        'stream' => false,       // Wajib false agar menghasilkan objek JSON tunggal
+        'temperature' => $temperature,
+        'messages' => $messages,
+    ];
+
+    $httpRequest = Http::withToken($this->apiKey)->timeout($this->timeout);
+    if (!$this->verifySsl) {
+        $httpRequest = $httpRequest->withoutVerifying();
+    }
+
+    $response = $httpRequest->post($url, $payload);
+    ...
+    return (string) $response->json('choices.0.message.content');
+}
+```
+*Penjelasan:* Menggunakan endpoint OpenAI-compatible `/chat/completions` dengan model resmi `ag/gemini-3.8-flash`. Parameter `"stream": false` krusial agar gateway mengembalikan satu payload utuh, dan method `cleanAndParseJson()` memotong bungkus markdown (````json ... ````) sebelum di-parse ke array PHP.
+
+---
+
+### 48.2 Validasi Ketat Konfigurasi Soal Prompt AI (`QuizController@generatePrompt`)
+
+```php
+// app/Http/Controllers/API/QuizController.php
+$total = (int) $validated['total_questions'];
+$type = $validated['question_types'];
+$mcCount = (int) ($validated['mc_count'] ?? 0);
+$essayCount = (int) ($validated['essay_count'] ?? 0);
+
+if ($type === 'multiple_choice') {
+    $mcCount = $total;
+    $essayCount = 0;
+} elseif ($type === 'essay') {
+    $essayCount = $total;
+    $mcCount = 0;
+} elseif ($type === 'combination') {
+    if (($mcCount + $essayCount) !== $total) {
+        return response()->json([
+            'success' => false,
+            'message' => "Untuk jenis kombinasi, jumlah soal pilihan ganda ({$mcCount}) dan esai ({$essayCount}) harus berjumlah sama dengan total soal ({$total}).",
+        ], 422);
+    }
+    if ($mcCount < 1 || $essayCount < 1) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Untuk jenis kombinasi, soal pilihan ganda dan esai masing-masing minimal 1.',
+        ], 422);
+    }
+}
+```
+*Penjelasan:* Memastikan bahwa sebelum AI dihubungi, konfigurasi komposisi soal sudah diverifikasi secara matematis konsisten.
+
+---
+
+### 48.3 Ekstraksi Dokumen & Pelestarian Konteks Asli (`app/Services/AIService.php`)
+
+```php
+// app/Services/AIService.php
+public function extractFromDocumentText(string $documentText): array
+{
+    $systemPrompt = <<<SYS
+Anda adalah asisten AI yang bertugas mengekstrak dan menstrukturkan butir soal dari isi dokumen teks.
+Tujuan utama Anda adalah MEMINDAHKAN soal yang sudah ada di dokumen, BUKAN mengarang soal baru.
+Pertahankan kalimat pertanyaan asli, konteks soal, pilihan opsi, dan kunci jawaban asli semaksimal mungkin.
+Jika ada bagian opsi/pertanyaan/kunci yang ambigu, tidak terbaca, atau hilang di dokumen, tambahkan key "needs_review": true dan "review_note": "catatan penjelasan bagian yang meragukan".
+SYS;
+    ...
+}
+```
+*Penjelasan:* Prompt ekstraksi secara eksplisit melarang halusinasi pembuatan soal baru dan mewajibkan pemberian flag `needs_review: true` pada soal dengan ketidakpastian.
+
+---
+
+### 48.4 Penilaian Asinkron Hybrid PG + Esai AI (`GradeQuizSubmissionJob.php`)
+
+```php
+// app/Jobs/GradeQuizSubmissionJob.php
+foreach ($questions as $qId => $question) {
+    $studentAns = trim((string) ($studentAnswers[$qId] ?? ''));
+
+    if ($question->question_type === 'multiple_choice') {
+        $isCorrect = (strtoupper($studentAns) === strtoupper(trim($question->correct_answer)));
+        $score = $isCorrect ? 100.0 : 0.0;
+        $accumulatedScore += $score;
+    } else {
+        // Soal Esai dievaluasi oleh AI ag/gemini-3.8-flash terhadap rubrik kata kunci
+        $eval = $aiService->gradeEssay(
+            questionText: $question->question_text,
+            rubric: $question->correct_answer,
+            studentAnswer: $studentAns
+        );
+        $accumulatedScore += (float) $eval['score'];
+        $feedbackParts[] = "Soal #{$qNum} (Esai): Nilai {$eval['score']}/100. Evaluasi: {$eval['feedback']}";
+    }
+}
+
+$finalScore = round($accumulatedScore / $totalQuestions, 2);
+$submission->update([
+    'ai_score' => $finalScore,
+    'ai_feedback' => implode("\n", $feedbackParts),
+    'grading_status' => 'graded',
+]);
+```
+*Penjelasan:* Menggabungkan efisiensi koreksi pilihan ganda secara deterministik dengan kecerdasan semantik AI dalam menilai esai berdasarkan rubrik konsep penting.
+
+---
+
+### 48.5 Audit Trail Override Guru (`QuizController@overrideSubmission`)
+
+```php
+// app/Http/Controllers/API/QuizController.php
+$submission->update([
+    'ai_score' => round((float) $validated['score'], 2),
+    'ai_feedback' => $validated['feedback'] ?? $submission->ai_feedback,
+    'is_overridden' => true,
+    'overridden_by' => $user->id,
+    'overridden_at' => now(),
+    'grading_status' => 'graded',
+]);
+```
+*Penjelasan:* Setiap intervensi guru terhadap nilai otomatis merekam identitas verifikator dan waktu penyesuaian untuk akuntabilitas akademik.
+
+---
+
+## 49. Endpoint API yang Dibuat atau Diubah
+
+| No | Method | URL Endpoint | Middleware | Payload / Parameter Utama | Status Code | Deskripsi & Peran Aktor |
+|---|---|---|---|---|---|---|
+| 1 | `GET` | `/api/quizzes` | `auth:sanctum` | Query: `class_id`, `status`, `per_page` | 200 OK / 403 | Monitoring daftar kuis dengan auto-scoping peran (Guru, Siswa, Ortu, Waka). |
+| 2 | `POST` | `/api/quizzes` | `auth:sanctum`, `role:teacher` | `title`, `class_id`, `due_date`, `max_attempts` | 201 Created / 422 | Inisialisasi kuis baru dalam status `draft_review`. |
+| 3 | `GET` | `/api/quizzes/{id}` | `auth:sanctum` | URL Param: `{id}` | 200 OK / 403 / 404 | Detail kuis. Kunci jawaban `correct_answer` otomatis disembunyikan bagi siswa. |
+| 4 | `POST` | `/api/quizzes/{id}/generate-prompt` | `auth:sanctum`, `role:teacher` | `prompt`, `total_questions`, `question_types`, `mc_count`, `essay_count`, `difficulty` | 202 Accepted / 422 | Metode 1: Generate soal AI via prompt dengan konfigurasi ketat. |
+| 5 | `POST` | `/api/quizzes/{id}/extract-document` | `auth:sanctum`, `role:teacher` | `document` (multipart/form-data: PDF/TXT max 5MB) | 202 Accepted / 422 | Metode 2: Ekstraksi butir soal dari dokumen via AI dengan pelestarian konteks. |
+| 6 | `GET` | `/api/quizzes/{id}/questions` | `auth:sanctum`, `role:teacher` | URL Param: `{id}` | 200 OK / 403 | Tahap Preview: Guru melihat seluruh butir soal draft, opsi, kunci, dan catatan review. |
+| 7 | `POST` | `/api/quizzes/{id}/questions` | `auth:sanctum`, `role:teacher` | `question_text`, `question_type`, `options`, `correct_answer` | 201 Created / 422 | Metode 3: Tambah butir soal secara manual satu per satu tanpa AI. |
+| 8 | `PUT` | `/api/quizzes/{id}/questions/{qid}` | `auth:sanctum`, `role:teacher` | `question_text`, `question_type`, `options`, `correct_answer` | 200 OK / 422 | Koreksi / edit butir soal pada tahap preview. |
+| 9 | `DELETE` | `/api/quizzes/{id}/questions/{qid}` | `auth:sanctum`, `role:teacher` | URL Param: `{qid}` | 200 OK / 403 / 404 | Hapus butir soal yang tidak sesuai pada tahap preview. |
+| 10 | `PATCH` | `/api/quizzes/{id}/publish` | `auth:sanctum`, `role:teacher` | URL Param: `{id}` | 200 OK / 422 | Konfirmasi & publikasikan kuis (`status: published`) agar dapat dikerjakan siswa. |
+| 11 | `PATCH` | `/api/quizzes/{id}` | `auth:sanctum`, `role:teacher` | `title`, `due_date`, `max_attempts`, `status` | 200 OK / 422 | Update metadata kuis atau rilis hasil kuis (`status: published_result`). |
+| 12 | `POST` | `/api/quizzes/{id}/submissions` | `auth:sanctum`, `role:student` | `answers`: `[{"question_id": 1, "answer": "B"}]` | 202 Accepted / 422 | Pengumpulan jawaban siswa (validasi due date & max attempts) memicu koreksi AI asinkron. |
+| 13 | `GET` | `/api/quizzes/{id}/submissions` | `auth:sanctum`, `role:teacher` | URL Param: `{id}` | 200 OK / 403 | Guru meninjau seluruh riwayat submission siswa kelas bersangkutan. |
+| 14 | `PATCH` | `/api/quiz-submissions/{id}` | `auth:sanctum`, `role:teacher` | `score` (0-100), `feedback` | 200 OK / 422 | Guru meng-override nilai & umpan balik dengan pencatatan audit trail otomatis. |
+| 15 | `GET` | `/api/quizzes/{id}/submissions/me` | `auth:sanctum`, `role:student,parent` | URL Param: `{id}` | 200 OK / 403 | Siswa dan Orang Tua melihat hasil evaluasi akhir setelah kuis berstatus `published_result`. |
+| 16 | `POST` | `/api/journals/{id}/quiz/generate` | `auth:sanctum`, `role:teacher` | URL Param: `{id}` | 202 Accepted / 422 | Endpoint legacy pembuatan kuis via materi jurnal (backward compatibility). |
+
+---
+
+## 50. Command yang Dijalankan, Hasil Automated Testing, & Kendala
+
+### 50.1 Command yang Dijalankan
+
+1. **Uji Coba Fitur Kuis Berbantuan AI (`QuizFeatureTest`)**:
+   ```bash
+   php artisan test --filter=QuizFeatureTest
+   ```
+   *Hasil:* **17 passed** dari 17 tests (67 assertions, durasi 1.58s, 100% lolos).
+2. **Uji Coba Regresi Penuh Seluruh Test Suite Project (`Full Suite`)**:
+   ```bash
+   php artisan test
+   ```
+   *Hasil:* **156 passed** dari 156 tests (678 assertions, durasi 31.65s, 0 failed, 100% lolos hijau tanpa regresi).
+3. **Uji Coba Live E2E ke 9router AI Gateway (`ag/gemini-3.8-flash`)**:
+   - Memanggil `AIService::generateFromPrompt()` dengan materi *"Dasar-dasar Flutter"*, menghasilkan 1 soal PG valid dan 1 soal Esai lengkap dengan rubrik penilaian komprehensif.
+   - Memanggil `AIService::gradeEssay()` terhadap jawaban esai siswa mengenai `StatefulWidget`, menghasilkan skor riil `95.0` dan umpan balik analitis profesional berbahasa Indonesia.
+
+### 50.2 Kendala yang Ditemukan dan Solusinya
+
+- **Kendala Sertifikat SSL cURL pada PHP CLI Windows Lokal**:
+  - *Deskripsi Masalah:* Saat melakukan request live HTTP ke `https://9router.wekanz.id/v1`, PHP cURL pada mesin Windows lokal mengalami error `cURL error 60: SSL certificate problem: unable to get local issuer certificate` karena ketiadaan bundel CA root di `php.ini`.
+  - *Solusi:* Menambahkan opsi konfigurasi `'verify_ssl' => env('AI_VERIFY_SSL', false)` pada `config/services.php` dan mengaktifkan `$httpRequest->withoutVerifying()` di `AIService.php` jika verifikasi dinonaktifkan di environment lokal.
+
+---
+
+## 51. Panduan Pengujian Endpoint melalui Postman (Fase 6)
+
+### 51.1 Pengujian 1: Inisialisasi Kuis Baru (`POST /api/quizzes`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "title": "Kuis Pemrograman Mobile Flutter",
+    "class_id": 1,
+    "due_date": "2026-10-25 23:59:00",
+    "max_attempts": 2
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Kuis berhasil dibuat dalam status draft review.",
+    "data": {
+      "id": 1,
+      "teacher_id": 2,
+      "class_id": 1,
+      "title": "Kuis Pemrograman Mobile Flutter",
+      "status": "draft_review",
+      "due_date": "2026-10-25T23:59:00.000000Z",
+      "max_attempts": 2,
+      "school_class": { "id": 1, "name": "XII RPL 1" }
+    }
+  }
+  ```
+
+---
+
+### 51.2 Pengujian 2: Generate Soal via Prompt AI dengan Konfigurasi Wajib (`POST`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes/1/generate-prompt`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "prompt": "Buatkan soal tentang dasar-dasar Flutter, StatelessWidget, StatefulWidget, dan navigasi routing",
+    "total_questions": 5,
+    "question_types": "combination",
+    "mc_count": 3,
+    "essay_count": 2,
+    "difficulty": "sedang",
+    "additional_notes": "Sertakan contoh potongan kode singkat pada soal pilihan ganda"
+  }
+  ```
+- **Expected Response (202 Accepted):**
+  ```json
+  {
+    "success": true,
+    "message": "Permintaan pembuatan soal kuis sedang diproses oleh AI di latar belakang.",
+    "data": {
+      "quiz_id": 1,
+      "status": "generating",
+      "config": {
+        "prompt": "Buatkan soal tentang dasar-dasar Flutter...",
+        "total_questions": 5,
+        "question_types": "combination",
+        "mc_count": 3,
+        "essay_count": 2
+      }
+    }
+  }
+  ```
+
+---
+
+### 51.3 Pengujian 3: Validasi Gagal Konfigurasi Prompt Tidak Seimbang (422)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes/1/generate-prompt`
+- **Body (raw JSON):**
+  ```json
+  {
+    "prompt": "Soal Flutter",
+    "total_questions": 5,
+    "question_types": "combination",
+    "mc_count": 3,
+    "essay_count": 1
+  }
+  ```
+- **Expected Response (422 Unprocessable Content):**
+  ```json
+  {
+    "success": false,
+    "message": "Untuk jenis kombinasi, jumlah soal pilihan ganda (3) dan esai (1) harus berjumlah sama dengan total soal (5).",
+    "errors": {
+      "total_questions": [
+        "Total soal (5) tidak sesuai dengan penjumlahan pilihan ganda (3) dan esai (1)."
+      ]
+    }
+  }
+  ```
+
+---
+
+### 51.4 Pengujian 4: Ekstraksi Soal dari Berkas Dokumen PDF/TXT (`POST`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes/1/extract-document`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body:** `form-data` (Multipart)
+  | Key | Type | Value | Keterangan |
+  |---|---|---|---|
+  | `document` | File | `[Pilih file bank_soal.pdf atau bank_soal.txt]` | Berkas teks soal (max 5MB) |
+- **Expected Response (202 Accepted):**
+  ```json
+  {
+    "success": true,
+    "message": "Ekstraksi soal dari dokumen sedang diproses oleh AI di latar belakang.",
+    "data": {
+      "quiz_id": 1,
+      "status": "generating",
+      "document_name": "bank_soal.pdf",
+      "file_size": 154200
+    }
+  }
+  ```
+
+---
+
+### 51.5 Pengujian 5: Tambah Butir Soal Manual (`POST`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes/1/questions`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "question_text": "Apa nama perintah CLI untuk membuat project Flutter baru?",
+    "question_type": "multiple_choice",
+    "options": {
+      "A": "flutter start project",
+      "B": "flutter create project_name",
+      "C": "flutter init project",
+      "D": "flutter new app"
+    },
+    "correct_answer": "B"
+  }
+  ```
+- **Expected Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Butir soal manual berhasil ditambahkan.",
+    "data": {
+      "id": 10,
+      "quiz_id": 1,
+      "question_text": "Apa nama perintah CLI untuk membuat project Flutter baru?",
+      "question_type": "multiple_choice",
+      "options": { ... },
+      "correct_answer": "B"
+    }
+  }
+  ```
+
+---
+
+### 51.6 Pengujian 6: Tahap Preview & Edit Soal oleh Guru (`GET & PUT`)
+
+- **Preview Daftar Soal:**
+  - **Method:** `GET`
+  - **URL:** `{{base_url}}/quizzes/1/questions`
+  - **Expected Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "Daftar butir soal kuis berhasil diambil untuk preview.",
+      "data": {
+        "quiz_id": 1,
+        "title": "Kuis Pemrograman Mobile Flutter",
+        "status": "draft_review",
+        "total_questions": 5,
+        "questions": [ ... ]
+      }
+    }
+    ```
+- **Koreksi / Update Butir Soal:**
+  - **Method:** `PUT`
+  - **URL:** `{{base_url}}/quizzes/1/questions/10`
+  - **Body (raw JSON):**
+    ```json
+    {
+      "question_text": "Perintah CLI resmi untuk menginisialisasi project Flutter adalah?",
+      "correct_answer": "B"
+    }
+    ```
+  - **Expected Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "Butir soal berhasil diperbarui.",
+      "data": { "id": 10, ... }
+    }
+    ```
+
+---
+
+### 51.7 Pengujian 7: Konfirmasi & Publikasikan Kuis (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/quizzes/1/publish`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Kuis berhasil dipublikasikan dan siap dikerjakan siswa.",
+    "data": {
+      "id": 1,
+      "status": "published",
+      "questions": [ ... ]
+    }
+  }
+  ```
+
+---
+
+### 51.8 Pengujian 8: Siswa Membuka Kuis yang Dipublikasikan (`GET`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/quizzes/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data kuis berhasil diambil.",
+    "data": {
+      "id": 1,
+      "title": "Kuis Pemrograman Mobile Flutter",
+      "status": "published",
+      "due_date": "2026-10-25T23:59:00.000000Z",
+      "max_attempts": 2,
+      "questions": [
+        {
+          "id": 10,
+          "question_text": "Perintah CLI resmi untuk menginisialisasi project Flutter adalah?",
+          "question_type": "multiple_choice",
+          "options": {
+            "A": "flutter start project",
+            "B": "flutter create project_name",
+            "C": "flutter init project",
+            "D": "flutter new app"
+          }
+          // Note: 'correct_answer' otomatis disembunyikan (hidden) untuk siswa
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 51.9 Pengujian 9: Siswa Mengerjakan Kuis Multi-Attempt (`POST`)
+
+- **Method:** `POST`
+- **URL:** `{{base_url}}/quizzes/1/submissions`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_siswa}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "answers": [
+      {
+        "question_id": 10,
+        "answer": "B"
+      },
+      {
+        "question_id": 11,
+        "answer": "StatefulWidget adalah widget yang memiliki state dinamis yang dapat berubah sepanjang waktu menggunakan setState."
+      }
+    ]
+  }
+  ```
+- **Expected Response (202 Accepted):**
+  ```json
+  {
+    "success": true,
+    "message": "Jawaban kuis berhasil dikumpulkan dan sedang dinilai oleh sistem evaluasi AI.",
+    "data": {
+      "submission_id": 1,
+      "quiz_id": 1,
+      "student_id": 5,
+      "attempt_number": 1,
+      "grading_status": "pending"
+    }
+  }
+  ```
+
+---
+
+### 51.10 Pengujian 10: Validasi Gagal Melewati Deadline / Max Attempts (422)
+
+- **Kasus Melewati Tenggat Waktu (`due_date`):**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "success": false,
+      "message": "Batas waktu pengerjaan kuis telah berakhir."
+    }
+    ```
+- **Kasus Melebihi Batas Percobaan (`max_attempts`):**
+  - **Expected Response (422 Unprocessable Content):**
+    ```json
+    {
+      "success": false,
+      "message": "Batas percobaan kuis telah habis (maksimal 2 kali)."
+    }
+    ```
+
+---
+
+### 51.11 Pengujian 11: Guru Mereview Seluruh Submission Siswa (`GET`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/quizzes/1/submissions`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data submission siswa berhasil diambil.",
+    "data": {
+      "quiz_id": 1,
+      "title": "Kuis Pemrograman Mobile Flutter",
+      "total_submissions": 1,
+      "submissions": [
+        {
+          "id": 1,
+          "student_id": 5,
+          "attempt_number": 1,
+          "grading_status": "graded",
+          "ai_score": 95.0,
+          "ai_feedback": "Soal #1 (Pilihan Ganda): Benar (B).\nSoal #2 (Esai): Nilai 90/100. Evaluasi: Konsep dinamis dan setState dijelaskan dengan tepat.",
+          "is_overridden": false,
+          "student": { "id": 5, "name": "Ahmad Siswa", "nis_nip": "1001" }
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 51.12 Pengujian 12: Guru Meng-override Nilai & Feedback AI (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/quiz-submissions/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "score": 98.0,
+    "feedback": "Nilai disesuaikan oleh guru: Penjelasan konsep dan contoh kasus sangat lengkap."
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Nilai kuis berhasil di-override oleh guru.",
+    "data": {
+      "id": 1,
+      "ai_score": 98.0,
+      "ai_feedback": "Nilai disesuaikan oleh guru: Penjelasan konsep dan contoh kasus sangat lengkap.",
+      "is_overridden": true,
+      "overridden_by": 2,
+      "overridden_at": "2026-10-21T15:15:00.000000Z",
+      "overrider": { "id": 2, "name": "Pak Budi Guru" }
+    }
+  }
+  ```
+
+---
+
+### 51.13 Pengujian 13: Guru Merilis Hasil Akhir Kuis (`PATCH`)
+
+- **Method:** `PATCH`
+- **URL:** `{{base_url}}/quizzes/1`
+- **Headers:**
+  - `Accept: application/json`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer {{token_guru}}`
+- **Body (raw JSON):**
+  ```json
+  {
+    "status": "published_result"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data kuis berhasil diperbarui.",
+    "data": {
+      "id": 1,
+      "status": "published_result"
+    }
+  }
+  ```
+
+---
+
+### 51.14 Pengujian 14: Siswa & Orang Tua Melihat Hasil Akhir Kuis (`GET`)
+
+- **Method:** `GET`
+- **URL:** `{{base_url}}/quizzes/1/submissions/me`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_siswa}}` *(atau token orang tua)*
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Hasil kuis berhasil diambil.",
+    "data": {
+      "quiz_id": 1,
+      "title": "Kuis Pemrograman Mobile Flutter",
+      "best_score": 98.0,
+      "attempts_used": 1,
+      "max_attempts": 2,
+      "submissions": [
+        {
+          "id": 1,
+          "attempt_number": 1,
+          "ai_score": 98.0,
+          "ai_feedback": "Nilai disesuaikan oleh guru: Penjelasan konsep dan contoh kasus sangat lengkap.",
+          "is_overridden": true
+        }
+      ]
+    }
+  }
+  ```
+

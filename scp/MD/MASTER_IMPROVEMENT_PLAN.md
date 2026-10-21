@@ -50,10 +50,10 @@ Dokumen ini adalah **panduan rencana implementasi menyeluruh (end-to-end master 
   ├── Sinkronisasi Otomatis Izin Approved ke Hadir/Sakit/Izin
   └── GET /attendances Auto-Scoped Role
        │
-[Fase 6: Workflow Evaluasi Kuis AI Asinkron (PRD 9.8)]
-  ├── POST /quizzes (Generating -> Asynchronous GenerateQuizJob)
-  ├── Review & Edit Soal oleh Guru (draft_review -> published)
-  ├── Submission Siswa (Max Attempts, Due Date, Async Grading)
+[Fase 6: Sistem Kuis Berbantuan AI & Evaluasi Asinkron (PRD 5.14 & 9.8)]
+  ├── 3 Metode Pembuatan Soal: Prompt AI (Konfigurasi Ketat), Dokumen (PDF/TXT), & Manual
+  ├── Tahap Preview, Koreksi/Edit Butir Soal, & Konfirmasi Publikasi (draft_review -> published)
+  ├── Submission Siswa (Validasi Max Attempts, Due Date) & Penilaian Asinkron (Hybrid PG + Esai AI)
   └── Guru Override Nilai & Publikasi Hasil (published_result)
        │
 [Fase 7: Profil, Verifikasi Kontak & Scheduled Background Jobs (PRD 9.1, 8)]
@@ -1014,136 +1014,252 @@ Tujuan fase ini adalah membangun modul perizinan siswa (`leave_requests`) yang m
 
 ---
 
-## FASE 6: Workflow Evaluasi Kuis AI Asinkron (PRD 5.14 & 9.8)
+## FASE 6: Sistem Kuis Berbantuan AI & Evaluasi Asinkron (PRD 5.14 & 9.8)
 
-Tujuan fase ini adalah merombak modul Kuis AI agar berjalan sepenuhnya asinkron via Queue Worker, mendukung pembuatan kuis oleh guru, review/edit soal esai & pilihan ganda, pengerjaan siswa dengan batasan `max_attempts` dan `due_date`, penilaian AI asinkron, serta audit trail override nilai oleh guru.
+Tujuan fase ini adalah mengembangkan modul Kuis Berbantuan AI yang berjalan secara asinkron (*non-blocking*) via antrean (*Queue Worker*), menyediakan tiga metode pembuatan soal (Prompt AI dengan konfigurasi ketat, Ekstraksi Dokumen berformat PDF/TXT, dan Pembuatan Manual), mewajibkan tahap preview dan konfirmasi sebelum kuis dipublikasikan, mendukung pengerjaan siswa multi-percobaan (*multi-attempt*) dengan penegakan *due date*, penilaian otomatis hybrid (PG instan + Esai AI), serta audit trail override nilai oleh guru.
 
 ---
 
-### Tugas 6.1 · Pembuatan Kuis Asinkron & Polling Status (`POST & GET /api/quizzes`)
+### Tugas 6.1 · Konfigurasi AI 9router (`ag/gemini-3.8-flash`), Ekstraksi Dokumen, & Service Layer (`AIService.php`)
 - **Masalah dan tujuan:**
-  - *Kondisi saat ini:* Pembuatan kuis saat ini dipicu lewat `POST /journals/{id}/quiz/generate`.
-  - *Kebutuhan PRD 5.14 & 9.8:*
-    - `POST /api/quizzes`: Auth (Guru). Menerima `title`, `class_id`, `due_date`, `max_attempts`, dan materi/topik kuis.
-    - Status kuis awal: `generating`.
-    - Memicu job asinkron `GenerateQuizJob` ➔ mengembalikan respons **202 Accepted**.
-    - Job mengeksekusi pembuatan soal AI (via Google Generative AI / script generator), mengisi `quiz_questions`, lalu mengubah status kuis menjadi `draft_review`.
-    - `GET /api/quizzes`: Paginasi kuis (Guru: miliknya; Siswa: published di kelasnya).
-    - `GET /api/quizzes/{id}`: Polling detail & status kuis.
+  - *Kebutuhan:* Membangun layer komunikasi terisolasi ke API AI eksternal 9router menggunakan model resmi `ag/gemini-3.8-flash`, serta pustaka pemrosesan teks dokumen lokal tanpa mengekspos kredensial ke kode sumber terbuka.
+  - *Spesifikasi Integrasi AI:*
+    - Base URL: `https://9router.wekanz.id/v1`
+    - Model: `ag/gemini-3.8-flash`
+    - Protokol: OpenAI-compatible Chat Completions (`POST /v1/chat/completions`)
+    - Parameter Wajib: `"stream": false` (menghasilkan objek JSON tunggal yang utuh, bukan aliran SSE).
+    - API Key: Disimpan secara aman di `.env` (`AI_API_KEY`) dan dikonfigurasi melalui `config/services.php`.
 - **Solusi:**
-  - Refactor `QuizController.php` dan `GenerateQuizJob.php`.
-  - Daftarkan endpoint REST di `routes/api.php`.
+  - Tambahkan konfigurasi `ai` pada `config/services.php` dan `.env`.
+  - Buat service `app/Services/AIService.php` yang menangani request HTTP, sanitasi prompt, pembersihan tag markdown (````json ... ````), ekstraksi JSON, dan penanganan timeout/retry.
+  - Buat helper ekstraksi dokumen: teks biasa (`.txt`) dibaca secara native oleh PHP, dan berkas PDF (`.pdf`) diekstrak menggunakan script Python `script/pdf_doc_extractor.py` berbasis pustaka `pdfplumber` (via Symfony Process).
 - **File dan lokasi kode:**
-  - `app/Http/Controllers/API/QuizController.php`.
-  - `app/Jobs/GenerateQuizJob.php`.
-  - `routes/api.php`.
+  - `config/services.php`
+  - `app/Services/AIService.php` (Baru)
+  - `script/pdf_doc_extractor.py` (Baru)
 - **Implementasi:**
-  1. `store`: Validasi `title`, `class_id`, `due_date` (after:now), `max_attempts` (min:1), `topic`.
-     - Buat record `Quiz::create(['teacher_id' => auth()->id(), 'status' => 'generating', ...])`.
-     - Dispatch `GenerateQuizJob::dispatch($quiz->id, $request->topic)`.
-     - Return respons 202 JSON.
-  2. Di `GenerateQuizJob`:
-     - Panggil AI engine untuk membuat 5–10 soal (kombinasi pilihan ganda dan esai berserta rubrik kata kunci).
-     - Simpan butir soal ke `quiz_questions`.
-     - Update status kuis menjadi `draft_review`.
+  1. Daftarkan konfigurasi `ai` di `config/services.php`:
+     ```php
+     'ai' => [
+         'base_url' => env('AI_BASE_URL', 'https://9router.wekanz.id/v1'),
+         'api_key' => env('AI_API_KEY'),
+         'model' => env('AI_MODEL', 'ag/gemini-3.8-flash'),
+         'timeout' => env('AI_TIMEOUT', 45),
+     ],
+     ```
+  2. Implementasikan method di `AIService.php`:
+     - `generateFromPrompt(...)`: Mengirimkan instruksi guru dan parameter komposisi soal ke AI.
+     - `extractFromDocumentText(string $text): array`: Mengirimkan teks mentah dokumen ke AI untuk dipetakan ke butir soal terstruktur.
+     - `gradeEssay(string $question, string $rubric, string $studentAnswer): array`: Mengevaluasi esai siswa terhadap rubrik kata kunci (menghasilkan skor 0–100 dan feedback edukatif).
+     - `extractJson(string $rawContent): array`: Fungsi regex untuk mengekstrak array/objek JSON murni dari respons AI.
 - **Command:**
-  - `php artisan test --filter=QuizAsyncTest`
+  - `php artisan test --filter=AIServiceTest`
 - **Testing:**
-  - Guru men-trigger `POST /api/quizzes` ➔ Mendapat respons 202 tanpa blocking HTTP.
-  - Jalankan queue worker ➔ Status kuis bertransisi dari `generating` menjadi `draft_review` dan `quiz_questions` terisi.
+  - Mock `Http::fake()` menguji parsing JSON valid, JSON terbungkus markdown, serta penanganan error response 4xx/5xx dari gateway AI.
 - **Kriteria keberhasilan:**
-  - Proses generate tidak pernah memblokir response HTTP client.
+  - Komunikasi ke 9router AI terpusat dan kredensial aman dari paparan publik.
 
 ---
 
-### Tugas 6.2 · Review & Edit Soal Kuis oleh Guru (`/api/quizzes/{id}/questions`, `/publish`)
+### Tugas 6.2 · Pembuatan Kuis & Soal via Prompt AI dengan Validasi Konfigurasi Wajib (`POST /api/quizzes`, `POST /api/quizzes/{id}/generate-prompt`)
 - **Masalah dan tujuan:**
-  - *Kebutuhan PRD 5.14 & 9.8:*
-    - Guru berhak mereview, mengedit teks soal, opsi jawaban, dan kunci jawaban/rubrik (`GET & PUT /api/quizzes/{id}/questions/{question_id}`).
-    - Guru dapat mengubah status kuis menjadi `published` (`PATCH /api/quizzes/{id}`) sehingga dapat dikerjakan siswa.
+  - Guru dapat membuat soal menggunakan prompt bahasa sehari-hari (Metode 1), namun **wajib** menentukan konfigurasi jumlah dan jenis soal terlebih dahulu.
+  - Sistem harus mencegah pengiriman prompt jika konfigurasi tidak valid (misal: jumlah bertentangan, bernilai negatif, atau kombinasi tidak seimbang).
 - **Solusi:**
-  - Tambahkan method `questions`, `updateQuestion`, dan `update` (patch status) di `QuizController.php`.
+  - Implementasikan pembuatan kuis induk `POST /api/quizzes` (status awal `draft_review`).
+  - Implementasikan endpoint pemicu generasi soal via prompt: `POST /api/quizzes/{id}/generate-prompt`.
+  - Bangun aturan validasi ketat (*strict validation*) untuk memastikan kesesuaian antara total soal dengan rincian jenis soal.
+  - Jalankan proses generasi secara asinkron via `GenerateQuizFromPromptJob` ➔ respons HTTP **202 Accepted**.
 - **File dan lokasi kode:**
-  - `app/Http/Controllers/API/QuizController.php`.
-  - `routes/api.php`.
+  - `app/Http/Controllers/API/QuizController.php`
+  - `app/Jobs/GenerateQuizFromPromptJob.php` (atau penyempurnaan `GenerateQuizJob.php`)
+  - `routes/api.php`
 - **Implementasi:**
-  1. `questions($id)`: Ambil seluruh soal untuk kuis terkait (khusus guru pemilik).
-  2. `updateQuestion($id, $question_id, Request $request)`: Validasi dan perbarui teks soal, opsi, atau kata kunci rubrik esai.
-  3. `update($id, Request $request)`: Guru mengubah status kuis dari `draft_review` menjadi `published`.
+  1. Validasi request pada `generatePrompt`:
+     - `prompt`: `required|string|min:5`
+     - `total_questions`: `required|integer|min:1|max:50`
+     - `question_types`: `required|string|in:multiple_choice,essay,combination`
+     - `essay_count`: `required_if:question_types,essay,combination|integer|min:0`
+     - `mc_count`: `required_if:question_types,multiple_choice,combination|integer|min:0`
+     - `difficulty`: `nullable|string|in:mudah,sedang,sulit`
+     - `additional_notes`: `nullable|string|max:500`
+  2. Rule Validasi Konsistensi (*Conditional Validation*):
+     - Jika `question_types === 'multiple_choice'`: `mc_count` wajib sama dengan `total_questions` dan `essay_count` = 0.
+     - Jika `question_types === 'essay'`: `essay_count` wajib sama dengan `total_questions` dan `mc_count` = 0.
+     - Jika `question_types === 'combination'`: `essay_count + mc_count === total_questions`, dan keduanya harus minimal 1.
+     - Jika tidak memenuhi aturan, kembalikan HTTP **422 Unprocessable Content**.
+  3. Dispatch job asinkron: `GenerateQuizFromPromptJob::dispatch($quiz->id, $validatedPayload)`.
+  4. Response: HTTP **202 Accepted** dengan pesan *"Permintaan pembuatan soal sedang diproses oleh AI."*
+  5. Di dalam Job:
+     - Panggil `AIService::generateFromPrompt()`.
+     - AI menghasilkan butir soal sesuai konfigurasi tanpa melenceng.
+     - Simpan butir soal ke tabel `quiz_questions` dengan `quiz_id`.
+     - Status kuis tetap berada di `draft_review` untuk tahap preview guru.
 - **Command:**
-  - `php artisan test --filter=QuizQuestionTest`
+  - `php artisan test --filter=QuizPromptGenerationTest`
 - **Testing:**
-  - Guru mengedit kunci rubrik esai ➔ Perubahan tersimpan.
+  - Mengirim prompt dengan kombinasi tidak seimbang (total 10, mc 6, essay 3) ➔ Ditolak 422.
+  - Mengirim prompt dengan konfigurasi valid ➔ Menerima 202 Accepted.
+  - Job memproses antrean ➔ Soal tersimpan di `quiz_questions` persis 10 butir sesuai jenis.
+- **Kriteria keberhasilan:**
+  - Prompt tidak pernah dikirim ke AI sebelum konfigurasi soal divalidasi valid.
+
+---
+
+### Tugas 6.3 · Ekstraksi Soal dari Dokumen (PDF/TXT) via AI dengan Pelestarian Konteks (`POST /api/quizzes/{id}/extract-document`)
+- **Masalah dan tujuan:**
+  - Guru dapat mengunggah berkas dokumen soal (Metode 2) untuk diekstrak secara otomatis ke dalam aplikasi, membebaskan guru dari mengetik ulang soal.
+  - AI bertugas memetakan dan mengekstrak soal yang sudah ada di dokumen, **bukan mengarang soal baru**.
+  - Jika terdapat bagian teks yang buram, tidak terbaca, atau kunci jawaban tidak ditemukan dengan pasti, butir soal harus ditandai agar guru dapat memeriksanya (*needs review*).
+- **Solusi:**
+  - Implementasikan endpoint `POST /api/quizzes/{id}/extract-document`.
+  - Validasi unggahan berkas: tipe `mimes:pdf,txt`, ukuran maksimal 5MB (`max: 5120 KB`).
+  - Ekstraksi teks dari berkas (.txt dibaca native, .pdf diproses via `pdfplumber`).
+  - Dispatch job asinkron `ExtractQuizFromDocumentJob` ➔ respons HTTP **202 Accepted**.
+  - AI menyusun struktur butir soal dengan instruksi pelestarian konteks asli dan menandai ambiguitas dengan flag `needs_review: true` serta catatan `review_note`.
+- **File dan lokasi kode:**
+  - `app/Http/Controllers/API/QuizController.php`
+  - `app/Jobs/ExtractQuizFromDocumentJob.php` (Baru)
+  - `routes/api.php`
+- **Implementasi:**
+  1. Upload berkas disimpan sementara di disk penyimpanan `private/documents/`.
+  2. Ekstraksi teks isi berkas secara lengkap.
+  3. Prompting AI khusus ekstraksi:
+     - *"Ekstrak dan susun seluruh butir soal yang ditemukan di dalam dokumen teks ini ke dalam format JSON. Pertahankan kalimat asli, konteks pertanyaan, pilihan opsi A-D, dan kunci jawaban asli. JANGAN mengarang atau menambah soal baru yang tidak ada di dokumen. Jika kunci jawaban atau opsi tidak jelas/tidak ditemukan, isi kolom 'needs_review': true dan berikan catatan pada 'review_note'."*
+  4. Simpan butir soal ke tabel `quiz_questions`:
+     - `question_text`, `options` (opsi A-D beserta flag `needs_review` dan `review_note` jika ada), `correct_answer`, `question_type`.
+  5. Bersihkan berkas fisik sementara setelah teks selesai diekstrak.
+- **Command:**
+  - `php artisan test --filter=QuizDocumentExtractionTest`
+- **Testing:**
+  - Upload file selain PDF/TXT atau ukuran > 5MB ➔ Ditolak 422.
+  - Upload dokumen soal valid ➔ 202 Accepted, job memproses dan butir soal muncul di tahap preview dengan konteks asli terjaga.
+  - Soal tanpa kunci jawaban di dokumen ➔ Tersimpan dengan atribut penanda `needs_review: true`.
+- **Kriteria keberhasilan:**
+  - Soal dokumen terpindah secara akurat tanpa fabrikasi soal baru.
+
+---
+
+### Tugas 6.4 · Tahap Preview, Koreksi/Edit Butir Soal, Pembuatan Soal Manual, & Konfirmasi Publikasi
+- **Masalah dan tujuan:**
+  - Semua soal dari prompt AI maupun ekstraksi dokumen **wajib melalui tahap preview** oleh guru sebelum kuis dibuka.
+  - Guru dapat memeriksa, mengoreksi teks/kunci, menghapus soal, menambah soal secara manual (Metode 3), atau membatalkan proses.
+  - Setelah yakin, guru mengonfirmasi publikasi kuis (`published`).
+  - Siswa tidak boleh melihat kunci jawaban (`correct_answer`).
+- **Solusi:**
+  - Implementasikan endpoint preview kuis: `GET /api/quizzes/{id}/questions` (khusus guru pemilik kuis / Waka).
+  - Implementasikan operasi CRUD butir soal manual:
+    - `POST /api/quizzes/{id}/questions`: Tambah soal manual satu per satu.
+    - `PUT /api/quizzes/{id}/questions/{question_id}`: Edit teks soal, opsi PG, atau rubrik esai.
+    - `DELETE /api/quizzes/{id}/questions/{question_id}`: Hapus butir soal.
+  - Implementasikan konfirmasi publikasi: `PATCH /api/quizzes/{id}` mengubah status menjadi `published`.
+  - Amankan detail kuis bagi siswa (`GET /api/quizzes/{id}`): kolom `correct_answer` otomatis disembunyikan via `makeHidden(['correct_answer'])`.
+- **File dan lokasi kode:**
+  - `app/Http/Controllers/API/QuizController.php`
+  - `routes/api.php`
+- **Implementasi:**
+  1. `previewQuestions($id)`: Menampilkan seluruh soal draft beserta opsi, kunci jawaban, dan penanda `needs_review`.
+  2. `storeQuestion($id, Request $request)`: Validasi pembuatan manual (`question_text`, `question_type: multiple_choice/essay`, `options`, `correct_answer`).
+  3. `updateQuestion($id, $question_id, Request $request)`: Mengupdate butir soal hasil AI atau manual sebelum dipublikasikan.
+  4. `destroyQuestion($id, $question_id)`: Menghapus butir soal yang tidak diinginkan.
+  5. `publish($id)`: Memastikan kuis memiliki minimal 1 butir soal, lalu mengubah status kuis dari `draft_review` menjadi `published`.
+- **Command:**
+  - `php artisan test --filter=QuizPreviewAndManualTest`
+- **Testing:**
+  - Guru melihat preview soal draft ➔ Seluruh butir soal dan kunci tampil lengkap.
+  - Guru mengedit kunci rubrik dan menghapus 1 soal yang tidak diinginkan ➔ Perubahan tersimpan.
+  - Guru menambah soal manual ➔ Soal manual masuk ke dalam kuis yang sama.
   - Guru mempublikasikan kuis ➔ Status berubah menjadi `published`.
-  - Siswa membuka detail kuis ➔ Kunci jawaban `correct_answer` disembunyikan (*hidden*).
+  - Siswa membuka detail kuis ➔ Kunci jawaban `correct_answer` tersembunyi.
 - **Kriteria keberhasilan:**
-  - Guru memegang kendali mutu soal AI sebelum siswa mulai mengerjakan.
+  - Tidak ada soal AI yang langsung aktif tanpa melewati tahap preview dan konfirmasi guru.
 
 ---
 
-### Tugas 6.3 · Submission Siswa & Penilaian AI Asinkron (`/submissions`, `GradeQuizSubmissionJob`)
+### Tugas 6.5 · Submission Siswa & Penilaian AI Asinkron Hybrid (`POST /quizzes/{id}/submissions`, `GradeQuizSubmissionJob`)
 - **Masalah dan tujuan:**
-  - *Kondisi saat ini:* Submission dikoreksi secara sinkron dan hanya mencocokkan string huruf pilihan ganda. Siswa ditolak jika mencoba kedua kalinya.
-  - *Kebutuhan PRD 5.14 & 9.8:*
-    - Siswa mengirim jawaban via `POST /api/quizzes/{id}/submissions`.
-    - Ditolak (422) jika waktu sekarang melewati `due_date` ATAU jumlah percobaan siswa sudah mencapai `max_attempts`.
-    - Submission dicatat dengan nomor percobaan (`attempt_number`), status penilaian `pending`.
-    - Memicu job asinkron `GradeQuizSubmissionJob` (mengoreksi pilihan ganda secara otomatis dan mengevaluasi jawaban esai berdasarkan rubrik kata kunci AI) ➔ Update status menjadi `graded`, isi `ai_score` dan `ai_feedback`.
+  - Siswa mengumpulkan jawaban kuis. Sistem harus menegakkan batasan `due_date` dan `max_attempts`.
+  - Penilaian dilakukan secara asinkron tanpa memblokir HTTP response (202 Accepted).
+  - Penilaian bersifat hybrid: pilihan ganda dinilai otomatis oleh logika sistem, sedangkan esai dievaluasi semantik oleh AI berdasarkan rubrik kata kunci (`ag/gemini-3.8-flash`).
 - **Solusi:**
-  - Implementasikan endpoint `submit` di `QuizController.php` dan buat queue job `app/Jobs/GradeQuizSubmissionJob.php`.
+  - Implementasikan endpoint `POST /api/quizzes/{id}/submissions`.
+  - Validasi ketat: kuis `status === 'published'`, siswa anggota kelas kuis, waktu `now() <= due_date`, dan `current_attempts < max_attempts`.
+  - Buat record `QuizSubmission` (`attempt_number`, status `pending`, payload jawaban), lalu dispatch `GradeQuizSubmissionJob` ➔ HTTP **202 Accepted**.
+  - Job `GradeQuizSubmissionJob` menghitung skor gabungan (skala 0–100) dan umpan balik (`ai_feedback`), lalu mengubah status menjadi `graded`.
 - **File dan lokasi kode:**
-  - `app/Http/Controllers/API/QuizController.php`.
-  - `app/Jobs/GradeQuizSubmissionJob.php` (Baru).
-  - `routes/api.php`.
+  - `app/Http/Controllers/API/QuizController.php`
+  - `app/Jobs/GradeQuizSubmissionJob.php` (Baru)
+  - `routes/api.php`
 - **Implementasi:**
   1. Di `submit`:
-     - Cek kuis `status === 'published'`. Cek `now() <= $quiz->due_date`.
-     - Hitung jumlah attempt siswa: `$attempts = QuizSubmission::where('quiz_id', $id)->where('student_id', $user->id)->count()`.
-     - Jika `$attempts >= $quiz->max_attempts`, tolak 422: "Batas percobaan telah habis".
-     - Buat submission: `attempt_number = $attempts + 1`, `grading_status = 'pending'`, `answers_payload = $request->answers`.
-     - Dispatch `GradeQuizSubmissionJob::dispatch($submission->id)`. Return 202 Accepted.
+     - Hitung attempt siswa sebelumnya: `$attempts = QuizSubmission::where('quiz_id', $quiz->id)->where('student_id', $user->id)->count()`.
+     - Tolak 422 jika `$attempts >= $quiz->max_attempts` atau waktu melewati `due_date`.
+     - Buat submission baru dengan `attempt_number = $attempts + 1` dan `grading_status = 'pending'`.
+     - Dispatch `GradeQuizSubmissionJob::dispatch($submission->id)`. Return 202 Accepted JSON.
   2. Di `GradeQuizSubmissionJob`:
-     - Hitung skor pilihan ganda. Evaluasi esai terhadap rubrik.
-     - Simpan akumulasi `ai_score` dan teks evaluasi `ai_feedback`.
-     - Ubah `grading_status = 'graded'`.
+     - Loop butir soal:
+       - Untuk `multiple_choice`: Cocokkan jawaban siswa dengan `correct_answer`. Skor 100 jika benar, 0 jika salah.
+       - Untuk `essay`: Panggil `AIService::gradeEssay($question, $rubric, $studentAnswer)`. Dapatkan skor 0–100 dan umpan balik dari AI `ag/gemini-3.8-flash`.
+     - Hitung rata-rata tertimbang skor total: `$finalScore = round($totalScore / $questionCount, 2)`.
+     - Rangkum feedback: `$submission->update(['ai_score' => $finalScore, 'ai_feedback' => $feedbackSummary, 'grading_status' => 'graded'])`.
 - **Command:**
-  - `php artisan make:job GradeQuizSubmissionJob`
-  - `php artisan test --filter=QuizSubmissionTest`
+  - `php artisan test --filter=QuizSubmissionAndGradingTest`
 - **Testing:**
-  - Siswa submit percobaan ke-1 ➔ Diterima (202).
-  - Siswa submit percobaan ke-2 (jika max_attempts=2) ➔ Diterima sebagai attempt 2.
-  - Siswa submit setelah deadline ➔ Ditolak 422.
+  - Siswa submit attempt 1 ➔ 202 Accepted.
+  - Job berjalan ➔ Skor PG dan evaluasi esai terisi di database.
+  - Siswa submit setelah due date ➔ Ditolak 422.
+  - Siswa submit melebihi max_attempts ➔ Ditolak 422.
 - **Kriteria keberhasilan:**
-  - Acceptance Criteria UKK: "Kuis AI Asinkron" ditegakkan.
+  - Batasan deadline dan max attempts ditegakkan; penilaian AI berjalan asinkron.
 
 ---
 
-### Tugas 6.4 · Review Guru, Override Nilai & Publikasi Hasil Kuis (`PATCH /quiz-submissions/{id}`, `/submissions/me`)
+### Tugas 6.6 · Review Guru, Override Nilai & Publikasi Hasil Kuis (`PATCH /quiz-submissions/{id}`, `/submissions/me`)
 - **Masalah dan tujuan:**
-  - *Kebutuhan PRD 5.14 & 9.8:*
-    - Guru mereview seluruh submission siswa (`GET /api/quizzes/{id}/submissions`).
-    - Guru dapat meng-override nilai atau feedback hasil AI (`PATCH /api/quiz-submissions/{id}`). Setiap override wajib mencatat audit trail: `is_overridden = true`, `overridden_by = auth()->id()`, `overridden_at = now()`.
-    - Guru mempublikasikan hasil (`published_result`).
-    - Siswa dan Orang Tua dapat melihat nilai & feedback akhir melalui `GET /api/quizzes/{id}/submissions/me` setelah hasil dipublikasikan.
+  - Guru berhak meninjau seluruh submission dan meng-override nilai/feedback hasil AI dengan audit trail transparan.
+  - Hasil penilaian kuis tidak boleh langsung terlihat oleh siswa sampai guru merilis publikasi hasil (`published_result`).
 - **Solusi:**
-  - Tambahkan method `submissions`, `overrideSubmission`, dan `mySubmission` di `QuizController.php`.
+  - Implementasikan `GET /api/quizzes/{id}/submissions` (khusus guru pemilik kuis / Waka).
+  - Implementasikan `PATCH /api/quiz-submissions/{id}`: Guru meng-override nilai (`ai_score`) dan `ai_feedback` dengan pencatatan `is_overridden = true`, `overridden_by = auth()->id()`, dan `overridden_at = now()`.
+  - Implementasikan publikasi hasil kuis: `PATCH /api/quizzes/{id}` dengan status `published_result`.
+  - Implementasikan `GET /api/quizzes/{id}/submissions/me`: Siswa dan orang tua melihat skor akhir dan umpan balik hanya setelah status kuis menjadi `published_result`.
 - **File dan lokasi kode:**
-  - `app/Http/Controllers/API/QuizController.php`.
-  - `routes/api.php`.
+  - `app/Http/Controllers/API/QuizController.php`
+  - `routes/api.php`
 - **Implementasi:**
   1. `overrideSubmission($id, Request $request)`:
      - Validasi `score => required|numeric|min:0|max:100`, `feedback => nullable|string`.
-     - Update record: `ai_score = $request->score`, `ai_feedback = $request->feedback`, `is_overridden = true`, `overridden_by = auth()->id()`, `overridden_at = now()`.
+     - Simpan perubahan beserta identitas guru dan timestamp override.
   2. `mySubmission($id, Request $request)`:
-     - Cek apakah status kuis sudah `published_result`. Jika belum, kembalikan info bahwa hasil belum diumumkan.
-     - Ambil submission siswa terbaik / attempt terakhir beserta nilai dan feedback.
+     - Periksa apakah status kuis sudah `published_result`. Jika belum, kembalikan response informatif bahwa hasil kuis belum diumumkan guru.
+     - Jika sudah `published_result`, tampilkan rincian nilai tiap attempt, skor tertinggi, dan catatan evaluasi.
 - **Command:**
-  - `php artisan test --filter=QuizOverrideTest`
+  - `php artisan test --filter=QuizOverrideAndResultTest`
 - **Testing:**
-  - Guru meng-override nilai AI dari 70 menjadi 85 ➔ Field `is_overridden` bernilai true dan nama guru tercatat.
-  - Siswa dan orang tua mengakses nilai setelah dipublish ➔ Nilai 85 dan feedback tampil.
+  - Guru meng-override skor dari 75 menjadi 90 ➔ Kolom audit trail terisi benar.
+  - Siswa mengakses nilai sebelum hasil dipublikasikan ➔ Menerima info bahwa hasil belum diumumkan.
+  - Guru mengubah status kuis menjadi `published_result` ➔ Siswa dan orang tua dapat melihat nilai final dan feedback.
 - **Kriteria keberhasilan:**
-  - Audit trail penilaian transparan dan akuntabel.
+  - Audit trail akuntabel dan kerahasiaan hasil sebelum publikasi terjamin.
+
+---
+
+### Tugas 6.7 · Automated Feature Testing Komprehensif & Verifikasi Real API 9router E2E
+- **Masalah dan tujuan:**
+  - Memastikan seluruh skenario baru (3 metode pembuatan soal, validasi konfigurasi ketat, ekstraksi dokumen, preview & konfirmasi, penilaian hybrid, override, dan publikasi) teruji otomatis 100% tanpa merusak fitur sebelumnya.
+  - Memverifikasi integrasi riil ke model `ag/gemini-3.8-flash` via 9router API Gateway.
+- **Solusi:**
+  - Buat suite test feature komprehensif `tests/Feature/QuizFeatureTest.php`.
+  - Gunakan `Http::fake()` pada automated test agar eksekusi `php artisan test` tetap instan (< 2 detik), deterministik, dan hemat kuota.
+  - Jalankan pengujian regresi penuh seluruh aplikasi (`php artisan test`) untuk memastikan 139+ test sebelumnya tetap lulus 100%.
+  - Lakukan verifikasi live E2E via Postman / skrip khusus untuk menguji hasil nyata pembuatan soal dan penilaian esai dari model `ag/gemini-3.8-flash`.
+- **File dan lokasi kode:**
+  - `tests/Feature/QuizFeatureTest.php` (Baru)
+- **Command:**
+  - `php artisan test --filter=QuizFeatureTest`
+  - `php artisan test`
+- **Kriteria keberhasilan:**
+  - Seluruh test kuis baru lulus 100% dan zero regression pada seluruh modul sistem.
 
 ---
 

@@ -49,6 +49,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
     Route::patch('/leave-requests/{id}', [LeaveRequestController::class, 'update']);
 
+    // 9.8 Sistem Kuis Berbantuan AI (General Accessible / Scoped in Controller)
+    Route::get('/quizzes', [QuizController::class, 'index']);
+    Route::get('/quizzes/{id}', [QuizController::class, 'show']);
+
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
         Route::get('/waka-only', function () {
@@ -125,12 +129,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/permissions/{id}/status', [StudentPermisionController::class, 'updateStatus']);
         Route::post('/substitute', [SubstituteAssignmentController::class, 'store']);
 
-        Route::post('/journals/{id}/quiz/generate', [QuizController::class, 'generate']);
+        // 9.8 Sistem Kuis Berbantuan AI (Guru)
+        Route::post('/quizzes', [QuizController::class, 'store']);
+        Route::patch('/quizzes/{id}', [QuizController::class, 'update']);
         Route::patch('/quizzes/{id}/publish', [QuizController::class, 'publish']);
-    });
+        Route::post('/quizzes/{id}/generate-prompt', [QuizController::class, 'generatePrompt']);
+        Route::post('/quizzes/{id}/extract-document', [QuizController::class, 'extractDocument']);
+        Route::get('/quizzes/{id}/questions', [QuizController::class, 'questions']);
+        Route::post('/quizzes/{id}/questions', [QuizController::class, 'storeQuestion']);
+        Route::put('/quizzes/{id}/questions/{question_id}', [QuizController::class, 'updateQuestion']);
+        Route::delete('/quizzes/{id}/questions/{question_id}', [QuizController::class, 'destroyQuestion']);
+        Route::get('/quizzes/{id}/submissions', [QuizController::class, 'submissions']);
+        Route::patch('/quiz-submissions/{id}', [QuizController::class, 'overrideSubmission']);
 
-    Route::middleware('role:teacher,student')->group(function() {
-        Route::get('/quizzes/{id}', [QuizController::class, 'show']);
+        Route::post('/journals/{id}/quiz/generate', [QuizController::class, 'generate']);
     });
 
     // 4. Siswa & Orang Tua
@@ -140,6 +152,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
         Route::post('/permissions', [StudentPermisionController::class, 'store']);
         Route::get('/students/{id}/attendance/summary', [StudentController::class, 'attendanceSummary']);
+
+        // 9.8 Pengerjaan & Hasil Kuis
         Route::post('/quizzes/{id}/submissions', [QuizController::class, 'submit']);
+        Route::get('/quizzes/{id}/submissions/me', [QuizController::class, 'mySubmission']);
     });
 });

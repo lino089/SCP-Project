@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'ai' => [
+        'base_url' => env('AI_BASE_URL', 'https://9router.wekanz.id/v1'),
+        'api_key' => env('AI_API_KEY'),
+        'model' => env('AI_MODEL', 'ag/gemini-3.8-flash'),
+        'timeout' => (int) env('AI_TIMEOUT', 45),
+        'verify_ssl' => env('AI_VERIFY_SSL', false),
+    ],
+
 ];

@@ -201,17 +201,75 @@ Waka menandai siswa tidak naik via POST /api/students/{id}/hold-back sebelum POS
 
 Siswa di kelas akhir yang lulus: users.graduation_date diisi Waka. Job harian menghapus PERMANEN (hard delete) akun & data siswa 14 hari setelah graduation_date.
 
-## 5.14 Workflow Evaluasi Kuis AI (Asinkron)
+## 5.14 Sistem Kuis Berbantuan AI & Workflow Evaluasi Asinkron
 
-POST /api/quizzes (due_date, max_attempts) -> generating -> job asinkron -> quiz_questions -> draft_review.
+Modul Kuis Berbantuan AI memungkinkan guru menyusun, mengelola, dan mengevaluasi asesmen pembelajaran siswa dengan tiga metode pembuatan soal yang terintegrasi secara konsisten ke dalam struktur data kuis:
 
-Guru review/edit soal (GET/PUT .../questions), tandai reviewed lalu published.
+### A. Tiga Metode Pembuatan Soal
 
-Siswa submit (attempt_number, batas sesuai max_attempts, ditolak jika lewat due_date) -> koreksi AI asinkron -> graded.
+1. **Metode 1: Pembuatan Soal Berbasis Prompt AI**
+   - Guru memasukkan instruksi materi dalam bahasa sehari-hari (misal: *"Buatkan soal tentang dasar-dasar Flutter"*).
+   - **Konfigurasi Wajib Soal**: Sebelum prompt dapat dikirimkan ke AI, guru **wajib** mengisi konfigurasi soal terlebih dahulu sebagai bagian integral dari alur pembuatan:
+     - `total_questions`: Total jumlah soal yang ingin dibuat (integer, minimal 1).
+     - `question_types`: Jenis soal yang diinginkan (`multiple_choice`, `essay`, atau `combination`).
+     - `essay_count`: Jumlah butir soal esai.
+     - `mc_count`: Jumlah butir soal pilihan ganda.
+   - **Aturan Validasi & Perilaku Konfigurasi**:
+     - Sistem memvalidasi konfigurasi di sisi client dan server; pengiriman prompt dicegah/ditolak jika konfigurasi belum valid.
+     - Jika memilih satu jenis soal (`multiple_choice` atau `essay`), seluruh butir soal wajib dibuat sesuai jenis tersebut (`total_questions` sama dengan jumlah jenis terpilih, jenis lainnya bernilai 0).
+     - Jika memilih kombinasi (`combination`), penjumlahan `essay_count + mc_count` **wajib sama persis** dengan `total_questions`, dan masing-masing jenis minimal berjumlah 1.
+     - Nilai jumlah soal tidak boleh kosong, tidak boleh bernilai negatif, dan tidak boleh saling bertentangan.
+     - AI (`ag/gemini-3.8-flash`) wajib menghasilkan butir soal yang patuh secara ketat terhadap komposisi jumlah dan jenis soal yang telah ditentukan guru. AI tidak boleh mengubah komposisi tanpa pemberitahuan eksplisit kepada guru.
+     - Pengaturan kualitas tambahan (opsional): tingkat kesulitan (`mudah`, `sedang`, `sulit`) dan catatan instruksi khusus guru.
 
-Guru review semua submission, override skor/feedback (tercatat overridden_by/at), publish hasil (published_result).
+2. **Metode 2: Pembuatan Soal dari Ekstraksi Dokumen Berbantuan AI**
+   - Guru mengunggah berkas dokumen yang telah memuat soal-soal ujian/latihan untuk dipindahkan secara otomatis ke dalam aplikasi tanpa perlu mengetik ulang secara manual.
+   - **Dukungan Format & Batasan Berkas**: Mendukung format berkas yang didukung pustaka sistem: berkas teks biasa (`.txt`) secara native dan berkas PDF (`.pdf`) melalui parser `pdfplumber` (Symfony Process), dengan batas ukuran berkas maksimal 5MB (`max: 5120 KB`). Unggahan divalidasi tipe berkas dan diamankan di disk penyimpanan sementara.
+   - **Alur Pemrosesan Dokumen**:
+     1. Guru mengunggah berkas dokumen soal.
+     2. Sistem mengekstrak teks isi dokumen dan mengirimkannya ke AI (`ag/gemini-3.8-flash`) dengan instruksi penataan struktur soal (*structuring prompt*).
+     3. AI menyusun butir soal ke dalam skema kuis: teks pertanyaan, opsi jawaban A–D, kunci jawaban, dan rubrik esai.
+     4. **Prinsip Pelestarian Konten Asli**: AI bertugas memetakan dan mengekstrak soal yang sudah ada di dokumen, **bukan mengarang soal baru**. Isi, maksud, konteks, dan kunci jawaban asli wajib dipertahankan semaksimal mungkin.
+     5. **Penanganan Ambiguitas & Teks Tidak Terbaca**: Jika terdapat bagian teks yang buram/rusak, nomor soal yang hilang, atau opsi/kunci jawaban yang tidak dapat diidentifikasi secara pasti, AI menandai butir soal tersebut dengan atribut flag ambiguitas (`needs_review: true`) beserta catatan penjelasan (`review_note`), sehingga guru dapat segera memperbaikinya pada tahap preview.
 
-Tipe essay: correct_answer diisi rubrik/kata kunci, bukan jawaban literal.
+3. **Metode 3: Pembuatan Soal Manual**
+   - Fitur pembuatan soal manual yang sudah ada tetap dipertahankan penuh tanpa modifikasi yang merusak.
+   - Guru dapat menambah butir soal secara mandiri satu per satu (`POST /api/quizzes/{id}/questions`), mengedit butir soal (`PUT /api/quizzes/{id}/questions/{question_id}`), maupun menghapus butir soal (`DELETE /api/quizzes/{id}/questions/{question_id}`).
+   - Seluruh butir soal manual disimpan ke dalam tabel `quiz_questions` dengan struktur data yang identik dengan soal hasil AI.
+
+### B. Tahap Preview, Pengeditan, & Konfirmasi Wajib
+
+- Setiap butir soal—baik yang dihasilkan melalui prompt AI maupun yang diekstrak dari dokumen—**wajib melalui tahap preview** terlebih dahulu sebelum disimpan secara permanen ke dalam kuis atau dipublikasikan kepada siswa.
+- Pada tahap preview (status kuis `draft_review`):
+  - Guru dapat melihat seluruh daftar butir soal hasil generasi/ekstraksi.
+  - Guru dapat memeriksa jenis soal, teks pertanyaan, opsi jawaban A–D, dan kunci jawaban/rubrik esai.
+  - Guru dapat melihat penanda butir soal yang membutuhkan perhatian (`needs_review`) hasil ekstraksi dokumen.
+  - Guru berhak mengoreksi, mengedit teks, memperbarui kunci jawaban, menambah soal manual, maupun menghapus soal yang tidak sesuai.
+  - Guru dapat membatalkan proses jika hasil belum memuaskan.
+  - Setelah seluruh butir soal terverifikasi, guru melakukan **konfirmasi** dan mempublikasikan kuis (`PATCH /api/quizzes/{id}` dengan status `published`).
+
+### C. Alur Pengerjaan Siswa, Penilaian Asinkron, Override Guru, & Publikasi Hasil
+
+1. **Pengerjaan oleh Siswa**:
+   - Siswa mengirimkan jawaban via `POST /api/quizzes/{id}/submissions`.
+   - Validasi ketat: kuis berstatus `published`, siswa terdaftar di kelas bersangkutan, waktu pengerjaan belum melewati `due_date`, dan jumlah percobaan siswa belum mencapai `max_attempts`.
+   - Sistem mencatat submission dengan nomor percobaan (`attempt_number`), status `grading_status = 'pending'`, dan mengembalikan HTTP **202 Accepted**.
+2. **Koreksi Asinkron (Hybrid Grading Job)**:
+   - Job antrean `GradeQuizSubmissionJob` berjalan di latar belakang:
+     - Soal Pilihan Ganda: Dikoreksi otomatis oleh logika sistem dengan mencocokkan opsi jawaban siswa terhadap `correct_answer` (A/B/C/D).
+     - Soal Esai: Dievaluasi secara semantik oleh AI (`ag/gemini-3.8-flash`) berdasarkan rubrik kata kunci pada `correct_answer`, menghasilkan skor esai dan umpan balik (*ai_feedback*).
+     - Skor total gabungan diakumulasikan ke kolom `ai_score` (skala 0–100) dan status penilaian berubah menjadi `grading_status = 'graded'`.
+3. **Kendali Guru & Audit Trail Override**:
+   - Guru memantau seluruh submission siswa via `GET /api/quizzes/{id}/submissions`.
+   - Guru berhak meng-override skor maupun umpan balik AI via `PATCH /api/quiz-submissions/{id}`. Setiap penyesuaian wajib mencatat audit trail: `is_overridden = true`, `overridden_by = auth()->id()`, dan `overridden_at = now()`.
+4. **Publikasi Hasil Kuis**:
+   - Guru mengubah status kuis menjadi `published_result`.
+   - Siswa dan orang tua hanya dapat melihat skor akhir dan umpan balik pengerjaan via `GET /api/quizzes/{id}/submissions/me` setelah status kuis menjadi `published_result`.
+
+### D. Konfigurasi AI & Keamanan
+
+- **Penyedia & Model**: Integrasi AI menggunakan 9router API Gateway dengan Base URL `https://9router.wekanz.id/v1`, Model `ag/gemini-3.8-flash`, dan parameter `"stream": false`.
+- **Keamanan Kredensial**: API Key dikelola secara aman melalui environment variable (`AI_API_KEY`) dan service configuration (`config/services.php`). Kredensial tidak pernah ditulis langsung (*hardcoded*) pada source code maupun dokumentasi terbuka.
 
 ## 5.15 Rekap Presensi & Izin
 
@@ -379,25 +437,35 @@ PUT /api/journals/{id} | Auth (Guru pemilik jadwal ATAU Guru Kesiswaan selaku gu
 
 PATCH /api/journals/{id} | Auth (Khusus Guru Kesiswaan / Waka. Wali Kelas / Guru lain ditolak 403 Forbidden) | Menandai status teacher_absent pada jurnal yang sudah dibuat/dibuka.
 
-## 9.8 Evaluasi Kuis AI
+## 9.8 Sistem Kuis Berbantuan AI & Evaluasi
 
-GET /api/quizzes | Auth (Guru: miliknya; Siswa: published kelasnya) | Pagination.
+GET /api/quizzes | Auth (Guru: miliknya; Siswa: published kelasnya; Waka: semua) | Pagination & filter status/kelas.
 
-POST /api/quizzes | Auth (Guru) | due_date, max_attempts -> generate asinkron.
+POST /api/quizzes | Auth (Guru) | Inisialisasi kuis (`title`, `class_id`, `due_date`, `max_attempts`). Status awal: `draft_review`.
 
-GET /api/quizzes/{id} | Auth | Polling status.
+GET /api/quizzes/{id} | Auth | Polling status & detail kuis. Kolom `correct_answer` otomatis disembunyikan jika diakses Siswa.
 
-GET & PUT /api/quizzes/{id}/questions[/{question_id}] | Auth (Guru) | Review & edit soal.
+POST /api/quizzes/{id}/generate-prompt | Auth (Guru) | Metode 1: Generate soal AI via prompt. Wajib konfigurasi valid (`total_questions`, `question_types`: multiple_choice/essay/combination, `essay_count`, `mc_count`). Response 202 Accepted -> asinkron mengisi `quiz_questions`.
 
-PATCH /api/quizzes/{id} | Auth (Guru) | Ubah status/due_date/max_attempts.
+POST /api/quizzes/{id}/extract-document | Auth (Guru) | Metode 2: Ekstraksi soal AI dari dokumen (PDF via pdfplumber / TXT, max 5MB). Melestarikan soal asli & menandai `needs_review: true` pada soal ambigu. Response 202 Accepted -> asinkron mengisi `quiz_questions`.
 
-POST /api/quizzes/{id}/submissions | Auth (Siswa) | Ditolak 422 jika melebihi attempt/due_date.
+GET /api/quizzes/{id}/questions | Auth (Guru) | Tahap Preview: Melihat seluruh butir soal hasil prompt AI, ekstraksi dokumen, atau manual sebelum dipublikasikan.
 
-GET /api/quizzes/{id}/submissions | Auth (Guru) | Review semua submission.
+POST /api/quizzes/{id}/questions | Auth (Guru) | Metode 3: Pembuatan soal secara manual satu per satu (`question_text`, `question_type`, `options`, `correct_answer`).
 
-PATCH /api/quiz-submissions/{id} | Auth (Guru) | Override skor/feedback, audit trail.
+PUT /api/quizzes/{id}/questions/{question_id} | Auth (Guru) | Edit dan koreksi butir soal pada tahap preview (memperbaiki teks, opsi, kunci jawaban, atau rubrik).
 
-GET /api/quizzes/{id}/submissions/me | Auth (Siswa/Ortu) | Hasil final setelah published_result.
+DELETE /api/quizzes/{id}/questions/{question_id} | Auth (Guru) | Hapus butir soal yang tidak sesuai pada tahap preview.
+
+PATCH /api/quizzes/{id} | Auth (Guru) | Konfirmasi & publikasikan kuis (`published`), perbarui due_date/max_attempts, atau rilis hasil akhir (`published_result`).
+
+POST /api/quizzes/{id}/submissions | Auth (Siswa) | Pengerjaan kuis siswa. Ditolak 422 jika lewat due_date atau melebihi max_attempts. Response 202 Accepted -> trigger `GradeQuizSubmissionJob` (asinkron: PG otomatis + Esai dievaluasi AI).
+
+GET /api/quizzes/{id}/submissions | Auth (Guru) | Review seluruh submission siswa pada kuis terkait.
+
+PATCH /api/quiz-submissions/{id} | Auth (Guru) | Override skor (`ai_score`) dan umpan balik (`ai_feedback`) dengan audit trail (`is_overridden`, `overridden_by`, `overridden_at`).
+
+GET /api/quizzes/{id}/submissions/me | Auth (Siswa/Ortu) | Menampilkan hasil perolehan nilai dan umpan balik final setelah status kuis `published_result`.
 
 # 10. Acceptance Criteria (Rubrik Penilaian UKK)
 
@@ -412,5 +480,5 @@ GET /api/quizzes/{id}/submissions/me | Auth (Siswa/Ortu) | Hasil final setelah p
 | Multirole Guru | Satu akun Guru dapat memegang lebih dari satu teacher_assignment sekaligus. |
 | Sinkronisasi Izin | Izin tidak_masuk Approved terisi otomatis pada rentang tanggalnya; izin keluar_sekolah tidak mengubah status hadir. |
 | Presensi Exception-Based | Siswa yang tidak disebut guru pada payload otomatis tercatat Hadir. |
-| Kuis AI Asinkron | Proses AI tidak memblokir response HTTP; batas percobaan & deadline ditegakkan. |
+| Kuis Berbantuan AI Asinkron | Mendukung 3 metode pembuatan soal (Prompt AI dengan validasi konfigurasi ketat, Ekstraksi Dokumen PDF/TXT, dan Manual); wajib melalui tahap preview & konfirmasi; penilaian asinkron PG otomatis + Esai AI (`ag/gemini-3.8-flash`); batas percobaan & deadline ditegakkan. |
 | Kenaikan Kelas & Kelulusan | Promosi kelas & hard delete akun lulusan berjalan sesuai aturan retensi 14 hari. |
