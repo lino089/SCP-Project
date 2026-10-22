@@ -2,20 +2,17 @@
 
 use App\Http\Controllers\API\AcademicSettingController;
 use App\Http\Controllers\API\AttendanceController;
-use App\Http\Controllers\API\AttendanceWarningController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\LeaveRequestController;
+use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\QuizController;
-use App\Http\Controllers\API\ReportController;
 use App\Http\Controllers\API\RoomController;
 use App\Http\Controllers\API\ScheduleController;
 use App\Http\Controllers\API\ScheduleImportController;
 use App\Http\Controllers\API\SchoolClassController;
 use App\Http\Controllers\API\StudentController;
-use App\Http\Controllers\API\StudentPermisionController;
 use App\Http\Controllers\API\SubjectController;
-use App\Http\Controllers\API\SubstituteAssignmentController;
 use App\Http\Controllers\API\TeacherController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,10 +27,18 @@ Route::get('/ping', function () {
 });
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/auth/google', [AuthController::class, 'loginWithGoogle']);
 
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // 9.1 Verifikasi Kontak Mandiri & Profil (PRD 5.2 & 9.1)
+    Route::post('/me/email', [ProfileController::class, 'requestEmailOtp']);
+    Route::post('/me/email/verify', [ProfileController::class, 'verifyEmailOtp']);
+    Route::post('/me/phone', [ProfileController::class, 'requestPhoneOtp']);
+    Route::post('/me/phone/verify', [ProfileController::class, 'verifyPhoneOtp']);
+    Route::post('/me/google-link', [ProfileController::class, 'linkGoogle']);
 
     // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3 & 9.6)
     Route::get('/classes', [SchoolClassController::class, 'index']);
@@ -55,13 +60,6 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
-        Route::get('/waka-only', function () {
-            return response()->json([
-                'success' => true,
-                'message' => 'Selamat datang waka kurikulum'
-            ]);
-        });
-
         // 9.2 Setting Akademik & Riwayat
         Route::get('/academic-settings', [AcademicSettingController::class, 'index']);
         Route::patch('/academic-settings', [AcademicSettingController::class, 'updateCycle']);
@@ -107,13 +105,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::patch('/schedule-imports/{id}/rows/{row_id}', [ScheduleImportController::class, 'resolveRow']);
         Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);
         Route::delete('/schedule-imports/{id}', [ScheduleImportController::class, 'destroy']);
-
-        Route::get('/reports/journals', [ReportController::class, 'teachingJournals']);
     });
 
     // 2. Waka Kurikulum & Guru (Shared Read/Verification & Journals: PRD 9.7)
     Route::middleware('role:vice_principal,teacher')->group(function () {
-        Route::get('/attendance-warnings', [AttendanceWarningController::class, 'index']);
         Route::get('/journals', [JournalController::class, 'index']);
         Route::get('/journals/{id}', [JournalController::class, 'show']);
         Route::post('/journals', [JournalController::class, 'store']);
@@ -122,12 +117,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // 3. Khusus Guru (termasuk Kesiswaan & Wali Kelas)
     Route::middleware('role:teacher')->group(function () {
-        Route::match(['put', 'post'], '/journals/{id}', [JournalController::class, 'update']);
-        Route::post('/journals/{id}/attendance', [AttendanceController::class, 'store']);
-        Route::post('/journals/{id}/complete', [JournalController::class, 'complete']);
-
-        Route::post('/permissions/{id}/status', [StudentPermisionController::class, 'updateStatus']);
-        Route::post('/substitute', [SubstituteAssignmentController::class, 'store']);
+        Route::put('/journals/{id}', [JournalController::class, 'update']);
 
         // 9.8 Sistem Kuis Berbantuan AI (Guru)
         Route::post('/quizzes', [QuizController::class, 'store']);
@@ -141,17 +131,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/quizzes/{id}/questions/{question_id}', [QuizController::class, 'destroyQuestion']);
         Route::get('/quizzes/{id}/submissions', [QuizController::class, 'submissions']);
         Route::patch('/quiz-submissions/{id}', [QuizController::class, 'overrideSubmission']);
-
-        Route::post('/journals/{id}/quiz/generate', [QuizController::class, 'generate']);
     });
 
     // 4. Siswa & Orang Tua
     Route::middleware('role:student,parent')->group(function () {
         Route::post('/leave-requests', [LeaveRequestController::class, 'store']);
         Route::delete('/leave-requests/{id}', [LeaveRequestController::class, 'destroy']);
-
-        Route::post('/permissions', [StudentPermisionController::class, 'store']);
-        Route::get('/students/{id}/attendance/summary', [StudentController::class, 'attendanceSummary']);
 
         // 9.8 Pengerjaan & Hasil Kuis
         Route::post('/quizzes/{id}/submissions', [QuizController::class, 'submit']);

@@ -1161,7 +1161,7 @@ Tujuan fase ini adalah mengembangkan modul Kuis Berbantuan AI yang berjalan seca
   1. `previewQuestions($id)`: Menampilkan seluruh soal draft beserta opsi, kunci jawaban, dan penanda `needs_review`.
   2. `storeQuestion($id, Request $request)`: Validasi pembuatan manual (`question_text`, `question_type: multiple_choice/essay`, `options`, `correct_answer`).
   3. `updateQuestion($id, $question_id, Request $request)`: Mengupdate butir soal hasil AI atau manual sebelum dipublikasikan.
-  4. `destroyQuestion($id, $question_id)`: Menghapus butir soal yang tidak diinginkan.
+  4. `destroyQuestion($id, $question_id)`: Menghapus butir soalf yang tidak diinginkan.
   5. `publish($id)`: Memastikan kuis memiliki minimal 1 butir soal, lalu mengubah status kuis dari `draft_review` menjadi `published`.
 - **Command:**
   - `php artisan test --filter=QuizPreviewAndManualTest`

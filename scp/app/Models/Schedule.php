@@ -57,9 +57,4 @@ class Schedule extends Model
     {
         return $this->hasMany(Journal::class, 'schedule_id');
     }
-
-    public function substituteAssignments(): HasMany
-    {
-        return $this->hasMany(SubstituteAssignment::class, 'schedule_id');
-    }
 }

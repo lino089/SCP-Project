@@ -408,13 +408,4 @@ class JournalController extends Controller
             ],
         ], 200);
     }
-
-    /**
-     * Alias legacy untuk kompatibilitas endpoint lama.
-     * POST /api/journals/{id}/complete
-     */
-    public function complete(Request $request, $id): JsonResponse
-    {
-        return $this->update($request, $id);
-    }
 }

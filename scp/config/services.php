@@ -43,4 +43,15 @@ return [
         'verify_ssl' => env('AI_VERIFY_SSL', false),
     ],
 
+    'fonnte' => [
+        'token' => env('FONNTE_TOKEN'),
+        'base_url' => env('FONNTE_BASE_URL', 'https://api.fonnte.com'),
+        'driver' => env('WHATSAPP_DRIVER', 'fonnte'),
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+    ],
+
 ];

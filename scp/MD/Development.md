@@ -4776,3 +4776,544 @@ $submission->update([
   }
   ```
 
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 7 (Profil, Verifikasi Kontak Mandiri & Scheduled Background Jobs)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 7 (Profil, Verifikasi Kontak Mandiri & Scheduled Background Jobs)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4 Bagian 5.2, 5.13, 8, 9.1, 10) & `MD/MASTER_IMPROVEMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-22  
+**Status Fase:** Selesai (100% Lolos Pengujian — 173 Tests Passed, 747 Assertions)
+
+---
+
+## 52. Ringkasan Perubahan & Tujuan Fase 7
+
+Fase 7 mengimplementasikan fungsionalitas pengelolaan profil dan penautan kontak mandiri (*self-service contact linking*) serta automasi pekerjaan latar belakang terjadwal (*scheduled background jobs*):
+
+1. **Self-Service Contact Linking & Verification (`/api/me/*`)**:
+   - Akun awal yang di-generate sistem (auto-provisioning) hanya memiliki NIS/NIP dan password acak sementara (`must_change_password: true`). Pengguna kini dapat menautkan kontak mereka secara mandiri.
+   - **Verifikasi Email**: Permintaan kode OTP 6 digit dikirim via SMTP Gmail (`POST /api/me/email`), diverifikasi via `POST /api/me/email/verify`, mengaktifkan `email_verified_at`.
+   - **Verifikasi WhatsApp**: Permintaan kode OTP 6 digit dikirim ke nomor WhatsApp via Fonnte Gateway (`POST /api/me/phone`), diverifikasi via `POST /api/me/phone/verify`, menyimpan `phone_number` terstandarisasi (`628...`).
+   - **Penautan Akun Google**: Pengguna mengirimkan Google `id_token` (`POST /api/me/google-link`). Sistem memverifikasi token ke Google TokenInfo API, memvalidasi `aud` terhadap `GOOGLE_CLIENT_ID`, menyimpan `google_id`, dan otomatis mengisi `email` serta `email_verified_at` jika sebelumnya kosong (PRD 5.2).
+   - **Google 1-Click Login (SSO)**: Pengguna yang telah menautkan Google dapat masuk langsung dari halaman login via `POST /api/auth/google` menggunakan `id_token` dan menerima Sanctum Bearer token.
+
+2. **Scheduled Background Jobs**:
+   - **Retensi Akun Siswa Lulus 14 Hari (`scp:prune-graduated-students`)**: Menghapus permanen (*forceDelete*) akun siswa dan seluruh data terkait (presensi, perizinan, submission kuis, data peringatan, serta akun orang tua yang terikat) tepat setelah 14 hari sejak `graduation_date` dalam satu transaksi atomik.
+   - **Pembersihan OTP Kedaluwarsa (`scp:prune-expired-otps`)**: Menghapus secara berkala baris kode OTP yang telah melewati `expires_at`.
+   - **Registrasi Jadwal Cron**: Kedua command didaftarkan di `routes/console.php` untuk dieksekusi harian pada pukul 02:00 WIB dan 03:00 WIB.
+
+---
+
+## 53. Daftar File yang Dibuat atau Diubah (Fase 7)
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `database/migrations/2026_10_20_000003_create_otp_codes_table.php` | Dibuat | Migration tabel `otp_codes` untuk menampung kode OTP email dan nomor HP. |
+| 2 | `app/Models/OtpCode.php` | Dibuat | Model Eloquent representasi `otp_codes`, relasi ke `User`, dan helper `isExpired()`. |
+| 3 | `app/Models/User.php` | Diubah | Menambahkan `email_verified_at` ke `#[Fillable]` dan relasi `otpCodes()`. |
+| 4 | `app/Services/WhatsAppService.php` | Dibuat | Service pengiriman WhatsApp via Fonnte REST API dengan dukungan normalisasi nomor (`628...`) dan dual-driver (`fonnte` vs `log`). |
+| 5 | `app/Mail/VerifyEmailOtpMail.php` | Dibuat | Mailable class untuk pengiriman kode verifikasi email OTP 6 digit. |
+| 6 | `resources/views/emails/verify-otp.blade.php` | Dibuat | Template email HTML profesional dan responsif untuk kode verifikasi SCP. |
+| 7 | `app/Http/Controllers/API/ProfileController.php` | Dibuat | Controller penanganan alur verifikasi email, nomor WhatsApp, dan Google ID linking. |
+| 8 | `app/Http/Controllers/API/AuthController.php` | Diubah | Menambahkan method `loginWithGoogle` untuk Single Sign-On (SSO) 1-click login. |
+| 9 | `app/Console/Commands/PruneGraduatedStudents.php` | Dibuat | Artisan Command pembersihan permanen data lulusan setelah 14 hari via DB transaction. |
+| 10 | `app/Console/Commands/PruneExpiredOtps.php` | Dibuat | Artisan Command pembersihan baris kode OTP yang telah kedaluwarsa. |
+| 11 | `routes/console.php` | Diubah | Mendaftarkan jadwal harian untuk `scp:prune-graduated-students` dan `scp:prune-expired-otps`. |
+| 12 | `routes/api.php` | Diubah | Mendaftarkan endpoint `/api/me/email`, `/api/me/phone`, `/api/me/google-link`, dan `/api/auth/google`. |
+| 13 | `config/services.php` | Diubah | Mendaftarkan konfigurasi `fonnte` dan `google`. |
+| 14 | `phpunit.xml` | Diubah | Menambahkan env testing `WHATSAPP_DRIVER=log`, dummy `FONNTE_TOKEN`, dan `GOOGLE_CLIENT_ID`. |
+| 15 | `.env.example` | Diubah | Menambahkan variabel contoh `WHATSAPP_DRIVER`, `FONNTE_TOKEN`, `GOOGLE_CLIENT_ID`, dan `GOOGLE_CLIENT_SECRET`. |
+| 16 | `tests/Feature/ProfileContactTest.php` | Dibuat | Test suite pengujian 14 skenario endpoint profil kontak dan autentikasi Google. |
+| 17 | `tests/Feature/ScheduledJobTest.php` | Dibuat | Test suite pengujian 3 skenario scheduled artisan command pembersihan data. |
+
+---
+
+## 54. Penjelasan Detail Implementasi Fitur Fase 7
+
+### 54.1 Skema Tabel dan Model `otp_codes`
+Tabel `otp_codes` dirancang dengan integritas relasional tinggi:
+- `user_id`: foreign key ke `users.id` dengan onDelete cascade.
+- `target`: menyimpan alamat email atau nomor telepon tujuan saat kode dibuat. Kolom ini menjadi kunci proteksi tampering agar kode tidak dapat digunakan untuk memverifikasi kontak lain.
+- `code`: string 6 digit numerik yang di-generate via `random_int(100000, 999999)`.
+- `purpose`: ENUM (`email`, `phone`).
+- `expires_at`: batas waktu aktif kode (10 menit sejak diterbitkan).
+- Indeks gabungan `['user_id', 'purpose']`, `['target', 'purpose']`, dan indeks tunggal `expires_at` untuk mempercepat query verifikasi dan pruning.
+
+### 54.2 Service Layer WhatsApp Gateway (`WhatsAppService`)
+- Normalisasi nomor telepon: Mengubah berbagai format masukan pengguna (`0812...`, `+62812...`, `812...`) menjadi format standar seragam `628...` sebelum dikirimkan dan disimpan ke database.
+- Arsitektur Dual-Driver:
+  - Driver `fonnte`: Memanggil HTTP POST ke `https://api.fonnte.com/send` dengan header `Authorization` token Fonnte dan payload `target`, `message`, `countryCode: 62`.
+  - Driver `log`: Mencatat payload pesan ke file log Laravel tanpa memicu panggilan jaringan HTTP eksternal, digunakan secara otomatis pada automated testing untuk mencegah konsumsi kuota pesan.
+
+### 54.3 Verifikasi Email via SMTP Gmail
+- Template email Blade responsif menampilkan header resmi SCP SMKN 1 Bantul, ucapan salam nama pengguna, box kode verifikasi 6 digit dengan typography monospace tebal, instruksi keamanan 10 menit, dan footer hak cipta.
+- Pengiriman email dibungkus dalam exception handling try-catch untuk menghasilkan respon error yang aman dan informatif jika SMTP server mengalami kendala konektivitas.
+
+### 54.4 Integrasi Google OAuth (ID Linking & SSO Login)
+- Method statis `ProfileController::verifyGoogleIdToken(string $idToken)` memanggil endpoint Google `https://oauth2.googleapis.com/tokeninfo`.
+- Sistem memvalidasi bahwa klaim `aud` sama persis dengan `GOOGLE_CLIENT_ID` aplikasi sekolah, serta mengekstrak `sub` (Google User ID) dan `email`.
+- Sesuai PRD Bagian 5.2: Saat pengguna menautkan Google, jika kolom `users.email` masih bernilai `NULL`, sistem secara otomatis mengisi `email` dengan email Google tersebut dan menetapkan `email_verified_at = now()`.
+- Endpoint `POST /api/auth/google` memungkinkan pengguna melakukan 1-click SSO login dengan mengirimkan `id_token` dan `device_name`, yang langsung mengembalikan Sanctum Bearer token jika akun Google telah terhubung.
+
+### 54.5 Scheduled Jobs Retensi 14 Hari & Pembersihan OTP
+- **Command `scp:prune-graduated-students`**:
+  - Menghitung cutoff date: `now()->subDays(14)->toDateString()`.
+  - Mengambil seluruh user `role = 'student'` yang memiliki `graduation_date <= cutoff`.
+  - Menjalankan transaksi database atomik:
+    1. Menghapus quiz submissions milik siswa terkait.
+    2. Menghapus data attendances siswa terkait.
+    3. Menghapus data leave requests (baik sebagai siswa maupun pemohon).
+    4. Menghapus data izin legacy (`student_permisions`) jika ada.
+    5. Menghapus seluruh OTP siswa.
+    6. Menghapus permanen (*forceDelete*) akun orang tua yang terikat (`linked_student_id`).
+    7. Menghapus permanen (*forceDelete*) akun siswa tersebut.
+- **Command `scp:prune-expired-otps`**:
+  - Menghapus rekaman `otp_codes` dengan kondisi `expires_at < now()`.
+- **Penjadwalan di `routes/console.php`**:
+  - `scp:prune-graduated-students` dijadwalkan harian pukul 02:00 WIB.
+  - `scp:prune-expired-otps` dijadwalkan harian pukul 03:00 WIB.
+
+---
+
+## 55. Aspek Keamanan, Validasi & Penanganan Error (Fase 7)
+
+1. **Perlindungan Kredensial Sensitif**:
+   - Seluruh rahasia (SMTP App Password, Token Fonnte, Google Client Secret) disimpan secara ketat di `.env` lokal dan tidak pernah di-commit ke repositori Git.
+2. **Anti-Tampering OTP**:
+   - Verifikasi kode OTP wajib menyertakan target kontak (email/nomor HP) yang sama persis dengan saat kode diminta. Upaya memverifikasi kode dengan kontak yang berbeda akan langsung ditolak (422).
+3. **Pencegahan Spam & Rate Limiting (Cooldown)**:
+   - Diberlakukan cooldown 1 menit per user untuk setiap permintaan OTP baru. Permintaan ulang sebelum 60 detik langsung ditolak dengan HTTP 429 Too Many Requests.
+4. **Pencegahan Akun Duplikat**:
+   - Sistem memvalidasi keunikan email, nomor HP, dan Google ID terhadap pengguna lain sebelum proses penyimpanan dieksekusi.
+5. **Integritas Transaksi Hard Delete**:
+   - Pembersihan akun siswa lulus 14 hari dibungkus penuh dalam transaksi database (`DB::transaction`) guna mencegah kondisi data terputus (*partial delete / orphan records*).
+
+---
+
+## 56. Hasil Pengujian & Verifikasi (Fase 7)
+
+Pengujian otomatis dijalankan menggunakan PHPUnit / Pest pada lingkungan SQLite in-memory:
+
+### 56.1 Ringkasan Eksekusi Test Suite
+- **Command:** `php artisan test`
+- **Total Test Cases:** **173 passed** (0 failed, 0 errors)
+- **Total Assertions:** **747 assertions**
+- **Durasi Eksekusi:** ~27 detik
+- **Status Regresi:** **Zero Regression** (seluruh modul Fase 0 s.d. Fase 6 tetap hijau 100%).
+
+### 56.2 Rincian Test Baru Fase 7
+1. **`tests/Feature/ProfileContactTest.php` (14 Tests, 52 Assertions)**:
+   - `test_unauthenticated_user_cannot_access_profile_contact_endpoints` (Passed)
+   - `test_user_can_request_email_otp_and_receives_mail` (Passed)
+   - `test_request_email_otp_enforces_cooldown_rate_limit` (Passed)
+   - `test_request_email_otp_rejects_duplicate_email` (Passed)
+   - `test_user_can_verify_email_otp_successfully` (Passed)
+   - `test_verify_email_otp_rejects_wrong_or_expired_code` (Passed)
+   - `test_user_can_request_phone_otp_via_whatsapp` (Passed)
+   - `test_request_phone_otp_enforces_validation_and_cooldown` (Passed)
+   - `test_user_can_verify_phone_otp_successfully` (Passed)
+   - `test_user_can_link_google_account_and_autofill_email` (Passed)
+   - `test_link_google_rejects_duplicate_google_id` (Passed)
+   - `test_link_google_rejects_invalid_token_or_audience_mismatch` (Passed)
+   - `test_user_can_login_with_google_sso` (Passed)
+   - `test_login_with_google_fails_if_account_not_linked` (Passed)
+2. **`tests/Feature/ScheduledJobTest.php` (3 Tests, 17 Assertions)**:
+   - `test_prune_graduated_students_hard_deletes_students_and_relations_after_14_days` (Passed)
+   - `test_prune_graduated_students_does_not_delete_recent_graduates_or_active_students` (Passed)
+   - `test_prune_expired_otps_deletes_only_expired_codes` (Passed)
+
+---
+
+## 57. Panduan Pengujian Endpoint melalui Postman (Fase 7)
+
+Berikut adalah panduan lengkap pengujian HTTP endpoint Fase 7 melalui Postman:
+
+### 57.1 Pengujian 1: Request OTP Email (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/me/email`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_user}}`
+- **Body (JSON):**
+  ```json
+  {
+    "email": "siswa.test@example.com"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Kode verifikasi berhasil dikirim ke email Anda.",
+    "data": {
+      "target": "siswa.test@example.com",
+      "expires_in_minutes": 10
+    }
+  }
+  ```
+
+---
+
+### 57.2 Pengujian 2: Verifikasi OTP Email (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/me/email/verify`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_user}}`
+- **Body (JSON):**
+  ```json
+  {
+    "email": "siswa.test@example.com",
+    "code": "123456"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Email berhasil diverifikasi dan ditautkan ke akun Anda.",
+    "data": {
+      "user": {
+        "id": 1,
+        "email": "siswa.test@example.com",
+        "email_verified_at": "2026-10-22T10:15:00.000000Z"
+      }
+    }
+  }
+  ```
+
+---
+
+### 57.3 Pengujian 3: Request OTP WhatsApp (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/me/phone`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_user}}`
+- **Body (JSON):**
+  ```json
+  {
+    "phone_number": "081234567890"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Kode verifikasi berhasil dikirim ke nomor WhatsApp Anda.",
+    "data": {
+      "target": "6281234567890",
+      "expires_in_minutes": 10
+    }
+  }
+  ```
+
+---
+
+### 57.4 Pengujian 4: Verifikasi OTP WhatsApp (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/me/phone/verify`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_user}}`
+- **Body (JSON):**
+  ```json
+  {
+    "phone_number": "081234567890",
+    "code": "654321"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Nomor WhatsApp berhasil diverifikasi dan ditautkan ke akun Anda.",
+    "data": {
+      "user": {
+        "id": 1,
+        "phone_number": "6281234567890"
+      }
+    }
+  }
+  ```
+
+---
+
+### 57.5 Pengujian 5: Penautan Akun Google (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/me/google-link`
+- **Headers:**
+  - `Accept: application/json`
+  - `Authorization: Bearer {{token_user}}`
+- **Body (JSON):**
+  ```json
+  {
+    "id_token": "{{google_id_token}}"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Akun Google berhasil ditautkan ke profil Anda.",
+    "data": {
+      "user": {
+        "id": 1,
+        "google_id": "108392817263548192039",
+        "email": "user@gmail.com",
+        "email_verified_at": "2026-10-22T10:15:00.000000Z"
+      }
+    }
+  }
+  ```
+
+---
+
+### 57.6 Pengujian 6: Login Single Sign-On (SSO) Google (`POST`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/auth/google`
+- **Headers:**
+  - `Accept: application/json`
+- **Body (JSON):**
+  ```json
+  {
+    "id_token": "{{google_id_token}}",
+    "device_name": "Postman Web Client"
+  }
+  ```
+- **Expected Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Berhasil Login dengan Google",
+    "data": {
+      "token": "1|sanctum_plain_text_token_string",
+      "expires_at": "2026-11-21T10:15:00.000000Z",
+      "must_change_password": false,
+      "user": {
+        "id": 1,
+        "name": "Siswa Test",
+        "google_id": "108392817263548192039"
+      }
+    }
+  }
+  ```
+
+---
+
+### 57.7 Pengujian 7: Eksekusi Artisan Command Retensi Siswa Lulus (CLI)
+- **Perintah:**
+  ```bash
+  php artisan scp:prune-graduated-students
+  ```
+- **Output:**
+  ```text
+  Pembersihan retensi 14 hari selesai: 1 siswa dan 1 orang tua dihapus permanen.
+  ```
+
+---
+
+### 57.8 Pengujian 8: Eksekusi Artisan Command Pembersihan OTP Kedaluwarsa (CLI)
+- **Perintah:**
+  ```bash
+  php artisan scp:prune-expired-otps
+  ```
+- **Output:**
+  ```text
+  Berhasil membersihkan 3 kode OTP kedaluwarsa.
+  ```
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 8 (Pembersihan Route & Dead Code: R-01 s.d. R-15)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 8 (Pembersihan Route & Dead Code: R-01 s.d. R-15)  
+**Acuan Spesifikasi:** `MD/PRD.md` (v4.4 Bagian 9), `MD/IMPROVEMENT_PLAN.md` (Bagian 4) & `MD/MASTER_IMPROVEMENT_PLAN.md` (Fase 8)  
+**Waktu Eksekusi:** 2026-10-22  
+**Status Fase:** Selesai (100% Lolos Pengujian — 176 Tests Passed, 766 Assertions, Zero Regression)
+
+---
+
+## 58. Ringkasan Perubahan & Tujuan Fase 8
+
+Fase 8 berfokus pada eliminasi utang teknis (*technical debt*), kode mati (*dead code*), rute eksperimental/percobaan, serta controller dan model legacy yang sudah tidak relevan dengan 66 endpoint resmi pada PRD v4.4:
+
+1. **Pembersihan Rute API (`routes/api.php`)**:
+   - Menghapus rute eksperimental middleware `GET /api/waka-only` (R-02).
+   - Menghapus rute usang presensi terpisah `POST /api/journals/{id}/attendance` (R-04) dan `POST /api/journals/{id}/complete` (R-05) karena seluruh presensi exception-based diselesaikan secara atomik melalui `PUT /api/journals/{id}`.
+   - Menghapus rute perizinan legacy `POST /api/permissions` dan `POST /api/permissions/{id}/status` (R-06) yang telah digantikan secara resmi oleh `POST /api/leave-requests` dan `PATCH /api/leave-requests/{id}`.
+   - Menghapus rute usang `GET /api/attendance-warnings` (R-07) yang telah digantikan oleh alert keterlambatan jurnal `GET /api/schedules?status=missing_journal`.
+   - Menghapus rute pembuatan kuis usang via jurnal `POST /api/journals/{id}/quiz/generate` (R-08) dan job pendukungnya `GenerateQuizJob.php`.
+   - Menghapus rute penugasan guru pengganti usang `POST /api/substitute` (R-10) yang telah digantikan oleh hak eksklusif penugasan struktural Kesiswaan (`substitute_teacher_id` pada `POST/PUT /api/journals`).
+   - Menghapus rute rekap usang `GET /api/reports/journals` dan `GET /api/students/{id}/attendance/summary` (R-11) yang telah digantikan secara modular oleh `GET /api/journals` dan `GET /api/attendances`.
+   - Mempertahankan `GET /api/ping` (R-03) sebagai endpoint health-check server publik ringan.
+
+2. **Pembersihan Berkas Controller, Job & Model Legacy**:
+   - Menghapus 4 controller legacy: `AttendanceWarningController.php`, `ReportController.php`, `StudentPermisionController.php`, dan `SubstituteAssignmentController.php`.
+   - Menghapus job legacy: `GenerateQuizJob.php`.
+   - Menghapus 3 model legacy: `SubstituteAssignment.php`, `QuizSubmision.php` (typo lama), dan `StudentPermision.php`.
+   - Menghapus method legacy pada controller aktif: `AttendanceController::store`, `JournalController::complete`, `QuizController::generate`, dan `StudentController::attendanceSummary`.
+   - Menghapus relasi usang `substituteAssignments(): HasMany` pada `Schedule.php` dan `permissions(): HasMany` pada `User.php`.
+
+3. **Migrasi Database Drop Tabel Legacy**:
+   - Membuat dan mengeksekusi migration `2026_10_22_000004_drop_substitute_assignments_table.php` untuk mendrop tabel `substitute_assignments`.
+
+4. **Penyusunan Test Suite Route Hygiene**:
+   - Membuat `tests/Feature/RouteHygieneTest.php` untuk memvalidasi bahwa seluruh endpoint legacy yang telah dihapus mengembalikan status **HTTP 404 Not Found**, dan endpoint resmi PRD tetap berfungsi normal.
+
+---
+
+## 59. Inventarisasi Pembersihan Item R-01 s.d. R-15
+
+| Kode Item | Deskripsi / Route Awal | Status Penyelesaian | Implementasi Solusi di Fase 8 |
+|:---:|---|:---:|---|
+| **R-01** | `GET /api/user` redundan dengan `GET /api/me` | Selesai | Sudah dibersihkan pada Fase 0; hanya `GET /api/me` yang dipertahankan. |
+| **R-02** | `GET /api/waka-only` (rute percobaan role middleware) | Selesai | Rute dihapus dari `routes/api.php`; pengujian role diverifikasi via unit test. |
+| **R-03** | `GET /api/ping` (health check) | Selesai | Dipertahankan sebagai unauthenticated public health-check probe. |
+| **R-04** | `POST /api/journals/{id}/attendance` (presensi terpisah) | Selesai | Rute dihapus dari `routes/api.php` dan method `store` dihapus dari `AttendanceController`. |
+| **R-05** | `POST /api/journals/{id}/complete` (jurnal terpisah) | Selesai | Rute dihapus dari `routes/api.php` dan method alias `complete` dihapus dari `JournalController`. |
+| **R-06** | `POST /api/permissions` & `/status` (izin legacy) | Selesai | Rute dihapus, berkas `StudentPermisionController.php` & model `StudentPermision.php` dihapus. |
+| **R-07** | `GET /api/attendance-warnings` (peringatan KBM lama) | Selesai | Rute dihapus, berkas `AttendanceWarningController.php` dihapus; digantikan query alert `GET /api/schedules?status=missing_journal`. |
+| **R-08** | `POST /api/journals/{id}/quiz/generate` (kuis jurnal lama) | Selesai | Rute dihapus, method `generate` di `QuizController` dihapus, berkas `GenerateQuizJob.php` dihapus. |
+| **R-09** | `PATCH /api/quizzes/{id}/publish` | Selesai | Dipertahankan berdampingan dengan `PATCH /api/quizzes/{id}` untuk konsistensi client web & mobile. |
+| **R-10** | `POST /api/substitute` (penggantian guru lama) | Selesai | Rute dihapus, controller `SubstituteAssignmentController.php` dihapus, model `SubstituteAssignment.php` dihapus, tabel `substitute_assignments` didrop via migration. |
+| **R-11** | `GET /reports/journals` & `GET /students/{id}/attendance/summary` | Selesai | Rute dihapus, berkas `ReportController.php` dihapus, method `attendanceSummary` di `StudentController` dihapus. |
+| **R-12** | Redundan `User::where()->firstOrFail()` setelah `Auth::attempt()` | Selesai | Sudah diselesaikan pada Fase 0; AuthController memakai validasi kredensial langsung dan token Sanctum. |
+| **R-13** | Input `'source'` pada `POST /schedules` | Selesai | Sudah diselesaikan pada Fase 2; ScheduleController otomatis menetapkan `'source' => 'manual'`. |
+| **R-14** | Blok manual `Validator::make()` + `if ($fails)` | Selesai | Sudah dibersihkan; seluruh controller resmi telah menggunakan `$request->validate()` standar. |
+| **R-15** | Duplikasi logika bentrok jadwal | Selesai | Sudah dipusatkan di `app/Services/ScheduleConflictService.php` sejak Fase 2. |
+
+---
+
+## 60. Daftar File yang Dihapus, Diubah, atau Dibuat (Fase 8)
+
+### A. Berkas yang Dihapus (Eliminasi Dead Code)
+| No | File Path | Alasan Penghapusan |
+|---|---|---|
+| 1 | `app/Http/Controllers/API/AttendanceWarningController.php` | Controller usang; fiturnya digantikan `GET /api/schedules?status=missing_journal`. |
+| 2 | `app/Http/Controllers/API/ReportController.php` | Controller usang; fiturnya digantikan `GET /api/journals` berfilter. |
+| 3 | `app/Http/Controllers/API/StudentPermisionController.php` | Controller usang; fiturnya digantikan `LeaveRequestController.php`. |
+| 4 | `app/Http/Controllers/API/SubstituteAssignmentController.php` | Controller usang; penggantian guru ditangani oleh hak penugasan kesiswaan. |
+| 5 | `app/Jobs/GenerateQuizJob.php` | Queue job usang; pembuatan kuis AI kini menggunakan flow PRD 5.14. |
+| 6 | `app/Models/SubstituteAssignment.php` | Model usang; tabelnya telah didrop. |
+| 7 | `app/Models/QuizSubmision.php` | Model legacy ber-typo (satu huruf 's'); model resmi adalah `QuizSubmission.php`. |
+| 8 | `app/Models/StudentPermision.php` | Model legacy; model resmi perizinan adalah `LeaveRequest.php`. |
+
+### B. Berkas yang Dimodifikasi
+| No | File Path | Perubahan yang Dilakukan |
+|---|---|---|
+| 1 | `routes/api.php` | Membersihkan 10 rute legacy dan 4 baris import controller yang telah dihapus. |
+| 2 | `app/Http/Controllers/API/AttendanceController.php` | Menghapus method legacy `store` (POST `/api/journals/{id}/attendance`) dan unused imports. |
+| 3 | `app/Http/Controllers/API/JournalController.php` | Menghapus method alias legacy `complete` (POST `/api/journals/{id}/complete`). |
+| 4 | `app/Http/Controllers/API/QuizController.php` | Menghapus method legacy `generate` (POST `/api/journals/{id}/quiz/generate`) dan unused imports. |
+| 5 | `app/Http/Controllers/API/StudentController.php` | Menghapus method legacy `attendanceSummary` (GET `/api/students/{id}/attendance/summary`). |
+| 6 | `app/Models/Schedule.php` | Menghapus relasi `substituteAssignments(): HasMany`. |
+| 7 | `app/Models/User.php` | Menghapus relasi `permissions(): HasMany`. |
+| 8 | `app/Console/Commands/PruneGraduatedStudents.php` | Mengganti query model `StudentPermision` dengan pengecekan aman `Schema::hasTable`. |
+
+### C. Berkas Baru yang Dibuat
+| No | File Path | Fungsi & Tanggung Jawab |
+|---|---|---|
+| 1 | `database/migrations/2026_10_22_000004_drop_substitute_assignments_table.php` | Migration resmi untuk mendrop tabel `substitute_assignments`. |
+| 2 | `tests/Feature/RouteHygieneTest.php` | Test suite otomatis untuk memverifikasi endpoint legacy mengembalikan 404 dan endpoint resmi aktif. |
+
+---
+
+## 61. Penjelasan Detail Implementasi & Perbaikan Teknis
+
+1. **Konsistensi Struktur Routing `routes/api.php`**:
+   - Seluruh rute terorganisasi rapi di bawah middleware `['auth:sanctum', 'throttle:api']` dengan pembagian hak akses role yang tegas:
+     - Rute Publik: `POST /api/login`, `POST /api/auth/google`, `GET /api/ping`.
+     - Rute Autentikasi Umum: `/me`, `/me/email`, `/me/phone`, `/me/google-link`, `/classes`, `/rooms`, `/subjects`, `/teachers`, `/students`, `/schedules`, `/attendances`, `/leave-requests`, `/quizzes`.
+     - Rute Khusus Waka (`role:vice_principal`): `/academic-settings`, `/cycle-history`, Master Data mutation, Schedule mutation, Schedule PDF imports.
+     - Rute Waka & Guru (`role:vice_principal,teacher`): Monitoring jurnal KBM & penandaan `teacher_absent`.
+     - Rute Khusus Guru (`role:teacher`): Penyelesaian atomik jurnal KBM (`PUT /api/journals/{id}`) dan seluruh workflow kuis AI.
+     - Rute Siswa & Orang Tua (`role:student,parent`): Pengajuan perizinan dan pengerjaan kuis.
+2. **Eliminasi Model Duplikat & Typo**:
+   - Model `QuizSubmision.php` (warisan lama dengan satu 's') dihapus sepenuhnya. Seluruh relasi dan query di codebase telah diverifikasi 100% menggunakan `QuizSubmission.php`.
+3. **Pembersihan Database Migration**:
+   - Migration `drop_substitute_assignments_table` mengeliminasi tabel yang tidak lagi direferensikan dalam rancangan sistem PRD v4.4, menjaga kebersihan skema database PostgreSQL/SQLite.
+
+---
+
+## 62. Hasil Pengujian & Verifikasi (Fase 8)
+
+Pengujian otomatis dijalankan secara menyeluruh menggunakan PHPUnit:
+
+### 62.1 Ringkasan Eksekusi Test Suite
+- **Command:** `php artisan test`
+- **Total Test Cases:** **176 passed** (0 failed, 0 errors)
+- **Total Assertions:** **766 assertions**
+- **Durasi Eksekusi:** ~37 detik
+- **Status Regresi:** **Zero Regression** (seluruh modul dari Fase 0 hingga Fase 7 tetap 100% hijau).
+
+### 62.2 Rincian Test Baru `RouteHygieneTest.php` (3 Tests, 19 Assertions)
+- `test_ping_endpoint_returns_success_health_check` (Passed — memverifikasi status 200 dan payload timestamp server).
+- `test_deleted_experimental_routes_return_404` (Passed — memverifikasi status 404 untuk `/waka-only`, `/attendance-warnings`, `/reports/journals`, `/substitute`, `/journals/1/attendance`, `/journals/1/complete`, `/permissions`, `/permissions/1/status`, `/journals/1/quiz/generate`, dan `/students/1/attendance/summary`).
+- `test_official_routes_are_active_and_accessible` (Passed — memverifikasi bahwa endpoint resmi `/api/cycle-history`, `/api/me`, `/api/schedules`, dan `/api/leave-requests` aktif merespons 200).
+
+---
+
+## 63. Panduan Pengujian Integritas Rute (Postman & CLI)
+
+### 63.1 Pemeriksaan Daftar Rute via Artisan CLI
+- **Perintah:**
+  ```bash
+  php artisan route:list --path=api
+  ```
+- **Hasil yang Diharapkan:**
+  Hanya menampilkan rute resmi PRD Bagian 9 (Master Data, Setting Akademik, Jadwal, Import PDF, Jurnal, Perizinan, Kuis AI, Profil Kontak) dan tidak ada rute legacy (`waka-only`, `substitute`, `reports/journals`, dll).
+
+---
+
+### 63.2 Pengujian Rute Terhapus via Postman (Expected 404 Not Found)
+
+#### 1. Uji Rute Eksperimental Waka (`GET /api/waka-only`)
+- **Method:** `GET`
+- **URL:** `{{base_url}}/waka-only`
+- **Headers:** `Authorization: Bearer {{token_waka}}`
+- **Expected Response (404 Not Found):**
+  ```json
+  {
+    "message": "The route api/waka-only could not be found."
+  }
+  ```
+
+#### 2. Uji Rute Presensi Lama (`POST /api/journals/1/attendance`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/journals/1/attendance`
+- **Headers:** `Authorization: Bearer {{token_guru}}`
+- **Expected Response (404 Not Found):**
+  ```json
+  {
+    "message": "The route api/journals/1/attendance could not be found."
+  }
+  ```
+
+#### 3. Uji Rute Guru Pengganti Lama (`POST /api/substitute`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/substitute`
+- **Headers:** `Authorization: Bearer {{token_guru}}`
+- **Expected Response (404 Not Found):**
+  ```json
+  {
+    "message": "The route api/substitute could not be found."
+  }
+  ```
+
+#### 4. Uji Rute Perizinan Lama (`POST /api/permissions`)
+- **Method:** `POST`
+- **URL:** `{{base_url}}/permissions`
+- **Headers:** `Authorization: Bearer {{token_siswa}}`
+- **Expected Response (404 Not Found):**
+  ```json
+  {
+    "message": "The route api/permissions could not be found."
+  }
+  ```

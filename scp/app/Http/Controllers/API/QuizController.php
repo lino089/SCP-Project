@@ -5,10 +5,8 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Jobs\ExtractQuizFromDocumentJob;
 use App\Jobs\GenerateQuizFromPromptJob;
-use App\Jobs\GenerateQuizJob;
 use App\Jobs\GradeQuizSubmissionJob;
 use App\Models\Classes;
-use App\Models\Journal;
 use App\Models\Quiz;
 use App\Models\QuizQuestion;
 use App\Models\QuizSubmission;
@@ -479,7 +477,7 @@ class QuizController extends Controller
         $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda bukan pemilik kuis ini.',
@@ -761,38 +759,5 @@ class QuizController extends Controller
                 'submissions' => $submissions,
             ],
         ], 200);
-    }
-
-    /**
-     * Endpoint legacy untuk generate kuis via jurnal (Backward Compatibility).
-     */
-    public function generate(Request $request, $journalId): JsonResponse
-    {
-        $journal = Journal::with('schedule')->findOrFail($journalId);
-        $userId = $request->user()->id;
-
-        $isTeacher = ($journal->schedule->teacher_id === $userId);
-        $isSubstitute = ($journal->substitute_teacher_id === $userId);
-
-        if (!$isTeacher && !$isSubstitute) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak.',
-            ], 403);
-        }
-
-        if (empty($journal->topic_description)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Jurnal belum memiliki materi pembahasan untuk dijadikan kuis.',
-            ], 422);
-        }
-
-        GenerateQuizJob::dispatch($journal->id);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pembuatan kuis otomatis sedang diproses di latar belakang.',
-        ], 202);
     }
 }

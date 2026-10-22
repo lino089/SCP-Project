@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('scp:prune-failed-imports')->dailyAt('01:00');
+Schedule::command('scp:prune-graduated-students')->dailyAt('02:00');
+Schedule::command('scp:prune-expired-otps')->dailyAt('03:00');

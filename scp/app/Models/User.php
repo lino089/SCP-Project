@@ -17,6 +17,7 @@ use Laravel\Sanctum\HasApiTokens;
 #[Fillable([
     'name',
     'email',
+    'email_verified_at',
     'password',
     'role',
     'nis_nip',
@@ -149,14 +150,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Relasi riwayat perizinan siswa (Legacy alias)
-     */
-    public function permissions(): HasMany
-    {
-        return $this->hasMany(StudentPermision::class, 'student_id');
-    }
-
-    /**
      * Relasi jurnal yang diampu sebagai guru pengganti
      */
     public function substituteJournals(): HasMany
@@ -170,5 +163,13 @@ class User extends Authenticatable
     public function cycleHistories(): HasMany
     {
         return $this->hasMany(CycleHistory::class, 'changed_by');
+    }
+
+    /**
+     * Relasi ke kode OTP verifikasi kontak pengguna
+     */
+    public function otpCodes(): HasMany
+    {
+        return $this->hasMany(OtpCode::class, 'user_id');
     }
 }
