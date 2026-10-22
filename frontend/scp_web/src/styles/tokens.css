@@ -1,0 +1,75 @@
+:root {
+  /* Colors - Precision Palette */
+  --color-bg: #FFFFFF;
+  --color-surface: #F9FAFB;
+  --color-surface-hover: #F3F4F6;
+  --color-border: #E5E7EB;
+  --color-border-light: #F3F4F6;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+  --color-accent: #FFDE02;
+  --color-accent-hover: #F0CF00;
+  --color-accent-text: #0F172A;
+  --color-success: #10B981;
+  --color-success-bg: #ECFDF5;
+  --color-error: #EF4444;
+  --color-error-bg: #FEF2F2;
+  --color-warning: #F59E0B;
+  --color-warning-bg: #FFFBEB;
+  --color-badge-blue-bg: #F1F5F9;
+  --color-badge-blue-text: #334155;
+  
+  /* Primary SCP Blue Palette */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  /* Typography - Plus Jakarta Sans & JetBrains Mono */
+  --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-size-h1: 26px;
+  --font-size-section: 18px;
+  --font-size-body: 13.5px;
+  --font-size-label: 12px;
+  --font-size-data: 13.5px;
+  --font-size-micro: 11px;
+  --font-weight-bold: 700;
+  --font-weight-semibold: 600;
+  --font-weight-medium: 500;
+  --font-weight-regular: 400;
+  --line-height-h1: 1.25;
+  --line-height-section: 1.35;
+  --line-height-body: 1.5;
+  
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* Border Radius - Precision 4px/6px/8px */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 4px;
+  --radius-circle: 50%;
+  
+  /* Shadows - Flat & Subtle */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-dropdown: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-none: none;
+  
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 60px;
+  --topbar-height: 56px;
+  --mobile-nav-height: 56px;
+}

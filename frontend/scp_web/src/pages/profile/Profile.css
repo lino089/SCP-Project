@@ -1,0 +1,31 @@
+.profile-container {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  font-family: var(--font-family);
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .profile-container {
+    padding: 32px 24px;
+  }
+}
+
+.profile-header {
+  margin-bottom: 24px;
+}
+
+.profile-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px 0;
+}
+
+.profile-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}

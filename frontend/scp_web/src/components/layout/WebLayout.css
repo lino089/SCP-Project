@@ -1,0 +1,53 @@
+.web-app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #FFFFFF;
+}
+
+.web-app-body {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  min-height: calc(100vh - 56px);
+  background-color: #FFFFFF;
+  position: relative;
+}
+
+/* Mobile Backdrop */
+.web-app-backdrop {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  z-index: 40;
+  cursor: pointer;
+  animation: fadeInBackdrop 0.18s ease-out;
+}
+
+@keyframes fadeInBackdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 768px) {
+  .web-app-backdrop {
+    display: none !important;
+  }
+}
+
+.web-app-main {
+  flex: 1;
+  min-width: 0;
+  background-color: #F8FAFC;
+  min-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
