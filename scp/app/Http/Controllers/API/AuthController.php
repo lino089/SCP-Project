@@ -10,23 +10,31 @@ use Illuminate\Support\Facades\Hash;
 class AuthController extends Controller
 {
     public function login(Request $request){
-        // Cek data yang harus masuk
+        // Cek data yang harus masuk (mendukung nis_nip atau username)
         $request->validate([
-            'nis_nip' => 'required|string',
+            'username' => 'required_without:nis_nip|string',
+            'nis_nip' => 'required_without:username|string',
             'password' => 'required|string',
             'device_name' => 'required|string'
         ]);
 
-        // Memvalidasi kredensial pengguna
-        $user = User::where('nis_nip', $request->nis_nip)->first();
+        $identifier = $request->input('username') ?? $request->input('nis_nip');
+
+        // Memvalidasi kredensial pengguna berdasarkan nis_nip atau email
+        $user = User::where('nis_nip', $identifier)
+            ->orWhere('email', $identifier)
+            ->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            $errorKey = $request->filled('username') && ! $request->filled('nis_nip') ? 'username' : 'nis_nip';
+            $errorMessage = $errorKey === 'username' ? 'Username atau password salah' : 'NIS/NIP atau password salah';
+
             return response()->json([
                 'success' => false,
                 'message' => 'Kredensial tidak valid',
                 'errors' => [
-                    'nis_nip' => [
-                        'NIS/NIP atau password salah'
+                    $errorKey => [
+                        $errorMessage
                     ]
                 ]
             ], 401);
