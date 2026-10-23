@@ -214,8 +214,8 @@
   color: #111827;
 }
 
-/* Responsive (<768px) Mobile Off-canvas Drawer */
-@media (max-width: 767px) {
+/* Responsive (<1024px) Mobile & Tablet Off-canvas Drawer */
+@media (max-width: 1023px) {
   .web-sidebar {
     position: fixed;
     top: 56px;

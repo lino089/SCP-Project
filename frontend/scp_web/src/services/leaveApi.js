@@ -219,7 +219,7 @@ export const leaveApi = {
   async getLeaveRequests(params = {}) {
     try {
       const res = await api.get('/leave-requests', { params });
-      return res.data;
+      return res;
     } catch {
       let filtered = [...MOCK_LEAVE_REQUESTS];
       if (params.status || params.status_approval) {
@@ -250,7 +250,7 @@ export const leaveApi = {
   async getLeaveRequestDetail(id) {
     try {
       const res = await api.get(`/leave-requests/${id}`);
-      return res.data;
+      return res;
     } catch {
       const match = MOCK_LEAVE_REQUESTS.find((r) => r.id === parseInt(id, 10)) || MOCK_LEAVE_REQUESTS[0];
       return {
@@ -269,7 +269,7 @@ export const leaveApi = {
       const res = await api.post('/leave-requests', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      return res.data;
+      return res;
     } catch (err) {
       if (err.response?.status === 422 || err.response?.status === 403) {
         throw err;
@@ -302,7 +302,7 @@ export const leaveApi = {
       const isFormData = dataOrFormData instanceof FormData;
       const headers = isFormData ? { 'Content-Type': 'multipart/form-data' } : {};
       const res = await api.patch(`/leave-requests/${id}`, dataOrFormData, { headers });
-      return res.data;
+      return res;
     } catch (err) {
       if (err.response?.status === 422 || err.response?.status === 403) {
         throw err;
@@ -321,7 +321,7 @@ export const leaveApi = {
   async deleteLeaveRequest(id) {
     try {
       const res = await api.delete(`/leave-requests/${id}`);
-      return res.data;
+      return res;
     } catch (err) {
       if (err.response?.status === 422 || err.response?.status === 403) {
         throw err;
@@ -339,7 +339,7 @@ export const leaveApi = {
   async getAttendances(params = {}) {
     try {
       const res = await api.get('/attendances', { params });
-      return res.data;
+      return res;
     } catch {
       let filtered = [...MOCK_ATTENDANCES];
       if (params.status && params.status !== 'ALL') {

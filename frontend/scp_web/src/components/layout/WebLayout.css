@@ -38,7 +38,7 @@
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .web-app-backdrop {
     display: none !important;
   }

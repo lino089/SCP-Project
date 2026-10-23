@@ -45,9 +45,8 @@ export default function PermissionVerifyPage() {
       try {
         const res = await leaveApi.getLeaveRequests({ per_page: 100 });
         if (!isMounted) return;
-        if (res.success && Array.isArray(res.data)) {
-          setPermissionList(res.data);
-        }
+        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        setPermissionList(list);
       } catch {
         // Fallback otomatis tertangani di service layer
       } finally {

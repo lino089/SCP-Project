@@ -58,9 +58,8 @@ export default function StudentPermissionPage() {
       try {
         const res = await leaveApi.getLeaveRequests({ per_page: 50 });
         if (!isMounted) return;
-        if (res.success && Array.isArray(res.data)) {
-          setLeaveRequests(res.data);
-        }
+        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        setLeaveRequests(list);
       } catch {
         // Fallback otomatis tertangani di service layer
       } finally {

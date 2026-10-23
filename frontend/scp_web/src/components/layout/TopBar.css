@@ -44,7 +44,7 @@
   color: #111827;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .web-topbar__menu-btn {
     display: inline-flex;
   }

@@ -96,6 +96,12 @@ export default function TopBar({ onToggleSidebar }) {
         <div
           className="web-topbar__brand"
           onClick={() => navigate(getHomeRoute())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              navigate(getHomeRoute());
+            }
+          }}
           role="button"
           tabIndex={0}
         >

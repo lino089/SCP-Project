@@ -19,40 +19,8 @@ import MonitoringRecapPage from '../pages/waka/MonitoringRecapPage';
 import PermissionVerifyPage from '../pages/teacher/PermissionVerifyPage';
 import StudentPermissionPage from '../pages/student/StudentPermissionPage';
 import StudentQuizPage from '../pages/student/StudentQuizPage';
+import StudentHomePage from '../pages/student/StudentHomePage';
 import ParentMonitoringPage from '../pages/parent/ParentMonitoringPage';
-import { Card, Badge, Button } from '../components/shared';
-import { Construction, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-
-/**
- * Placeholder component for feature modules scheduled for future phases (Phase 2 - Phase 7)
- */
-function ModulePlaceholder({ title, phase, description }) {
-  const navigate = useNavigate();
-
-  return (
-    <div className="p-6 md:p-10 max-w-4xl mx-auto space-y-4">
-      <Card
-        title={title}
-        headerAction={<Badge variant="default">{phase}</Badge>}
-        subtitle="School Class Progress"
-      >
-        <div className="py-10 flex flex-col items-center justify-center text-center space-y-3">
-          <div className="w-14 h-14 bg-gray-50 text-gray-700 border border-gray-200 rounded-full flex items-center justify-center">
-            <Construction size={28} />
-          </div>
-          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-          <p className="text-sm text-gray-500 max-w-md">{description}</p>
-          <div className="pt-4">
-            <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(-1)}>
-              Kembali
-            </Button>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
 
 export default function AppRouter() {
   return (
@@ -97,16 +65,7 @@ export default function AppRouter() {
 
           {/* Student Routes */}
           <Route element={<RoleRoute allowedRoles={['student']} />}>
-            <Route
-              path="/student/home"
-              element={
-                <ModulePlaceholder
-                  title="Beranda & Presensi Mandiri Siswa"
-                  phase="Fase 7"
-                  description="Presensi kehadiran kelas, riwayat absensi, dan jadwal KBM hari ini."
-                />
-              }
-            />
+            <Route path="/student/home" element={<StudentHomePage />} />
             <Route path="/student/permissions" element={<StudentPermissionPage />} />
             <Route path="/student/quiz" element={<StudentQuizPage />} />
           </Route>

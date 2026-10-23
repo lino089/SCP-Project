@@ -15,7 +15,9 @@ Dokumen ini adalah catatan resmi riwayat pengembangan (*living document*) untuk 
 | **Fase 4** | Kalender Mengajar KBM, Jurnal Harian & Presensi Siswa/Guru | **SELESAI** | 0 Error / 0 Warning (Build: 675ms) |
 | **Fase 5** | Modul Perizinan Siswa & Monitoring Kehadiran Sekolah | **SELESAI** | 0 Error / 0 Warning (Build: 723ms) |
 | **Fase 6** | Sistem Kuis Berbantuan AI & Evaluasi Submisi Otomatis | **SELESAI** | 0 Error / 0 Warning (Build: 773ms) |
-| **Fase 7** | Modul Portal Siswa & Monitoring Orang Tua | *Pending* | - |
+| **Fase 7** | Modul Portal Siswa & Monitoring Orang Tua | **SELESAI** | 0 Error / 0 Warning (Build: 1.03s) |
+| **Fase 8** | Penyempurnaan UI/UX, Aksesibilitas, & Keamanan Klien | **SELESAI** | 0 Error / 0 Warning (Build: 935ms) |
+| **Fase 9** | Pengujian Terpadu End-to-End & Kesiapan Production | *Pending* | - |
 
 ---
 
@@ -672,12 +674,89 @@ Tersedia 1 akun pengujian per peran pengguna yang telah didaftarkan pada backend
 
 ---
 
-## Rencana Tahapan Berikutnya (Fase 7)
+## Fase 7: Modul Portal Siswa & Monitoring Orang Tua
 
-**Fokus Utama Fase 7: Modul Portal Siswa & Monitoring Orang Tua**
-1. **Beranda Siswa (`StudentHomePage.jsx`):** Header identitas profil siswa, 4 kartu statistik absensi mandiri, widget jadwal KBM hari ini, serta daftar kuis aktif dengan tenggat terdekat.
-2. **Dashboard Monitoring Orang Tua Lanjutan (`ParentMonitoringPage.jsx`):** Peringatan dini kehadiran siswa (*Attendance Warnings / Alert threshold*), riwayat presensi harian per sesi kelas, dan keterbukaan hasil capaian kuis pembelajaran anak.
-3. **Penyempurnaan Integrasi Multi-Role Portal:** Memastikan seluruh alur dari presensi harian (Fase 4), perizinan siswa (Fase 5), dan kuis AI (Fase 6) teragregasi secara mulus di beranda siswa dan portal orang tua.
+### 1. Tujuan & Ruang Lingkup
+Menuntaskan seluruh antarmuka khusus peran Siswa (`student`) dan Orang Tua/Wali Murid (`parent`): portal beranda siswa dengan rekap kehadiran mandiri, jadwal harian dinamis, serta dashboard monitoring orang tua dengan rekapitulasi kehadiran anak, riwayat izin, alert peringatan presensi, dan capaian kuis resmi yang telah dirilis.
+
+### 2. Pekerjaan yang Telah Diselesaikan
+1. **Portal Beranda Mandiri Siswa (`StudentHomePage.jsx` & `StudentHome.css`):**
+   - [`src/pages/student/StudentHomePage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/student/StudentHomePage.jsx):
+     - **Header Profil Siswa:** Identitas resmi siswa (Nama, NIS, NISN, Rombel Kelas, Semester/Tahun Ajaran Aktif).
+     - **4 Kartu Metrik Kehadiran Mandiri:** Hari Masuk, Izin Sakit, Izin Keperluan, dan Alpa yang dikalkulasi secara dinamis dari catatan presensi riil.
+     - **Widget Jadwal KBM Hari Ini:** Deteksi hari otomatis, daftar mapel harian sesuai kelas siswa, slot jam KBM, guru pengajar, dan ruang kelas.
+     - **Widget Kuis Aktif Kelas:** Daftar kuis berstatus `published` dengan pengurutan tenggat terdekat dan tombol langsung menuju CBT (`/student/quiz`).
+     - **Aksi Cepat & Modal Presensi:** Tombol pintas pengajuan izin mandiri, pengerjaan kuis CBT, dan modal riwayat lengkap log presensi siswa.
+     - **Kartu Inspirasi Belajar Kejuruan:** Kotak motivasi bertema *Exness Precision Fintech*.
+2. **Penyempurnaan Dashboard Monitoring Orang Tua (`ParentMonitoringPage.jsx` & `ParentMonitoring.css`):**
+   - [`src/pages/parent/ParentMonitoringPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/parent/ParentMonitoringPage.jsx):
+     - **Banner Peringatan Kehadiran (*Attendance Alert*):** Peringatan otomatis jika anak memiliki catatan Alpa atau akumulasi izin/sakit berlebih.
+     - **Tab Nilai Kuis Riil:** Mengintegrasikan pemanggilan `quizApi.getQuizzes({ status: 'published_result' })` untuk menampilkan nilai kuis resmi yang dirilis guru.
+     - **Penanganan Akun Unlinked:** Menampilkan `parent-unlinked-box` jika akun orang tua belum terhubung ke data siswa manapun.
+3. **Penyelarasan Routing (`AppRouter.jsx`):**
+   - [`src/routes/AppRouter.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/routes/AppRouter.jsx): Menghubungkan `/student/home` ke `StudentHomePage` dan membersihkan `ModulePlaceholder`.
+
+### 3. Hasil Validasi & Kualitas
+- **ESLint:** Lulus audit kode secara sempurna (`0 errors, 0 warnings`).
+- **Production Build:** `vite build` berhasil dibangun dalam 1.03s.
+
+---
+
+## Fase 8: Penyempurnaan UI/UX, Aksesibilitas, & Keamanan Klien
+
+### 1. Tujuan & Ruang Lingkup
+Melakukan audit dan penyempurnaan menyeluruh terhadap aspek ketahanan aplikasi front-end (*robustness*), konsistensi pengalaman pengguna (*user experience*), adaptabilitas antarmuka pada berbagai ukuran perangkat (*responsive design*), kepatuhan aksesibilitas web (WCAG AA), serta penerapan mitigasi keamanan di sisi klien (*client-side security*).
+
+### 2. Pekerjaan yang Telah Diselesaikan
+1. **Global Error Boundary (`ErrorBoundary.jsx` & `ErrorBoundary.css`):**
+   - [`src/components/feedback/ErrorBoundary.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/components/feedback/ErrorBoundary.jsx):
+     - Membungkus seluruh hierarki rute aplikasi di `App.jsx` untuk menangani *unhandled JavaScript runtime errors*.
+     - Mencegah layar putih kosong (*white screen of death*).
+     - Antarmuka ramah pengguna dengan tombol *"Muat Ulang Halaman"* dan *"Kembali ke Beranda"*.
+     - Bagian diagnostik error teknis yang dapat dibuka/tutup (*collapsible technical details*) untuk kebutuhan debugging pengembang.
+2. **Penyelarasan UI States & Scrollbar Ergonomis:**
+   - [`src/components/shared/Table.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/components/shared/Table.css):
+     - Menambahkan class `.table-scroll-wrapper` dengan custom thin scrollbar (`scrollbar-width: thin`, `scrollbar-color: #cbd5e1 transparent`).
+     - Menyediakan indikator visual scroll horizontal yang halus tanpa merusak tata letak di layar tablet dan laptop kecil.
+   - [`src/components/shared/Table.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/components/shared/Table.jsx):
+     - Mendukung status `isLoading` dengan `SkeletonRow` terstruktur dan `emptyComponent` untuk menampilkan `EmptyState` berkonteks.
+3. **Penyempurnaan Responsivitas Layar Tablet (< 1024px):**
+   - Sinkronisasi breakpoint off-canvas drawer pada `TopBar.css`, `Sidebar.css`, dan `WebLayout.css` dari `767px` ke `1023px`.
+   - Mengaktifkan menu drawer off-canvas yang mulus dan backdrop overlay pada perangkat tablet (iPad Mini, iPad Air, Surface Pro) agar area konten utama tetap lega.
+4. **Audit Aksesibilitas Web (WCAG AA Compliance):**
+   - Memastikan seluruh tombol berbasis ikon (*icon-only buttons*) memiliki atribut `aria-label` yang jelas dan deskriptif:
+     - `TopBar.jsx`: `aria-label="Toggle navigasi menu"` dan keyboard navigation (`Enter` / `Space`) pada brand link.
+     - `Sidebar.jsx`: `aria-label="Tutup menu navigasi"`.
+     - `Modal.jsx`: `aria-label="Tutup modal"` dan listener tombol keyboard `Escape`.
+     - `FileUpload.jsx`: `aria-label="Hapus berkas"`.
+     - `SearchInput.jsx`: `aria-label="Bersihkan pencarian"`.
+     - `Pagination.jsx`: `aria-label="Halaman sebelumnya"` & `aria-label="Halaman berikutnya"`.
+     - `TeacherQuizPage.jsx`: `aria-label` dinamis pada tombol aksi edit dan hapus soal.
+     - `MasterDataPage.jsx`: `aria-label` pada tombol edit dan hapus baris.
+   - Mempertahankan rasio kontras warna teks terhadap latar belakang minimal 4.5:1 sesuai panduan desain Exness Precision Fintech.
+5. **Audit Keamanan Sisi Klien (Client-Side Security):**
+   - Bebas dari penggunaan `dangerouslySetInnerHTML` yang berpotensi injeksi XSS.
+   - Tidak mencatat (*zero logging*) token autentikasi Sanctum atau password pengguna ke dalam console browser.
+   - Pengecekan ukuran berkas di browser (`FileUpload.jsx`) sebelum unggah dimulai untuk mencegah pemborosan bandwidth.
+
+### 3. Hasil Validasi & Kualitas
+- **ESLint:** Lulus audit kode secara sempurna (`0 errors, 0 warnings`).
+- **Production Build:** `vite build` berhasil dibangun dalam 935ms tanpa galat.
+
+---
+
+## Rencana Tahapan Berikutnya (Fase 9)
+
+**Fokus Utama Fase 9: Pengujian Terpadu End-to-End & Kesiapan Production**
+1. **Pengujian Alur Pengguna Terpadu (End-to-End Journeys):**
+   - Validasi skenario Waka Kurikulum: Master Data, Input Jadwal Manual, Import PDF Jadwal, Kenaikan Kelas.
+   - Validasi skenario Guru: Kalender Mengajar, Presensi & Jurnal, Pembuatan Kuis AI, Koreksi Submisi.
+   - Validasi skenario Siswa & Orang Tua: Beranda Siswa, Pengerjaan Kuis CBT, Pengajuan Izin, Portal Monitoring.
+2. **Kesesuaian Rubrik Penilaian UKK (PRD Bagian 10):**
+   - Verifikasi pemenuhan seluruh indikator kompetensi kejuruan RPL.
+3. **Optimasi Build & Kesiapan Deployment:**
+   - Konfigurasi rewrite SPA server (Nginx/Apache `.htaccess`).
+   - Panduan deployment siap pakai.
 
 
 

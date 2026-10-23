@@ -1,0 +1,496 @@
+/* ==========================================================================
+   StudentHome.css — Antarmuka Beranda Mandiri Siswa
+   Tema: Exness Precision Fintech (Slate-900, Slate-600, Gray-50/100, Accent #FFDE02)
+   ========================================================================== */
+
+.student-home {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3.5rem;
+}
+
+@media (min-width: 640px) {
+  .student-home {
+    padding: 2rem 1.5rem 4rem;
+  }
+}
+
+/* Header Profil Siswa */
+.student-home__profile-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.student-home__profile-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .student-home__profile-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.student-home__profile-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.student-home__avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #0f172a;
+  flex-shrink: 0;
+}
+
+.student-home__name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.student-home__student-name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.student-home__student-meta {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
+
+.student-home__period-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.875rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+/* 4 Kartu Metrik Kehadiran */
+.student-home__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .student-home__stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+}
+
+.student-home__stat-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem 1.125rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.student-home__stat-card:hover {
+  border-color: #cbd5e1;
+}
+
+.student-home__stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.student-home__stat-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.student-home__stat-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.student-home__stat-indicator--hadir {
+  background-color: #10b981;
+}
+
+.student-home__stat-indicator--sakit {
+  background-color: #0284c7;
+}
+
+.student-home__stat-indicator--izin {
+  background-color: #f59e0b;
+}
+
+.student-home__stat-indicator--alpa {
+  background-color: #ef4444;
+}
+
+.student-home__stat-body {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.student-home__stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.student-home__stat-unit {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.student-home__stat-desc {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  margin-top: 0.35rem;
+}
+
+/* Quick Actions Grid */
+.student-home__quick-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .student-home__quick-actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.student-home__action-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem 1.125rem;
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.student-home__action-card:hover {
+  border-color: #0f172a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.student-home__action-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.student-home__action-icon--blue {
+  background-color: #e0f2fe;
+  color: #0284c7;
+}
+
+.student-home__action-icon--yellow {
+  background-color: #fef9c3;
+  color: #854d0e;
+}
+
+.student-home__action-icon--slate {
+  background-color: #f1f5f9;
+  color: #334155;
+}
+
+.student-home__action-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  display: block;
+}
+
+.student-home__action-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  display: block;
+  margin-top: 0.125rem;
+}
+
+/* 2-Column Content Layout: Jadwal Hari Ini & Kuis Aktif */
+.student-home__main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .student-home__main-grid {
+    grid-template-columns: 3fr 2fr;
+  }
+}
+
+/* Section Card Container */
+.student-home__section-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.student-home__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.student-home__section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.student-home__section-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* Timeline Jadwal Pelajaran */
+.student-home__schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.student-home__schedule-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.875rem;
+  border-radius: 6px;
+  border: 1px solid #f1f5f9;
+  background-color: #fafbfc;
+  transition: all 0.15s ease;
+}
+
+.student-home__schedule-item:hover {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.student-home__schedule-item--active {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+}
+
+.student-home__time-col {
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+}
+
+.student-home__time-slot {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.student-home__period-num {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  margin-top: 0.125rem;
+}
+
+.student-home__sched-details {
+  flex: 1;
+}
+
+.student-home__subject-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.student-home__teacher-name {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.student-home__room-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #475569;
+  background-color: #f1f5f9;
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+/* Kuis Aktif List */
+.student-home__quiz-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.student-home__quiz-item {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  transition: all 0.15s ease;
+}
+
+.student-home__quiz-item:hover {
+  border-color: #0f172a;
+}
+
+.student-home__quiz-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.student-home__quiz-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.student-home__quiz-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 0.625rem;
+}
+
+.student-home__quiz-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #f1f5f9;
+}
+
+.student-home__quiz-due {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Empty State Widget */
+.student-home__empty-widget {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.student-home__empty-icon {
+  margin: 0 auto 0.5rem;
+  color: #cbd5e1;
+}
+
+.student-home__empty-text {
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Motivational Learning Quote Box */
+.student-home__quote-box {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1);
+}
+
+.student-home__quote-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: rgba(255, 222, 2, 0.15);
+  color: #ffde02;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.student-home__quote-content h4 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffde02;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.student-home__quote-content p {
+  font-size: 0.8125rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+  margin: 0;
+}

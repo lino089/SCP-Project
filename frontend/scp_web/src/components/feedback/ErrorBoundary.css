@@ -1,0 +1,142 @@
+/* ==========================================================================
+   ErrorBoundary.css — Tampilan Tanggap Darurat Runtime Crash Antarmuka
+   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Slate-600, Border Slate-200)
+   ========================================================================== */
+
+.error-boundary-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background-color: #f8fafc;
+  box-sizing: border-box;
+}
+
+.error-boundary-card {
+  width: 100%;
+  max-width: 580px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 2.25rem 2rem;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+  text-align: center;
+}
+
+.error-boundary-icon-box {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.error-boundary-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+  line-height: 1.35;
+}
+
+.error-boundary-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 1.75rem;
+}
+
+.error-boundary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+@media (min-width: 480px) {
+  .error-boundary-actions {
+    flex-direction: row;
+  }
+}
+
+.error-boundary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.error-boundary-btn--primary {
+  background-color: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.error-boundary-btn--primary:hover {
+  background-color: #1e293b;
+  border-color: #1e293b;
+}
+
+.error-boundary-btn--secondary {
+  background-color: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.error-boundary-btn--secondary:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Technical Details Dropdown */
+.error-boundary-details {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed #e2e8f0;
+  text-align: left;
+}
+
+.error-boundary-toggle-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0;
+  transition: color 0.15s ease;
+}
+
+.error-boundary-toggle-btn:hover {
+  color: #0f172a;
+}
+
+.error-boundary-code-box {
+  margin-top: 0.75rem;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 180px;
+}

@@ -1147,6 +1147,7 @@ export default function TeacherQuizPage() {
                         className="q-action-btn"
                         onClick={() => handleStartEditQuestion(q)}
                         title="Edit butir soal"
+                        aria-label={`Edit butir soal nomor ${idx + 1}`}
                       >
                         <Edit3 size={14} />
                       </button>
@@ -1155,6 +1156,7 @@ export default function TeacherQuizPage() {
                         className="q-action-btn q-action-btn--danger"
                         onClick={() => handleDeleteQuestion(q.id)}
                         title="Hapus butir soal"
+                        aria-label={`Hapus butir soal nomor ${idx + 1}`}
                       >
                         <Trash2 size={14} />
                       </button>
