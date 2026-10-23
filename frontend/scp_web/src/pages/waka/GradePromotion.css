@@ -1,0 +1,211 @@
+/* GradePromotion.css - Exness Clean Precision Styling */
+
+.promotion-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  .promotion-container {
+    padding: 1.75rem 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .promotion-container {
+    padding: 2rem;
+  }
+}
+
+.promotion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.promotion-title {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: var(--neutral-900);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 0.25rem 0;
+}
+
+.promotion-subtitle {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--neutral-500);
+  margin: 0;
+}
+
+.promotion-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Success Result Card */
+.promotion-success-card {
+  background-color: var(--success-50);
+  border: 1px solid var(--success-200);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.promotion-success-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.promotion-success-icon {
+  width: 40px;
+  height: 40px;
+  background-color: var(--success-100);
+  color: var(--success-700);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.promotion-success-stats {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.promotion-stat-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0.75rem;
+  background-color: #fff;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.promotion-stat-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+}
+
+.promotion-stat-val {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--neutral-900);
+}
+
+/* Sections */
+.promotion-section {
+  margin-bottom: 2rem;
+  background-color: #fff;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-2xs);
+}
+
+.promotion-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.promotion-section-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--neutral-900);
+  letter-spacing: -0.015em;
+  margin: 0 0 0.2rem 0;
+}
+
+.promotion-section-desc {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--neutral-500);
+  margin: 0;
+}
+
+/* Toolbar & Filters */
+.promotion-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.promotion-search {
+  max-width: 320px;
+  width: 100%;
+}
+
+.promotion-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.promotion-filter-select {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-sm);
+  background-color: #fff;
+  color: var(--neutral-700);
+  outline: none;
+  cursor: pointer;
+}
+
+.promotion-filter-select:focus {
+  border-color: #0F172A;
+}
+
+.promotion-holdback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid var(--neutral-300);
+  background-color: #fff;
+  color: var(--neutral-700);
+}
+
+.promotion-holdback-btn:hover {
+  background-color: var(--neutral-50);
+}
+
+.promotion-holdback-btn--active {
+  background-color: var(--danger-50);
+  color: var(--danger-700);
+  border-color: var(--danger-300);
+}

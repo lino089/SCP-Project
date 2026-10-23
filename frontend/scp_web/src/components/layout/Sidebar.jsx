@@ -297,7 +297,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
   return (
     <aside className={`web-sidebar ${isOpen ? 'web-sidebar--open' : ''}`}>
       <div className="web-sidebar__mobile-header">
-        <span className="web-sidebar__mobile-title">Navigasi SCP</span>
+        <span className="web-sidebar__mobile-title">Menu Navigasi</span>
         <button
           type="button"
           className="web-sidebar__close-btn"

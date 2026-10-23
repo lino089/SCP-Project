@@ -21,6 +21,7 @@ Dokumentasi hasil analisis disusun secara komprehensif ke dalam 8 dokumen terstr
 | **06** | **Gap Analysis & Temuan Kritis** | Uraian kesenjangan fungsional, fitur yang belum ada di prototype (terutama kuis AI & exception-based presensi), inkonsistensi kontrak data, serta daftar pertanyaan teknis yang memerlukan konfirmasi pengguna (*Flagged for Confirmation*). | [Buka Dokumen 06](./06_GAP_ANALYSIS_DAN_TEMUAN_KRITIS.md) |
 | **07** | **Rekomendasi Solusi & Desain Fitur Baru** | Rekomendasi perbaikan terklasifikasi (Wajib PRD, Integrasi Backend, Polish UX) dan spesifikasi antarmuka modal/layar baru (Modal Prompt AI, Ekstraksi Dokumen, Preview Soal, Override Nilai, Credential Modal, dsb.). | [Buka Dokumen 07](./07_REKOMENDASI_DAN_DESAIN_SOLUSI_UI_UX.md) |
 | **08** | **Panduan Teknis Implementasi Front-End** | Panduan arsitektur direktori Front-End, konfigurasi Axios Client & Interceptor, standardisasi 5 UI States (Loading, Empty, Error, Forbidden, Step-up Auth), variabel lingkungan `.env`, dan roadmap sprint implementasi. | [Buka Dokumen 08](./08_PANDUAN_TEKNIS_IMPLEMENTASI_FRONTEND.md) |
+| **09** | **Master Implementation Roadmap** | Rencana implementasi produksi komprehensif 10 fase (Fase 0 s.d. 9), rincian tugas, dependensi, kriteria keberhasilan, rencana pengujian, dan checklist kesiapan production. | [Buka Dokumen 09](./09_ROADMAP_IMPLEMENTASI_FRONTEND.md) |
 
 ---
 
@@ -41,14 +42,15 @@ Dokumentasi hasil analisis disusun secara komprehensif ke dalam 8 dokumen terstr
 
 ---
 
-## 3. Poin-Poin yang Memerlukan Konfirmasi Pengguna
+## 3. Keputusan Teknis yang Telah Dikonfirmasi
 
-Sebelum tahap implementasi Front-End dimulai, berikut adalah hal-hal penting yang perlu dikonfirmasi:
+Berdasarkan hasil konfirmasi dengan pengguna pada 22 Oktober 2026:
 
-1. **Endpoint Ubah Kata Sandi (`/api/me/password`):** Apakah backend akan menambahkan endpoint ini terlebih dahulu, ataukah fitur ganti kata sandi di halaman profil ditunda sementara?
-2. **Struktur URL Review Import:** Apakah disepakati menggunakan parameter rute dinamis `/web/review-import/:id` agar ramah penyegaran halaman (*refresh-friendly*)?
-3. **Mekanisme Polling Asinkron:** Apakah disepakati menggunakan interval polling 3–4 detik untuk memantau status parsing PDF dan generasi soal AI (HTTP 202 Accepted)?
-4. **Persetujuan Desain Modal Kuis AI:** Apakah rancangan modal pembuatan soal kuis AI (Prompt, Dokumen, Preview, Submissions Review) pada Dokumen 07 sudah disetujui untuk diimplementasikan?
+1. **Folder Pengembangan Resmi:** Front-End Website resmi akan dibangun dan dikembangkan di folder `frontend/scp_web` dengan memigrasikan token Tailwind, komponen bersama, dan layout dari prototype.
+2. **Endpoint Ubah Kata Sandi:** Endpoint `PATCH /api/me/password` akan disiapkan di backend agar alur `must_change_password` dan ganti kata sandi di profil berfungsi penuh.
+3. **Persetujuan Modul Kuis AI:** Seluruh spesifikasi pada Dokumen 07 (3 metode pembuatan soal, tahap preview & edit, review submission & override nilai) telah disetujui penuh untuk diimplementasikan.
+4. **Struktur URL Review Import:** Disepakati menggunakan format rute dinamis `/web/review-import/:id` agar ramah *refresh* dan *bookmark*.
+5. **Mekanisme Polling:** Menggunakan polling berkala (3–4 detik) untuk memantau proses antrean worker asinkron (PDF import dan evaluasi AI).
 
 ---
 

@@ -15,9 +15,16 @@ const DEMO_PRESETS = [
   },
   {
     key: 'teacher',
-    label: 'Guru & Kesiswaan',
-    desc: 'Jadwal mengajar, jurnal KBM, kuis AI, dan perizinan',
+    label: 'Guru Pengampu / Wali Kelas',
+    desc: 'Jadwal mengajar KBM, jurnal harian, dan presensi kelas',
     username: '197803122005011002',
+    password: 'password123',
+  },
+  {
+    key: 'kesiswaan',
+    label: 'Guru Kesiswaan (Piket)',
+    desc: 'Ambil alih kelas guru izin, penampil tugas titipan & piket',
+    username: '198211102008011005',
     password: 'password123',
   },
   {
@@ -29,7 +36,7 @@ const DEMO_PRESETS = [
   },
   {
     key: 'parent',
-    label: 'Orang Tua',
+    label: 'Orang Tua / Wali',
     desc: 'Monitoring presensi, izin, dan hasil evaluasi anak',
     username: 'W-2024001',
     password: 'password123',
@@ -105,10 +112,7 @@ export default function LoginPage() {
       <div className="login-card">
         {/* Header */}
         <div className="login-header">
-          <div className="login-brand-text">
-            <span className="login-brand-badge">SCP ACADEMIC</span>
-            <span>SMK Negeri 1 Bantul</span>
-          </div>
+          <span className="login-brand-text">School Class Progress</span>
           <h1 className="login-title">Masuk ke Portal</h1>
           <p className="login-subtitle">
             Sistem Informasi KBM, Presensi, dan Pengelolaan Jadwal Terpadu.

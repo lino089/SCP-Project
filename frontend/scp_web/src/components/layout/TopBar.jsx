@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, ChevronDown, User, LogOut, Check } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import Badge from '../shared/Badge';
 import './TopBar.css';
 
 const getBreadcrumb = (pathname) => {
+  if (pathname.startsWith('/web/review-import')) {
+    return { category: 'Kurikulum & Jadwal', page: 'Review Import' };
+  }
   const routes = {
     '/web/dashboard': { category: 'Kurikulum & Jadwal', page: 'Dashboard' },
     '/web/schedules': { category: 'Kurikulum & Jadwal', page: 'Jadwal Pelajaran' },
@@ -30,7 +32,7 @@ const getBreadcrumb = (pathname) => {
 export default function TopBar({ onToggleSidebar }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, loginWithDemo, getHomeRoute, hasRole } = useAuth();
+  const { user, logout, loginWithDemo, getHomeRoute, hasRole, isKesiswaan } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -72,6 +74,7 @@ export default function TopBar({ onToggleSidebar }) {
 
   const getRoleLabel = () => {
     if (hasRole('waka')) return 'Waka Kurikulum';
+    if (isKesiswaan()) return 'Guru Kesiswaan';
     if (hasRole('teacher')) return 'Guru';
     if (hasRole('student')) return 'Siswa';
     if (hasRole('parent')) return 'Orang Tua';
@@ -90,26 +93,30 @@ export default function TopBar({ onToggleSidebar }) {
           <Menu size={18} />
         </button>
 
-        <div className="web-topbar__brand">
-          <div className="w-7 h-7 bg-blue-800 text-white rounded flex items-center justify-center font-bold text-xs">
-            SCP
-          </div>
-          <span className="web-topbar__brand-name font-semibold text-sm hidden sm:inline">
-            School Class Project
+        <div
+          className="web-topbar__brand"
+          onClick={() => navigate(getHomeRoute())}
+          role="button"
+          tabIndex={0}
+        >
+          <span className="web-topbar__brand-name text-base sm:text-lg font-bold tracking-tight truncate max-w-[180px] sm:max-w-none cursor-pointer">
+            School Class Progress
           </span>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 text-xs text-gray-400 pl-4 border-l border-gray-200">
-          <span>{breadcrumb.category}</span>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">{breadcrumb.page}</span>
+        <div className="hidden md:flex items-center text-[13px] font-medium select-none ml-1">
+          <span className="text-gray-300 mx-2 font-normal">/</span>
+          <span className="text-gray-500 font-normal">{breadcrumb.category}</span>
+          <span className="text-gray-300 mx-1.5 font-normal">/</span>
+          <span className="text-gray-900 font-semibold">{breadcrumb.page}</span>
         </div>
       </div>
 
       <div className="web-topbar__right">
-        <Badge variant={hasRole('waka') ? 'primary' : 'default'} className="hidden sm:inline-flex">
-          {getRoleLabel()}
-        </Badge>
+        <div className="web-topbar__role-chip hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-100 text-gray-800 text-[11.5px] font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>{getRoleLabel()}</span>
+        </div>
 
         <div className="web-topbar__profile-wrapper" ref={dropdownRef}>
           <button
@@ -162,7 +169,8 @@ export default function TopBar({ onToggleSidebar }) {
                     (item.id === 'waka' && hasRole('waka')) ||
                     (item.id === 'student' && hasRole('student')) ||
                     (item.id === 'parent' && hasRole('parent')) ||
-                    (item.id === 'teacher' && hasRole('teacher'));
+                    (item.id === 'kesiswaan' && isKesiswaan()) ||
+                    (item.id === 'teacher' && hasRole('teacher') && !isKesiswaan());
 
                   return (
                     <button
@@ -172,7 +180,7 @@ export default function TopBar({ onToggleSidebar }) {
                       onClick={() => handleSelectDemoRole(item.id)}
                     >
                       <span>{item.label}</span>
-                      {isActive && <Check size={12} className="text-blue-600" />}
+                      {isActive && <Check size={12} className="text-gray-900 font-bold" />}
                     </button>
                   );
                 })}

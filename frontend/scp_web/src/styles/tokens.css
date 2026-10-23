@@ -1,5 +1,5 @@
 :root {
-  /* Colors - Precision Palette */
+  /* Colors - Exness Precision Fintech Palette */
   --color-bg: #FFFFFF;
   --color-surface: #F9FAFB;
   --color-surface-hover: #F3F4F6;
@@ -20,17 +20,8 @@
   --color-badge-blue-bg: #F1F5F9;
   --color-badge-blue-text: #334155;
   
-  /* Primary SCP Blue Palette */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-
   /* Typography - Plus Jakarta Sans & JetBrains Mono */
-  --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-size-h1: 26px;
   --font-size-section: 18px;
@@ -59,11 +50,10 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --radius-pill: 4px;
+  --radius-pill: 4px; /* No pills, precision 4px */
   --radius-circle: 50%;
   
-  /* Shadows - Flat & Subtle */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  /* Shadows - Flat */
   --shadow-dropdown: 0 4px 16px rgba(0,0,0,0.06);
   --shadow-none: none;
   

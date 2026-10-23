@@ -171,12 +171,11 @@ export function AuthProvider({ children }) {
   const getHomeRoute = useCallback(() => {
     if (!user) return '/login';
     if (hasRole('waka')) return '/web/dashboard';
-    if (isKesiswaan()) return '/web/monitoring';
     if (hasRole('teacher')) return '/teacher/schedule';
     if (hasRole('student')) return '/student/home';
     if (hasRole('parent')) return '/parent/monitoring';
     return '/web/dashboard';
-  }, [user, hasRole, isKesiswaan]);
+  }, [user, hasRole]);
 
   const value = useMemo(() => ({
     user,

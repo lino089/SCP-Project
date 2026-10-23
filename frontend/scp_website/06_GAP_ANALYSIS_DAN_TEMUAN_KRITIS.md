@@ -74,20 +74,28 @@ Selama analisis mendalam terhadap kode backend `scp/app/Http/Controllers/API`, d
 
 ---
 
-## 4. Hal-Hal yang Perlu Dikonfirmasi (Flagged for Confirmation)
+## 4. Keputusan Teknis yang Telah Dikonfirmasi Pengguna (Confirmed Decisions)
 
-Berikut adalah daftar pertanyaan teknis dan keputusan desain yang membutuhkan konfirmasi dari Pengguna sebelum tahap implementasi dimulai:
+Berdasarkan konfirmasi resmi dari Pengguna pada 22 Oktober 2026, berikut adalah keputusan arsitektur dan teknis yang telah disepakati untuk menjadi acuan pengerjaan:
 
-> [!IMPORTANT]
-> **Daftar Hal yang Memerlukan Konfirmasi Pengguna:**
-
-1. **Konfirmasi Rute Ubah Kata Sandi (Change Password):**
-   - *Pertanyaan:* Apakah tim backend akan membuatkan endpoint baru `PATCH /api/me/password`, ataukah fitur ubah kata sandi di halaman profil ditunda terlebih dahulu pada tahap 1 ini?
-2. **Struktur URL Halaman Review Import:**
-   - *Pertanyaan:* Apakah alur Review Import lebih disukai menggunakan rute statis dengan state internal (`/web/review-import`) atau rute dinamis yang ramah bookmark/refresh (`/web/review-import/:id`)?
-3. **Mekanisme Polling vs Webhook untuk AI & PDF Parsing:**
-   - *Pertanyaan:* Mengingat proses parsing PDF dan generate soal AI berjalan asinkron via queue worker (HTTP 202 Accepted), apakah Front-End disepakati menggunakan polling berkala (misal: tiap 3–5 detik hingga status berubah menjadi `preview_ready` / `draft_review`)?
-4. **Tampilan Siswa Lulus pada Akun Orang Tua:**
-   - *Pertanyaan:* Sesuai aturan PRD 5.13 & 8, akun siswa yang telah lulus akan di-hard-delete setelah 14 hari. Bagaimana pengalaman antarmuka untuk Orang Tua setelah akun anak terhapus? Apakah akun orang tua otomatis ikut nonaktif atau menampilkan pesan arsip kelulusan?
-5. **Kebijakan Tautan Google SSO Baru:**
-   - *Pertanyaan:* Apakah pendaftaran akun baru diperbolehkan melalui Google Sign-In, ataukah Google SSO murni hanya sebagai jalur alternatif masuk bagi akun yang sudah dibuatkan oleh Waka (auto-provisioning)?
+> [!NOTE]
+> **Daftar Keputusan Teknis yang Disetujui:**
+>
+> 1. **Folder Workspace Front-End Resmi:**
+>    - *Keputusan:* Pengembangan Front-End Website resmi SCP dilakukan di folder `frontend/scp_web`. Token warna Tailwind, layout shell (`WebLayout`), dan komponen UI dari `frontend/_Prototype/akademik-prototype` akan dimigrasikan ke `frontend/scp_web` secara bertahap dan terstruktur.
+>
+> 2. **Penyediaan Endpoint Ubah Kata Sandi (`PATCH /api/me/password`):**
+>    - *Keputusan:* Disetujui untuk menambahkan endpoint baru `PATCH /api/me/password` di backend agar fitur penggantian kata sandi pertama kali (`must_change_password`) dan formulir ganti kata sandi di halaman profil berfungsi secara nyata.
+>
+> 3. **Implementasi Lengkap Modul Kuis AI (Dokumen 07):**
+>    - *Keputusan:* Disetujui untuk mengimplementasikan penuh seluruh fitur pada Dokumen 07, meliputi:
+>      - Tiga metode pembuatan soal: Prompt AI (dengan validasi komposisi ketat), Ekstraksi Dokumen (PDF/TXT maks 5MB), dan Input Manual.
+>      - Tahap preview & penyuntingan butir soal (`draft_review` -> `published`).
+>      - Layar review pengumpulan siswa (*submissions*) dan modal override nilai AI oleh guru.
+>      - Tombol rilis hasil kuis ke siswa (`published_result`).
+>
+> 4. **Struktur URL Dinamis untuk Review Import Jadwal:**
+>    - *Keputusan:* Disetujui menggunakan rute dinamis `/web/review-import/:id` agar halaman review import jadwal PDF dapat dimuat ulang (*refresh-friendly*) dan mendukung tautan langsung berbasis ID batch.
+>
+> 5. **Mekanisme Polling Asinkron (Polling Interval):**
+>    - *Keputusan:* Front-End akan menerapkan polling berkala setiap 3–4 detik (maksimum 30 iterasi dengan batas waktu/timeout) untuk memantau status antrean worker asinkron (parsing PDF jadwal FET dan pemrosesan AI kuis).

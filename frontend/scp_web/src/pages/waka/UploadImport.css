@@ -1,0 +1,147 @@
+/* UploadImport.css - Exness Clean Flat Precision Styling */
+
+.upload-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px;
+  background-color: #FFFFFF;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .upload-container {
+    padding: 24px;
+  }
+}
+
+@media (min-width: 768px) {
+  .upload-container {
+    padding: 32px;
+  }
+}
+
+.upload-header {
+  margin-bottom: 24px;
+}
+
+.upload-title {
+  font-size: 26px;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 4px 0;
+}
+
+.upload-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  color: #6B7280;
+  margin: 0;
+}
+
+.upload-flat-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: none;
+}
+
+.upload-section {
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.upload-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 20px;
+}
+
+.upload-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.upload-section-desc {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0 0 14px 0;
+}
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.upload-zone-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-zone-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.upload-zone-hint {
+  font-size: 12px;
+  color: #64748B;
+  line-height: 1.4;
+}
+
+.upload-submit-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.upload-progress-box {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.upload-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.upload-progress-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.upload-ready-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #F3F4F6;
+}
+
+@media (max-width: 767px) {
+  .upload-container {
+    padding: 20px 16px;
+  }
+
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
+}

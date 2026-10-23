@@ -1,4 +1,4 @@
-/* Badge.css - Precision Style */
+/* Badge.css - Exness Clean Precision Style */
 
 .badge {
   display: inline-flex;
@@ -16,18 +16,13 @@
   border: 0;
 }
 
-/* Variants - Soft background, crisp readable text */
+/* Variants - Exness Fintech Style: Soft background, crisp readable text, border-0 */
 .badge--default,
-.badge--neutral {
-  background-color: #F1F5F9;
-  color: #334155;
-  border: 0;
-}
-
+.badge--neutral,
 .badge--primary,
 .badge--info {
-  background-color: #EFF6FF;
-  color: #1D4ED8;
+  background-color: #F3F4F6;
+  color: #374151;
   border: 0;
 }
 

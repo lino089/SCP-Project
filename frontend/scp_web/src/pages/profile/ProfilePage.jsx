@@ -234,7 +234,7 @@ export default function ProfilePage() {
             <div className="border-t border-gray-100 pt-3.5 space-y-2.5 text-xs">
               <div className="flex justify-between items-center text-gray-600">
                 <span>Peran Sistem</span>
-                <Badge variant={hasRole('waka') ? 'primary' : 'default'}>
+                <Badge variant="default">
                   {getRoleLabel()}
                 </Badge>
               </div>
@@ -322,7 +322,7 @@ export default function ProfilePage() {
 
             <div className="space-y-3">
               {emailMsg && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded text-gray-700 text-xs">
                   {emailMsg}
                 </div>
               )}
@@ -402,7 +402,7 @@ export default function ProfilePage() {
 
             <div className="space-y-3">
               {waMsg && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded text-gray-700 text-xs">
                   {waMsg}
                 </div>
               )}
