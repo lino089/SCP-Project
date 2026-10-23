@@ -13,8 +13,9 @@ Dokumen ini adalah catatan resmi riwayat pengembangan (*living document*) untuk 
 | **Fase 2** | Master Data Akademik & Siklus Promosi (Modul Waka Kurikulum) | **SELESAI** | 0 Error / 0 Warning (Build: 893ms) |
 | **Fase 3** | Pengelolaan Jadwal Terpusat & Import Jadwal PDF FET | **SELESAI** | 0 Error / 0 Warning (Build: 830ms) |
 | **Fase 4** | Kalender Mengajar KBM, Jurnal Harian & Presensi Siswa/Guru | **SELESAI** | 0 Error / 0 Warning (Build: 675ms) |
-| **Fase 5** | Modul Perizinan Siswa & Monitoring Kehadiran Sekolah | *Menunggu Rencana Kerja* | - |
-| **Fase 6** | Sistem Kuis Berbantuan AI & Evaluasi Submisi Otomatis | *Pending* | - |
+| **Fase 5** | Modul Perizinan Siswa & Monitoring Kehadiran Sekolah | **SELESAI** | 0 Error / 0 Warning (Build: 723ms) |
+| **Fase 6** | Sistem Kuis Berbantuan AI & Evaluasi Submisi Otomatis | **SELESAI** | 0 Error / 0 Warning (Build: 773ms) |
+| **Fase 7** | Modul Portal Siswa & Monitoring Orang Tua | *Pending* | - |
 
 ---
 
@@ -531,6 +532,108 @@ Mengimplementasikan modul kegiatan belajar mengajar (KBM) harian untuk peran Gur
 
 ---
 
+## Fase 5: Modul Perizinan Siswa & Monitoring Kehadiran Sekolah
+
+### 1. Tujuan & Ruang Lingkup
+Mengembangkan ekosistem perizinan kehadiran dan pemantauan presensi sekolah secara terpadu dan menyeluruh. Modul ini melayani alur pengajuan izin mandiri oleh siswa atau orang tua, proses verifikasi dan persetujuan oleh Tim Kesiswaan, Waka Kurikulum, atau Wali Kelas, visualisasi monitoring kehadiran institusional dengan ekspor data CSV, serta dashboard monitoring khusus orang tua untuk memantau kehadiran dan capaian anak.
+
+### 2. Pekerjaan yang Telah Diselesaikan
+
+1. **Layanan Komunikasi API (`leaveApi.js`):**
+   - [`src/services/leaveApi.js`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/services/leaveApi.js): Menghubungkan client HTTP ke backend `/api/leave-requests` (pengajuan izin mandiri, daftar riwayat izin ter-scope peran, update status verifikasi `status_approval`, dan pembatalan izin berstatus pending) serta `/api/attendances` (daftar presensi institusi multi-filter).
+   - Menyediakan fallback data mock offline yang lengkap dan realistis untuk pengujian mandiri tanpa ketergantungan backend aktif.
+
+2. **Halaman Pengajuan Perizinan Siswa & Orang Tua:**
+   - [`src/pages/student/StudentPermissionPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/student/StudentPermissionPage.jsx) & [`StudentPermission.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/student/StudentPermission.css):
+     - **Form Dinamis Adaptif:** Mendukung 2 tipe permohonan (`tidak_masuk` multi-hari vs `keluar_sekolah` izin keluar jam KBM pada hari yang sama dengan input jam keluar & perkiraan jam kembali) serta 2 kategori (`sakit` wajib melampirkan surat dokter vs `lainnya` opsional dokumen).
+     - **Validasi Berkas:** Validasi tipe file (`.pdf`, `.jpg`, `.jpeg`, `.png`) dengan batasan ukuran berkas maksimum 2MB dan notifikasi error inline.
+     - **Kartu Statistik Siswa:** Ringkasan metrik kuota izin mandiri (Total Pengajuan, Disetujui, Menunggu Verifikasi, Ditolak).
+     - **Tabel Riwayat & Manajemen Izin:** Tabel responsif menampilkan tipe, kategori, tanggal, status badge, dan aksi. Pengajuan yang masih berstatus `pending` dapat diubah melalui modal edit atau dibatalkan langsung dengan dialog konfirmasi.
+     - **Modal Pratinjau Dokumen:** Memungkinkan siswa memeriksa berkas surat keterangan yang telah diunggah.
+
+3. **Pusat Verifikasi Perizinan Kesiswaan, Waka, & Wali Kelas:**
+   - [`src/pages/teacher/PermissionVerifyPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/teacher/PermissionVerifyPage.jsx) & [`PermissionVerify.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/teacher/PermissionVerify.css):
+     - **Tab Filter Status:** Tab interaktif untuk menyaring daftar perizinan (`Semua`, `Menunggu Verifikasi`, `Disetujui`, `Ditolak`) dilengkapi counter badge dinamis.
+     - **Tindakan Persetujuan Cepat:** Tombol *Setujui* dan *Tolak* instan dengan feedback toast dan pembaruan state lokal.
+     - **Modal Detail & Pratinjau Dokumen:** Menampilkan informasi lengkap pemohon, NIS, rombel kelas, alasan izin, serta pratinjau surat bukti dokter/orang tua.
+     - **Proteksi Akses (RBAC Guard):** Guru reguler non-wali kelas dan non-kesiswaan otomatis diarahkan ke tampilan 403 `ForbiddenState` dengan penjelasan wewenang yang ramah pengguna.
+
+4. **Monitoring & Rekapitulasi Presensi Institusi:**
+   - [`src/pages/waka/MonitoringRecapPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/waka/MonitoringRecapPage.jsx) & [`MonitoringRecap.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/waka/MonitoringRecap.css):
+     - **5 Kartu Statistik Institusi:** Tingkat Kehadiran Sekolah (%), Total Hadir, Izin Sakit, Izin Keperluan, dan Alpa.
+     - **Tab 1 — Rekapitulasi Presensi Siswa:** Filter tanggal, rombel kelas, dan status kehadiran. Mendukung ekspor data presensi ke format CSV (*Client-Side RFC 4180 CSV Export*) tanpa ketergantungan server.
+     - **Tab 2 — Rekapitulasi Jurnal KBM Guru:** Pemantauan kelengkapan pengisian jurnal KBM seluruh kelas, indikator status selesai/aktif, catatan topik pembelajaran yang dapat diperluas (*expandable details*), dan modal pratinjau foto dokumentasi kelas.
+
+5. **Portal Monitoring Orang Tua:**
+   - [`src/pages/parent/ParentMonitoringPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/parent/ParentMonitoringPage.jsx) & [`ParentMonitoring.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/parent/ParentMonitoring.css):
+     - **Kartu Profil Anak:** Avatar inisial, nama siswa (Aisyah Putri Ramadhani), NIS, rombel kelas (X-RPL-1), nama wali murid, dan status semester aktif.
+     - **Tab 1 — Rekapitulasi Kehadiran:** 4 kartu status kehadiran anak (Hadir, Sakit, Izin, Alpa) dan log presensi harian per sesi kelas.
+     - **Tab 2 — Riwayat Izin & Dispensasi:** Tabel riwayat permohonan izin anak, status verifikasi sekolah, dan tombol lihat lampiran surat.
+     - **Tab 3 — Capaian Nilai Kuis AI:** Tabel capaian nilai kuis harian, mata pelajaran, tanggal pengerjaan, skor perolehan, dan status ketuntasan KKM.
+
+6. **Integrasi Routing Terpadu:**
+   - [`src/routes/AppRouter.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/routes/AppRouter.jsx): Menghubungkan seluruh rute Fase 5 (`/student/permissions`, `/teacher/permissions`, `/web/monitoring`, dan `/parent/monitoring`) serta menggantikan seluruh placeholder `ModulePlaceholder`.
+
+### 3. Hasil Verifikasi & Validasi
+- **ESLint:** Lulus audit kode secara sempurna (`0 errors, 0 warnings`).
+- **Production Build:** `vite build` berhasil dibangun tanpa kendala dalam 723ms.
+- **Konsistensi Desain:** Menerapkan palet warna Exness Precision Fintech secara murni (`#FFDE02`, `#0F172A`, `#E2E8F0`, `#F8FAFC`), tanpa ada kotak logo "SCP".
+
+---
+
+## Fase 6: Modul Kuis Berbantuan AI & Workflow Evaluasi Asinkron
+
+### 1. Tujuan & Ruang Lingkup
+Mengembangkan modul evaluasi pembelajaran formatif bertenaga AI secara menyeluruh pada aplikasi Front-End Website SCP (`frontend/scp_web`). Modul ini mencakup 3 metode pembuatan soal (Prompt AI dengan konfigurasi ketat, Ekstraksi Dokumen materi PDF/TXT, dan Manual), tahap *preview* dan kurasi soal sebelum terbit, pengerjaan kuis interaktif siswa (*multi-attempt* & *countdown timer*), antrean evaluasi *hybrid* asinkron (pilihan ganda otomatis + esai dinilai semantik AI), peninjauan *submission* siswa oleh guru dengan fitur *override* nilai, serta rilis hasil kuis ke siswa dan orang tua.
+
+### 2. Pekerjaan yang Telah Diselesaikan
+
+1. **Layanan Komunikasi API (`quizApi.js`):**
+   - [`src/services/quizApi.js`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/services/quizApi.js): Menghubungkan client HTTP ke backend `/api/quizzes`, inisialisasi kuis, generator prompt AI (`/generate-prompt`), ekstraksi dokumen (`/extract-document`), kurasi butir soal CRUD (`/questions`), pengubahan status kuis (`published` / `published_result`), pengiriman pengerjaan siswa (`/submissions`), serta penyesuaian nilai guru (`/quiz-submissions/{id}`).
+   - Menyediakan fallback data mock offline yang realistis dan lengkap (soal PG, esai, soal berpenanda `needs_review: true`, dan submission siswa).
+
+2. **Halaman Manajemen Kuis Guru (`TeacherQuizPage.jsx`):**
+   - [`src/pages/teacher/TeacherQuizPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/teacher/TeacherQuizPage.jsx) & [`TeacherQuiz.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/teacher/TeacherQuiz.css):
+     - **Tab Status Kuis:** Memilah kuis ke dalam tab *Semua*, *Aktif Dipublikasi*, dan *Draft Siap Review*.
+     - **Modal Inisialisasi Kuis:** Form input judul, target kelas, batas waktu pengumpulan (*due date*), dan batas percobaan (*max attempts*). Status awal kuis selalu `draft_review`.
+     - **Tiga Metode Pembuatan Soal:**
+       - **Metode 1 (Prompt AI):** Form teks materi dengan validasi komposisi ketat di sisi klien (`mc_count + essay_count === total_questions`), tingkat kesulitan, dan simulasi penanganan respons 202 Accepted.
+       - **Metode 2 (Ekstraksi Dokumen):** Drag-and-drop berkas materi PDF / TXT (maks. 5MB) berprinsip pelestarian soal asli.
+       - **Metode 3 (Input Manual):** Form penambahan soal satu per satu (PG opsi A–D atau Esai berserta rubrik).
+     - **Layar Preview & Kurasi Butir Soal (`draft_review`):**
+       - Penanda visual butir soal ambigu hasil ekstraksi dokumen (`needs_review: true` dengan alert box kuning dan pesan catatan AI).
+       - Modal pengeditan butir soal (menyunting teks, opsi, kunci, atau rubrik secara instan dan membersihkan penanda ambigu).
+       - Tombol hapus butir soal dan penambahan soal manual ad-hoc.
+       - Tombol konfirmasi publikasi kuis (`published`).
+     - **Layar Review Pengumpulan Siswa & Override Nilai Guru:**
+       - Tabel daftar siswa yang telah mengumpulkan, waktu kumpul, nomor percobaan, dan status penilaian.
+       - Modal lembar jawaban siswa membandingkan jawaban dengan kunci, rubrik, dan umpan balik semantik AI (*ai_feedback*).
+       - Form *Override* Nilai: Guru dapat menyesuaikan skor (0–100) dan menyematkan catatan umpan balik personal, menghasilkan badge *"Telah di-override oleh Guru"*.
+       - Tombol Rilis Hasil Kuis (`published_result`) untuk membuka keterbukaan nilai bagi siswa dan orang tua.
+
+3. **Halaman Pengerjaan Kuis Interaktif Siswa (`StudentQuizPage.jsx`):**
+   - [`src/pages/student/StudentQuizPage.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/student/StudentQuizPage.jsx) & [`StudentQuiz.css`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/pages/student/StudentQuiz.css):
+     - **Tabel Kuis Aktif:** Menampilkan daftar kuis yang ditugaskan ke rombel kelas siswa beserta batas pengerjaan dan sisa kuota percobaan.
+     - **Lembar Ujian CBT Interaktif:**
+       - Matriks navigasi nomor soal responsif (penanda nomor aktif, terjawab dengan warna hijau, dan belum terjawab).
+       - Timer hitung mundur (*countdown timer*) aktif dengan peringatan jika waktu tersisa < 5 menit.
+       - Kartu opsi pilihan ganda radio A, B, C, D dan area textarea esai dengan counter karakter.
+       - Penyimpanan draf jawaban otomatis ke `sessionStorage` lokal untuk mencegah kehilangan progres saat browser tertutup tidak sengaja.
+       - Pengiriman jawaban via `POST /api/quizzes/{id}/submissions` (respons 202 Accepted dengan banner konfirmasi proses penilaian asinkron latar belakang).
+     - **Modal Review Nilai & Ulasan:**
+       - Melindungi kerahasiaan skor selama kuis belum berstatus `published_result` oleh guru.
+       - Menampilkan kartu capaian skor akhir (0–100), status ketuntasan KKM, dan evaluasi semantik AI + catatan guru jika hasil kuis telah dirilis resmi.
+
+4. **Integrasi Routing Terpadu:**
+   - [`src/routes/AppRouter.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/routes/AppRouter.jsx): Menghubungkan `/teacher/quiz` (`TeacherQuizPage`) dan `/student/quiz` (`StudentQuizPage`) menggantikan seluruh komponen placeholder.
+
+### 3. Hasil Verifikasi & Validasi
+- **ESLint:** Lulus audit kode secara sempurna (`0 errors, 0 warnings`).
+- **Production Build:** `vite build` berhasil dibangun tanpa kendala dalam 773ms.
+- **Konsistensi Desain:** 100% konsisten dengan palet warna *Exness Precision Fintech* dan bebas dari kotak logo "SCP".
+
+---
+
 ## Panduan Menjalankan & Menguji Proyek
 
 ### 1. Menjalankan Server Development
@@ -569,11 +672,12 @@ Tersedia 1 akun pengujian per peran pengguna yang telah didaftarkan pada backend
 
 ---
 
-## Rencana Tahapan Berikutnya (Fase 5)
+## Rencana Tahapan Berikutnya (Fase 7)
 
-**Fokus Utama Fase 5: Modul Perizinan Siswa & Monitoring Kehadiran Sekolah**
-1. **API Service Perizinan (`leaveApi.js`):** Integrasi endpoint `/api/leave-requests` dan `/api/attendances`.
-2. **Form Pengajuan Izin Siswa/Orang Tua:** Form dinamis dengan pilihan multi-hari (`tidak_masuk`) vs izin keluar di jam sekolah (`keluar_sekolah`).
-3. **Pusat Verifikasi Izin Kesiswaan & Wali Kelas:** Layar persetujuan/penolakan surat izin siswa dengan preview bukti lampiran.
-4. **Layar Monitoring Kehadiran Institusi:** Matriks pemantauan kehadiran harian/mingguan untuk Waka, Kesiswaan, dan Wali Kelas.
+**Fokus Utama Fase 7: Modul Portal Siswa & Monitoring Orang Tua**
+1. **Beranda Siswa (`StudentHomePage.jsx`):** Header identitas profil siswa, 4 kartu statistik absensi mandiri, widget jadwal KBM hari ini, serta daftar kuis aktif dengan tenggat terdekat.
+2. **Dashboard Monitoring Orang Tua Lanjutan (`ParentMonitoringPage.jsx`):** Peringatan dini kehadiran siswa (*Attendance Warnings / Alert threshold*), riwayat presensi harian per sesi kelas, dan keterbukaan hasil capaian kuis pembelajaran anak.
+3. **Penyempurnaan Integrasi Multi-Role Portal:** Memastikan seluruh alur dari presensi harian (Fase 4), perizinan siswa (Fase 5), dan kuis AI (Fase 6) teragregasi secara mulus di beranda siswa dan portal orang tua.
+
+
 

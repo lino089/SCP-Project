@@ -14,6 +14,12 @@ import UploadImportPage from '../pages/waka/UploadImportPage';
 import ReviewImportPage from '../pages/waka/ReviewImportPage';
 import TeacherSchedulePage from '../pages/teacher/TeacherSchedulePage';
 import TeacherJournalPage from '../pages/teacher/TeacherJournalPage';
+import TeacherQuizPage from '../pages/teacher/TeacherQuizPage';
+import MonitoringRecapPage from '../pages/waka/MonitoringRecapPage';
+import PermissionVerifyPage from '../pages/teacher/PermissionVerifyPage';
+import StudentPermissionPage from '../pages/student/StudentPermissionPage';
+import StudentQuizPage from '../pages/student/StudentQuizPage';
+import ParentMonitoringPage from '../pages/parent/ParentMonitoringPage';
 import { Card, Badge, Button } from '../components/shared';
 import { Construction, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -74,42 +80,19 @@ export default function AppRouter() {
             <Route path="/web/review-import" element={<ReviewImportPage />} />
             <Route path="/web/master-data" element={<MasterDataPage />} />
             <Route path="/web/grade-promotion" element={<GradePromotionPage />} />
-            <Route
-              path="/web/monitoring"
-              element={
-                <ModulePlaceholder
-                  title="Monitoring & Rekapitulasi Presensi"
-                  phase="Fase 5"
-                  description="Rekapitulasi kehadiran institusi, persetujuan izin, dan delegasi piket."
-                />
-              }
-            />
+          </Route>
+
+          {/* Shared Waka & Teacher (Kesiswaan) Monitoring Route */}
+          <Route element={<RoleRoute allowedRoles={['waka', 'teacher']} />}>
+            <Route path="/web/monitoring" element={<MonitoringRecapPage />} />
           </Route>
 
           {/* Teacher Routes */}
           <Route element={<RoleRoute allowedRoles={['teacher']} />}>
             <Route path="/teacher/schedule" element={<TeacherSchedulePage />} />
             <Route path="/teacher/journal" element={<TeacherJournalPage />} />
-            <Route
-              path="/teacher/quiz"
-              element={
-                <ModulePlaceholder
-                  title="Manajemen Kuis Berbantuan AI"
-                  phase="Fase 6"
-                  description="Pembuatan kuis via Prompt AI, ekstraksi materi PDF/TXT, dan evaluasi hasil belajar siswa."
-                />
-              }
-            />
-            <Route
-              path="/teacher/permissions"
-              element={
-                <ModulePlaceholder
-                  title="Verifikasi Perizinan Siswa"
-                  phase="Fase 5"
-                  description="Pemeriksaan dan persetujuan pengajuan izin ketidakhadiran siswa."
-                />
-              }
-            />
+            <Route path="/teacher/quiz" element={<TeacherQuizPage />} />
+            <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
           </Route>
 
           {/* Student Routes */}
@@ -124,40 +107,13 @@ export default function AppRouter() {
                 />
               }
             />
-            <Route
-              path="/student/permissions"
-              element={
-                <ModulePlaceholder
-                  title="Pengajuan Perizinan Siswa"
-                  phase="Fase 5"
-                  description="Form permohonan izin (Sakit/Izin Dispensasi) dan unggah surat bukti."
-                />
-              }
-            />
-            <Route
-              path="/student/quiz"
-              element={
-                <ModulePlaceholder
-                  title="Pengerjaan Kuis Interaktif AI"
-                  phase="Fase 6"
-                  description="Pengerjaan evaluasi materi kuis dan riwayat skor pengerjaan."
-                />
-              }
-            />
+            <Route path="/student/permissions" element={<StudentPermissionPage />} />
+            <Route path="/student/quiz" element={<StudentQuizPage />} />
           </Route>
 
           {/* Parent Routes */}
           <Route element={<RoleRoute allowedRoles={['parent']} />}>
-            <Route
-              path="/parent/monitoring"
-              element={
-                <ModulePlaceholder
-                  title="Portal Monitoring Orang Tua"
-                  phase="Fase 7"
-                  description="Pemantauan kehadiran anak, status perizinan, dan capaian kuis harian."
-                />
-              }
-            />
+            <Route path="/parent/monitoring" element={<ParentMonitoringPage />} />
           </Route>
         </Route>
       </Route>

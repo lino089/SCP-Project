@@ -1,0 +1,336 @@
+/* StudentQuiz.css - Exness Precision Fintech Theme */
+
+.student-quiz-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .student-quiz-page {
+    padding: 2rem 1.5rem 3rem 1.5rem;
+  }
+}
+
+/* Header */
+.student-quiz-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .student-quiz-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.student-quiz-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.student-quiz-subtitle {
+  font-size: 13px;
+  color: #64748B;
+  margin-top: 0.25rem;
+}
+
+.student-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.student-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10B981;
+}
+
+/* Table Wrap */
+.student-quiz-table-wrap {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+/* CBT Sheet Container */
+.cbt-sheet-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cbt-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+}
+
+.cbt-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  background-color: #0F172A;
+  color: #FFDE02;
+  font-size: 13px;
+}
+
+.cbt-timer--danger {
+  background-color: #DC2626;
+  color: #FFFFFF;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Matrix Bar */
+.cbt-matrix-bar {
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.cbt-matrix-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.cbt-num-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #CBD5E1;
+  background-color: #FFFFFF;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.cbt-num-btn:hover {
+  border-color: #0F172A;
+}
+
+.cbt-num-btn--answered {
+  background-color: #ECFDF5;
+  border-color: #10B981;
+  color: #047857;
+}
+
+.cbt-num-btn--current {
+  background-color: #0F172A;
+  border-color: #0F172A;
+  color: #FFDE02;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(255, 222, 2, 0.4);
+}
+
+/* Question Area */
+.cbt-question-box {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.cbt-question-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.cbt-question-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+  line-height: 1.6;
+  margin: 0 0 1.25rem 0;
+}
+
+/* Options List */
+.cbt-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cbt-option-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background-color: #F8FAFC;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cbt-option-card:hover {
+  background-color: #F1F5F9;
+  border-color: #CBD5E1;
+}
+
+.cbt-option-card--selected {
+  background-color: #FFFDF5;
+  border-color: #EAB308;
+  box-shadow: 0 0 0 1px #EAB308;
+}
+
+.cbt-option-radio {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.cbt-option-card--selected .cbt-option-radio {
+  background-color: #0F172A;
+  border-color: #0F172A;
+  color: #FFDE02;
+}
+
+.cbt-option-text {
+  font-size: 13px;
+  color: #1E293B;
+  line-height: 1.4;
+}
+
+/* Essay Box */
+.cbt-essay-box {
+  margin-top: 0.5rem;
+}
+
+.cbt-essay-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #0F172A;
+  background-color: #FFFFFF;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.cbt-essay-textarea:focus {
+  outline: none;
+  border-color: #FFDE02;
+  box-shadow: 0 0 0 3px rgba(255, 222, 2, 0.25);
+}
+
+/* Navigation Footer */
+.cbt-nav-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #E2E8F0;
+  padding-top: 1rem;
+}
+
+/* Complete View */
+.cbt-complete-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.cbt-status-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: 480px;
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  background-color: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  text-align: left;
+}
+
+/* Result Inspection Modal */
+.result-pending-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.result-content-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.result-score-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.result-answers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.result-answer-item {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}

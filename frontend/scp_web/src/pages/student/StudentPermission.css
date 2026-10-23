@@ -1,0 +1,160 @@
+/* ==========================================================================
+   StudentPermission.css — Styling Halaman Pengajuan Perizinan Siswa/Ortu
+   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent #FFDE02)
+   ========================================================================== */
+
+.student-permission {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+@media (min-width: 640px) {
+  .student-permission {
+    padding: 2rem 1.5rem 4rem;
+  }
+}
+
+/* Page Header */
+.student-permission__header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .student-permission__header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.student-permission__title-group h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.student-permission__subtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+
+/* Stat Cards Grid */
+.student-permission__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .student-permission__stats {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+}
+
+/* Form Type Selector Cards */
+.student-permission__type-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 640px) {
+  .student-permission__type-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.student-permission__type-card {
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.student-permission__type-card:hover {
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+}
+
+.student-permission__type-card--active {
+  border-color: #0f172a;
+  background-color: #f8fafc;
+  box-shadow: 0 0 0 1px #0f172a;
+}
+
+.student-permission__type-card-radio {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.student-permission__type-card--active .student-permission__type-card-radio {
+  border-color: #0f172a;
+}
+
+.student-permission__type-card-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: #0f172a;
+}
+
+.student-permission__type-card-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+  display: block;
+}
+
+.student-permission__type-card-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+  line-height: 1.35;
+  display: block;
+}
+
+/* Document Preview Modal */
+.student-permission__doc-preview {
+  padding: 1.25rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.student-permission__doc-icon {
+  margin: 0 auto 0.75rem;
+  color: #64748b;
+}
+
+.student-permission__doc-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}

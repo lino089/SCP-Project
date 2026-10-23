@@ -1,0 +1,115 @@
+/* ==========================================================================
+   PermissionVerify.css — Styling Halaman Verifikasi Perizinan Kesiswaan & Waka
+   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent #FFDE02)
+   ========================================================================== */
+
+.permission-verify {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+@media (min-width: 640px) {
+  .permission-verify {
+    padding: 2rem 1.5rem 4rem;
+  }
+}
+
+/* Page Header */
+.permission-verify__header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+@media (min-width: 768px) {
+  .permission-verify__header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.permission-verify__title-group h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.permission-verify__subtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+
+.permission-verify__header-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Action Buttons inside Table */
+.permission-verify__action-btn-approve {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.375rem;
+  border: 1px solid #a7f3d0;
+  background-color: #ecfdf5;
+  color: #047857;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.permission-verify__action-btn-approve:hover {
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
+}
+
+.permission-verify__action-btn-reject {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.375rem;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  color: #b91c1c;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.permission-verify__action-btn-reject:hover {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* Preview Modal */
+.permission-verify__preview-box {
+  padding: 1.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.permission-verify__preview-meta {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  text-align: left;
+  font-size: 0.75rem;
+}
