@@ -5413,3 +5413,247 @@ Hasil eksekusi seluruh automated test suite pasca penyelesaian Fase 9:
 - **Hasil:** **100% Passed (0 Failures, 0 Errors, 0 Warnings)**
 - **Durasi Eksekusi:** ~35 detik
 - **Status Akhir Sistem:** **Production Ready & UKK Ready**
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 1 (Modul Impor Guru & Fondasi Dependensi Spreadsheet - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 1 (Zero-Manual Master Data & Integrated Schedule Ingestion - Modul Guru)  
+**Acuan Spesifikasi:** `MD/NewFeature.md` (v4.5) & `MD/FASE_1_IMPLEMENTATION_PLAN.md`  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 70. Ringkasan Perubahan & Tujuan Fase 1
+
+Fase 1 mengawali implementasi inisiatif *Zero-Manual Master Data & Integrated Schedule Ingestion (SCP v4.5)* yang bertujuan memangkas friksi setup awal master data sekolah. Fase ini menyediakan fondasi teknis pengolahan spreadsheet asinkron/streaming serta endpoint import guru massal langsung dari file Excel (`.xlsx`).
+
+Tujuan dan capaian utama pekerjaan Fase 1 meliputi:
+1. **Fondasi Library & Ekstensi PHP**:
+   - Mengaktifkan ekstensi `zip` pada `php.ini` sistem untuk mendukung pembacaan dan penulisan berkas Office Open XML (`.xlsx`).
+   - Memasang dependensi streaming spreadsheet berkinerja tinggi `spatie/simple-excel` (v3.11.0) yang didukung oleh `openspout/openspout` (v5.13.0) untuk efisiensi memori (memory footprint rendah/O(1) streaming) tanpa buffering seluruh berkas ke RAM.
+2. **Penyediaan Template Impor Guru Berstandar**:
+   - Menyediakan endpoint `GET /api/teachers/import-template` khusus Waka Kurikulum.
+   - Template menyertakan header resmi: `nip`, `name`, dan `fet_staff_id` dengan baris contoh data. Kolom NIP dipersiapkan sebagai teks murni guna mencegah hilangnya angka nol di depan (*leading zeros*) atau konversi ke notasi ilmiah (*scientific notation*).
+3. **Ingestion & Auto-Provisioning Akun Guru**:
+   - Menyediakan endpoint `POST /api/teachers/import` yang menerima file `.xlsx` hingga 5 MB.
+   - Otomatis membuat akun `User` dengan role `teacher`, email default (`{nip}@school.sch.id`), password ter-hash dari NIP, dan flag `must_change_password: true`.
+   - Mengaitkan identifier `fet_staff_id` pada akun guru sebagai basis integrasi jadwal FET pada fase berikutnya.
+4. **Validasi Komprehensif & Transaksional (All-or-Nothing)**:
+   - Validasi struktur header berkas Excel.
+   - Pengecekan benturan data (*collision/duplicate detection*) baik antar-baris dalam lembar kerja Excel (*in-sheet duplicate*) maupun terhadap data yang sudah ada di database (`nis_nip`, `fet_staff_id`, `email`).
+   - Seluruh proses berjalan di dalam `DB::transaction()`: jika ada satu saja baris yang tidak valid atau duplikat, seluruh transaksi dibatalkan (*rollback*) dan mengembalikan response HTTP 422 terstruktur yang merinci baris (`row`), atribut, dan pesan kesalahan.
+
+---
+
+## 71. Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `composer.json` & `composer.lock` | Diubah | Mendaftarkan dependensi `spatie/simple-excel: ^3.11` untuk pemrosesan streaming Excel. |
+| 2 | `routes/api.php` | Diubah | Mendaftarkan rute `GET /api/teachers/import-template` dan `POST /api/teachers/import` pada grup middleware `role:vice_principal`. |
+| 3 | `app/Http/Controllers/API/TeacherController.php` | Diubah | Menambahkan method `downloadTemplate()` (streaming response) dan `import(Request $request)` (validasi, in-sheet check, DB check, dan auto-provisioning). |
+| 4 | `tests/Feature/TeacherImportTest.php` | Dibuat | Automated feature test suite mencakup 8 skenario pengujian izin akses, download template, validasi format, duplikasi, integritas database, dan pembatalan transaksi (rollback). |
+| 5 | `MD/FASE_1_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen arsitektur dan panduan teknis implementasi Fase 1. |
+| 6 | `MD/NewFeature.md` | Diubah | Menyelaraskan ketentuan persyaratan impor jadwal: hanya data siswa dan guru (dengan `fet_staff_id`) yang wajib ada. |
+
+---
+
+## 72. Detail Implementasi & Potongan Kode Utama
+
+### 72.1 Endpoint Download Template Excel (`TeacherController::downloadTemplate`)
+Menggunakan `response()->streamDownload(...)` dikombinasikan dengan `SimpleExcelWriter::create('php://output', 'xlsx')` guna menghindari pemanggilan fungsi `exit;` internal Spatie yang dapat memutus runner pengujian:
+
+```php
+public function downloadTemplate()
+{
+    return response()->streamDownload(function () {
+        $writer = SimpleExcelWriter::create('php://output', 'xlsx');
+        $writer->addHeader(['nip', 'name', 'fet_staff_id']);
+        $writer->addRow([
+            'nip' => '198501012010011001',
+            'name' => 'Budi Santoso, S.Pd.',
+            'fet_staff_id' => 'BS',
+        ]);
+        $writer->addRow([
+            'nip' => '199002022015022002',
+            'name' => 'Siti Aminah, M.Pd.',
+            'fet_staff_id' => 'SA',
+        ]);
+        $writer->close();
+    }, 'guru_import_template.xlsx', [
+        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+}
+```
+
+### 72.2 Endpoint Ingestion & Validasi Transaksional (`TeacherController::import`)
+Memastikan file diproses secara streaming baris per baris dengan deteksi duplikasi ganda dan database collision:
+
+```php
+public function import(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|mimes:xlsx|max:5120',
+    ]);
+
+    $file = $request->file('file');
+    $reader = SimpleExcelReader::create($file->getPathname())
+        ->trimHeaderRow()
+        ->headersToSnakeCase();
+
+    $headers = $reader->getHeaders();
+    $requiredHeaders = ['nip', 'name', 'fet_staff_id'];
+    $missingHeaders = array_diff($requiredHeaders, $headers ?? []);
+
+    if (!empty($missingHeaders)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Format file tidak sesuai template. Kolom wajib: nip, name, fet_staff_id.',
+            'errors' => [
+                'headers' => ['Kolom hilang: ' . implode(', ', $missingHeaders)]
+            ]
+        ], 422);
+    }
+
+    $errors = [];
+    $rowsToInsert = [];
+    $seenNips = [];
+    $seenFetStaffIds = [];
+    $rowNumber = 1; // Row 1 is header
+
+    foreach ($reader->getRows() as $row) {
+        $rowNumber++;
+        $nip = trim((string)($row['nip'] ?? ''));
+        $name = trim((string)($row['name'] ?? ''));
+        $fetStaffId = trim((string)($row['fet_staff_id'] ?? ''));
+
+        // Cek baris kosong / field wajib
+        if (empty($nip)) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'nip', 'message' => 'NIP wajib diisi.'];
+        }
+        if (empty($name)) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'name', 'message' => 'Nama wajib diisi.'];
+        }
+        if (empty($fetStaffId)) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'fet_staff_id', 'message' => 'FET Staff ID wajib diisi.'];
+        }
+
+        // Cek duplikasi di dalam file yang sama (in-sheet collision)
+        if (!empty($nip)) {
+            if (isset($seenNips[$nip])) {
+                $errors[] = ['row' => $rowNumber, 'attribute' => 'nip', 'message' => "NIP '{$nip}' duplikat dengan baris {$seenNips[$nip]}."];
+            } else {
+                $seenNips[$nip] = $rowNumber;
+            }
+        }
+
+        if (!empty($fetStaffId)) {
+            if (isset($seenFetStaffIds[$fetStaffId])) {
+                $errors[] = ['row' => $rowNumber, 'attribute' => 'fet_staff_id', 'message' => "FET Staff ID '{$fetStaffId}' duplikat dengan baris {$seenFetStaffIds[$fetStaffId]}."];
+            } else {
+                $seenFetStaffIds[$fetStaffId] = $rowNumber;
+            }
+        }
+
+        // Cek benturan data terhadap database
+        if (!empty($nip) && User::where('nis_nip', $nip)->exists()) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'nip', 'message' => "NIP '{$nip}' sudah terdaftar di database."];
+        }
+
+        if (!empty($fetStaffId) && User::where('fet_staff_id', $fetStaffId)->exists()) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'fet_staff_id', 'message' => "FET Staff ID '{$fetStaffId}' sudah digunakan oleh guru lain."];
+        }
+
+        $email = $nip . '@school.sch.id';
+        if (User::where('email', $email)->exists()) {
+            $errors[] = ['row' => $rowNumber, 'attribute' => 'email', 'message' => "Email '{$email}' sudah terdaftar."];
+        }
+
+        $rowsToInsert[] = [
+            'name' => $name,
+            'nis_nip' => $nip,
+            'email' => $email,
+            'password' => Hash::make($nip),
+            'role' => 'teacher',
+            'fet_staff_id' => $fetStaffId,
+            'must_change_password' => true,
+        ];
+    }
+
+    if (!empty($errors)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validasi impor guru gagal. Perbaiki baris data berikut.',
+            'errors' => $errors
+        ], 422);
+    }
+
+    DB::transaction(function () use ($rowsToInsert) {
+        foreach ($rowsToInsert as $data) {
+            User::create($data);
+        }
+    });
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Berhasil mengimpor ' . count($rowsToInsert) . ' data guru.',
+        'data' => [
+            'imported_count' => count($rowsToInsert)
+        ]
+    ], 201);
+}
+```
+
+---
+
+## 73. Verifikasi & Pengujian Otomatis (`TeacherImportTest.php`)
+
+Pengujian dilakukan secara menyeluruh pada file `tests/Feature/TeacherImportTest.php` mencakup 8 skenario utama dengan **41 assertions**:
+
+| Kasus Pengujian | Deskripsi & Validasi | Status |
+|---|---|---|
+| `test_guest_cannot_download_teacher_template_or_import` | Memastikan request unauthenticated ditolak HTTP 401 Unauthorized. | **PASSED** |
+| `test_non_waka_cannot_download_teacher_template_or_import` | Memastikan role selain Waka Kurikulum (misal: guru biasa, siswa) ditolak HTTP 403 Forbidden. | **PASSED** |
+| `test_waka_can_download_teacher_import_template` | Memastikan Waka berhasil mengunduh template dengan header dan mime type spreadsheet resmi. | **PASSED** |
+| `test_waka_can_import_valid_teachers_excel` | Memastikan file Excel valid berhasil diimpor (HTTP 201), akun user terbuat di database dengan hash password NIP dan `must_change_password: true`. | **PASSED** |
+| `test_import_fails_when_file_is_missing_or_invalid_extension` | Memastikan validasi request menolak input tanpa file atau file non-xlsx dengan HTTP 422. | **PASSED** |
+| `test_import_fails_when_header_is_invalid` | Memastikan file dengan header kolom yang tidak sesuai template ditolak HTTP 422. | **PASSED** |
+| `test_import_fails_and_rollbacks_on_in_sheet_duplicate_nip_or_fet_staff_id` | Memastikan jika terdapat duplikasi NIP atau FET Staff ID di lembar kerja yang sama, impor ditolak HTTP 422 dan tidak ada satupun baris yang masuk ke database (rollback). | **PASSED** |
+| `test_import_fails_and_rollbacks_on_database_nip_collision` | Memastikan benturan NIP terhadap user yang sudah ada di database membatalkan seluruh proses impor (HTTP 422 & rollback). | **PASSED** |
+
+### Hasil Eksekusi Test Runner:
+```bash
+PASS  Tests\Feature\TeacherImportTest
+✓ guest cannot download teacher template or import                         1.25s
+✓ non waka cannot download teacher template or import                      0.15s
+✓ waka can download teacher import template                                0.12s
+✓ waka can import valid teachers excel                                     0.30s
+✓ import fails when file is missing or invalid extension                   0.12s
+✓ import fails when header is invalid                                      0.14s
+✓ import fails and rollbacks on in sheet duplicate nip or fet staff id      0.22s
+✓ import fails and rollbacks on database nip collision                     0.24s
+
+Tests:    8 passed (41 assertions)
+Duration: 2.76s
+```
+
+Verifikasi regresi juga dijalankan pada `tests/Feature/TeacherManagementTest.php`:
+```bash
+PASS  Tests\Feature\TeacherManagementTest
+Tests:    9 passed (31 assertions)
+Duration: 3.12s
+```
+Tidak ada regresi atau fungsi manajemen guru existing yang terdampak oleh penambahan rute dan fitur baru ini.
+
+---
+
+## 74. Kesimpulan & Kesiapan Melangkah ke Fase 2
+
+Fase 1 telah selesai 100% sesuai spesifikasi `MD/NewFeature.md` dan `MD/FASE_1_IMPLEMENTATION_PLAN.md`.
+- **Fondasi Streaming**: `spatie/simple-excel` telah terintegrasi dengan baik dan terbukti andal dalam streaming data tanpa konsumsi memori berlebih.
+- **Master Data Guru**: Telah siap menerima input massal dengan pengamanan integritas data NIP, hash password, dan penanda `fet_staff_id`.
+- **Langkah Selanjutnya**: Sistem telah siap untuk dilanjutkan ke **Fase 2 (Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat)**.

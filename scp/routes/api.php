@@ -84,6 +84,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/subjects/{id}', [SubjectController::class, 'destroy']);
 
         // 9.3 Master Data Teachers & Assignments
+        Route::get('/teachers/import-template', [TeacherController::class, 'downloadTemplate']);
+        Route::post('/teachers/import', [TeacherController::class, 'import']);
         Route::post('/teachers', [TeacherController::class, 'store']);
         Route::put('/teachers/{id}', [TeacherController::class, 'update']);
         Route::delete('/teachers/{id}', [TeacherController::class, 'destroy']);

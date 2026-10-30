@@ -1,0 +1,287 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
+use Spatie\SimpleExcel\SimpleExcelWriter;
+use Tests\TestCase;
+
+class TeacherImportTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $waka;
+    private User $teacher;
+    private User $student;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->waka = User::create([
+            'name' => 'Waka Kurikulum',
+            'email' => 'waka@example.com',
+            'nis_nip' => '197001011990011001',
+            'role' => 'vice_principal',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        $this->teacher = User::create([
+            'name' => 'Guru Eksis',
+            'email' => 'guru@example.com',
+            'nis_nip' => '198001012010011002',
+            'fet_staff_id' => 'BS01',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        $this->student = User::create([
+            'name' => 'Siswa Test',
+            'email' => 'siswa@example.com',
+            'nis_nip' => '12345678',
+            'role' => 'student',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+    }
+
+    private function createTempExcel(array $rows): string
+    {
+        $tempPath = tempnam(sys_get_temp_dir(), 'test_teacher_') . '.xlsx';
+        $writer = SimpleExcelWriter::create($tempPath);
+        $writer->addRows($rows);
+        $writer->close();
+
+        return $tempPath;
+    }
+
+    public function test_guest_cannot_download_teacher_template_or_import(): void
+    {
+        $this->getJson('/api/teachers/import-template')
+            ->assertStatus(401);
+
+        $this->postJson('/api/teachers/import')
+            ->assertStatus(401);
+    }
+
+    public function test_non_waka_cannot_download_teacher_template_or_import(): void
+    {
+        Sanctum::actingAs($this->teacher);
+
+        $this->getJson('/api/teachers/import-template')
+            ->assertStatus(403);
+
+        $this->postJson('/api/teachers/import')
+            ->assertStatus(403);
+
+        Sanctum::actingAs($this->student);
+
+        $this->getJson('/api/teachers/import-template')
+            ->assertStatus(403);
+
+        $this->postJson('/api/teachers/import')
+            ->assertStatus(403);
+    }
+
+    public function test_waka_can_download_teacher_import_template(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->get('/api/teachers/import-template');
+
+        $response->assertStatus(200);
+        $response->assertHeader('content-disposition', 'attachment; filename=guru_import_template.xlsx');
+    }
+
+    public function test_waka_can_import_valid_teachers_excel(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Rahmat Hidayat, S.Kom.',
+                'fet_staff_id' => '101',
+                'email' => 'rahmat@sekolah.sch.id',
+                'phone_number' => '081299990001',
+            ],
+            [
+                'nip' => '199202022021022006',
+                'name' => 'Siti Nurhaliza, M.Pd.',
+                'fet_staff_id' => '102',
+                'email' => 'siti@sekolah.sch.id',
+                'phone_number' => '081299990002',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Data guru berhasil diimpor.',
+                'data' => [
+                    'imported_count' => 2,
+                ],
+            ]);
+
+        $teacher1 = User::where('nis_nip', '199001012020011005')->first();
+        $this->assertNotNull($teacher1);
+        $this->assertEquals('teacher', $teacher1->role);
+        $this->assertEquals('Rahmat Hidayat, S.Kom.', $teacher1->name);
+        $this->assertEquals('101', $teacher1->fet_staff_id);
+        $this->assertEquals('rahmat@sekolah.sch.id', $teacher1->email);
+        $this->assertEquals('081299990001', $teacher1->phone_number);
+        $this->assertTrue($teacher1->must_change_password);
+        $this->assertTrue(Hash::check('199001012020011005', $teacher1->password));
+
+        $teacher2 = User::where('nis_nip', '199202022021022006')->first();
+        $this->assertNotNull($teacher2);
+        $this->assertEquals('102', $teacher2->fet_staff_id);
+        $this->assertTrue(Hash::check('199202022021022006', $teacher2->password));
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_when_file_is_missing_or_invalid_extension(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // Missing file
+        $response1 = $this->postJson('/api/teachers/import', []);
+        $response1->assertStatus(422)
+            ->assertJsonValidationErrors(['file']);
+
+        // Invalid extension (.txt)
+        $fakeTxt = UploadedFile::fake()->create('guru.txt', 100, 'text/plain');
+        $response2 = $this->postJson('/api/teachers/import', [
+            'file' => $fakeTxt,
+        ]);
+        $response2->assertStatus(422)
+            ->assertJsonValidationErrors(['file']);
+    }
+
+    public function test_import_fails_when_header_is_invalid(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // Header missing 'fet_staff_id'
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Rahmat Hidayat',
+                'email' => 'rahmat@sekolah.sch.id',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_invalid_header.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+            ]);
+
+        $this->assertStringContainsString('fet_staff_id', $response->json('message'));
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_nip_or_fet_staff_id(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Guru Satu',
+                'fet_staff_id' => '101',
+            ],
+            [
+                'nip' => '199001012020011005', // Duplicate NIP in row 3
+                'name' => 'Guru Dua',
+                'fet_staff_id' => '102',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_duplicate.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals(3, $response->json('errors.0.row'));
+        $this->assertEquals('nip', $response->json('errors.0.attribute'));
+
+        // Rollback: Guru Satu should NOT be inserted into database
+        $this->assertNull(User::where('nis_nip', '199001012020011005')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_database_nip_collision(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // $this->teacher already exists with NIP 198001012010011002
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199505052020011010', // New valid teacher
+                'name' => 'Guru Baru',
+                'fet_staff_id' => '201',
+            ],
+            [
+                'nip' => '198001012010011002', // Collision with existing teacher in DB
+                'name' => 'Budi Collide',
+                'fet_staff_id' => '202',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_collision.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals(3, $response->json('errors.0.row'));
+        $this->assertEquals('nip', $response->json('errors.0.attribute'));
+
+        // Rollback: Guru Baru should NOT be inserted into database
+        $this->assertNull(User::where('nis_nip', '199505052020011010')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+}
