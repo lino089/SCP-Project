@@ -16,6 +16,7 @@ use App\Models\Classes;
 use App\Models\Schedule;
 use App\Services\ScheduleConflictService;
 use Symfony\Component\Process\Process;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -86,7 +87,10 @@ class ParseSchedulePdfJob implements ShouldQueue
             return;
         }
 
-        // Preload master data to optimize memory and queries
+        // Auto-register Master Data (Rooms, Subjects, Fallback Classes)
+        $this->autoRegisterMasterData($parseData);
+
+        // Preload / Reload master data to ensure all newly registered entities are in-memory
         $allClasses = Classes::all();
         $allTeachers = User::where('role', 'teacher')->get();
         $allSubjects = Subject::all();
@@ -317,5 +321,116 @@ class ParseSchedulePdfJob implements ShouldQueue
         return $rooms->first(
             fn ($r) => stripos($r->name, $code) !== false || stripos($code, $r->name) !== false
         );
+    }
+
+    /**
+     * Pra-registrasi otomatis master data (Rooms, Subject, Classes) dari berkas PDF.
+     */
+    public function autoRegisterMasterData(array $parseData): void
+    {
+        DB::transaction(function () use ($parseData) {
+            $this->autoRegisterRooms($parseData);
+            $this->autoRegisterSubjects($parseData);
+            $this->autoRegisterClasses($parseData);
+        });
+    }
+
+    /**
+     * Auto-create Room fisik unik dengan kapasitas default 36.
+     */
+    public function autoRegisterRooms(array $parseData): void
+    {
+        $existingRooms = Rooms::all();
+
+        $uniqueRooms = collect($parseData)
+            ->map(function ($row) {
+                $code = $row['ruang_final'] ?? $row['ruang_kelas'] ?? null;
+                return $code ? trim((string) $code) : null;
+            })
+            ->filter(fn ($code) => !empty($code))
+            ->unique();
+
+        foreach ($uniqueRooms as $roomCode) {
+            // Periksa via findRoom untuk mencegah duplikasi (misal "12" vs "Ruang 12")
+            if (!$this->findRoom($existingRooms, $roomCode)) {
+                $newRoom = Rooms::create([
+                    'name' => $roomCode,
+                    'capacity' => 36,
+                ]);
+                $existingRooms->push($newRoom);
+            }
+        }
+    }
+
+    /**
+     * Auto-create Subject unik dari data parsing PDF.
+     */
+    public function autoRegisterSubjects(array $parseData): void
+    {
+        $existingSubjects = Subject::all();
+
+        $blacklistedPlaceholders = ['-x-', '---', '-', 'null', 'none'];
+
+        $uniqueSubjects = collect($parseData)
+            ->map(fn ($row) => isset($row['mapel_mentah']) ? trim((string) $row['mapel_mentah']) : null)
+            ->filter(function ($subject) use ($blacklistedPlaceholders) {
+                if (empty($subject)) {
+                    return false;
+                }
+                return !in_array(strtolower($subject), $blacklistedPlaceholders);
+            })
+            ->unique();
+
+        foreach ($uniqueSubjects as $subjectName) {
+            // Periksa via findSubject untuk mencegah duplikasi
+            if (!$this->findSubject($existingSubjects, $subjectName)) {
+                $newSubject = Subject::create([
+                    'name' => $subjectName,
+                ]);
+                $existingSubjects->push($newSubject);
+            }
+        }
+    }
+
+    /**
+     * Fallback auto-create Classes unik dari data parsing PDF.
+     */
+    public function autoRegisterClasses(array $parseData): void
+    {
+        $existingClasses = Classes::all();
+
+        $uniqueClasses = collect($parseData)
+            ->map(fn ($row) => isset($row['kelas_mentah']) ? trim(preg_replace('/\s+/', ' ', (string) $row['kelas_mentah'])) : null)
+            ->filter(fn ($class) => !empty($class))
+            ->unique();
+
+        foreach ($uniqueClasses as $cleanClassName) {
+            // Periksa via findClass untuk mencegah duplikasi
+            if (!$this->findClass($existingClasses, $cleanClassName)) {
+                // Deteksi level kelas (selaras dengan Fase 4 di StudentController)
+                if (preg_match('/^XII(\s|-|_|$)/i', $cleanClassName)) {
+                    $level = '12';
+                } elseif (preg_match('/^XI(\s|-|_|$)/i', $cleanClassName)) {
+                    $level = '11';
+                } elseif (preg_match('/^X(\s|-|_|$)/i', $cleanClassName)) {
+                    $level = '10';
+                } elseif (preg_match('/^12(\s|-|_|$)/', $cleanClassName)) {
+                    $level = '12';
+                } elseif (preg_match('/^11(\s|-|_|$)/', $cleanClassName)) {
+                    $level = '11';
+                } elseif (preg_match('/^10(\s|-|_|$)/', $cleanClassName)) {
+                    $level = '10';
+                } else {
+                    $level = '10'; // Fallback default
+                }
+
+                $newClass = Classes::create([
+                    'name' => $cleanClassName,
+                    'level' => $level,
+                    'next_class_id' => null,
+                ]);
+                $existingClasses->push($newClass);
+            }
+        }
     }
 }

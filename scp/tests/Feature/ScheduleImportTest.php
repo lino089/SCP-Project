@@ -66,6 +66,15 @@ class ScheduleImportTest extends TestCase
             'name' => 'Ruang 12',
             'capacity' => 36,
         ]);
+
+        User::create([
+            'name' => 'Siswa Test',
+            'email' => 'siswa@example.com',
+            'nis_nip' => '12345678',
+            'role' => 'student',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
     }
 
     public function test_waka_can_upload_pdfs_and_dispatches_parse_job(): void

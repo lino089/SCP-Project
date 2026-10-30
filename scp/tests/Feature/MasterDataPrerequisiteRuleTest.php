@@ -171,7 +171,8 @@ class MasterDataPrerequisiteRuleTest extends TestCase
 
     public function test_pdf_import_upload_is_rejected_when_master_data_is_empty(): void
     {
-        User::where('role', 'teacher')->delete();
+        // Hapus guru dan siswa dari master data agar benar-benar kosong
+        User::whereIn('role', ['teacher', 'student'])->delete();
 
         Sanctum::actingAs($this->waka);
 
@@ -189,9 +190,14 @@ class MasterDataPrerequisiteRuleTest extends TestCase
             ->assertJsonStructure([
                 'success',
                 'message',
-                'errors' => ['classes', 'teachers', 'subjects', 'rooms'],
+                'errors' => ['students', 'teachers'],
                 'meta' => ['missing_entities'],
             ]);
+
+        $this->assertEqualsCanonicalizing(
+            ['students', 'teachers'],
+            $response->json('meta.missing_entities')
+        );
 
         // Pastikan tidak ada file yang tersimpan ke storage dan tidak ada job yang di-dispatch
         Queue::assertNothingPushed();
@@ -199,13 +205,64 @@ class MasterDataPrerequisiteRuleTest extends TestCase
         $this->assertEquals(0, ScheduleImport::count());
     }
 
+    public function test_pdf_import_upload_is_rejected_when_students_are_empty(): void
+    {
+        // Guru memiliki fet_staff_id, tapi siswa kosong
+        $this->teacher->update(['fet_staff_id' => '34']);
+        User::where('role', 'student')->delete();
+
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/schedule-imports', [
+            'cycle_type' => 1,
+            'file_kelas' => UploadedFile::fake()->create('jadwal_kelas.pdf', 100, 'application/pdf'),
+            'file_ruangan' => UploadedFile::fake()->create('jadwal_ruangan.pdf', 100, 'application/pdf'),
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+            ]);
+
+        $this->assertEquals(['students'], $response->json('meta.missing_entities'));
+        $this->assertArrayHasKey('students', $response->json('errors'));
+
+        Queue::assertNothingPushed();
+        $this->assertEquals(0, ScheduleImport::count());
+    }
+
+    public function test_pdf_import_upload_is_rejected_when_teachers_are_empty(): void
+    {
+        // Siswa ada, tapi guru belum ada sama sekali
+        User::where('role', 'teacher')->delete();
+
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/schedule-imports', [
+            'cycle_type' => 1,
+            'file_kelas' => UploadedFile::fake()->create('jadwal_kelas.pdf', 100, 'application/pdf'),
+            'file_ruangan' => UploadedFile::fake()->create('jadwal_ruangan.pdf', 100, 'application/pdf'),
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
+            ]);
+
+        $this->assertEquals(['teachers'], $response->json('meta.missing_entities'));
+        $this->assertArrayHasKey('teachers', $response->json('errors'));
+
+        Queue::assertNothingPushed();
+        $this->assertEquals(0, ScheduleImport::count());
+    }
+
     public function test_pdf_import_upload_is_rejected_when_teachers_lack_fet_staff_id(): void
     {
-        // Lengkapi master data kelas, ruangan, subject, dan guru, tapi belum ada guru dengan fet_staff_id
-        Classes::create(['name' => 'X RPL 1', 'level' => 10]);
-        Rooms::create(['name' => 'Lab Komputer 1', 'capacity' => 36]);
-        Subject::create(['name' => 'Pemrograman Web']);
-        // $this->teacher memiliki fet_staff_id = null
+        // Siswa dan guru ada, tapi belum ada guru dengan fet_staff_id
+        // Tabel classes, rooms, dan subject tidak perlu diisi (Fase 5)
+        $this->teacher->update(['fet_staff_id' => null]);
 
         Sanctum::actingAs($this->waka);
 
@@ -228,11 +285,14 @@ class MasterDataPrerequisiteRuleTest extends TestCase
         $this->assertEquals(0, ScheduleImport::count());
     }
 
-    public function test_pdf_import_upload_is_allowed_when_master_data_and_fet_staff_id_are_present(): void
+    public function test_pdf_import_upload_is_allowed_when_only_students_and_teachers_with_fet_exist(): void
     {
-        Classes::create(['name' => 'X RPL 1', 'level' => 10]);
-        Rooms::create(['name' => 'Lab Komputer 1', 'capacity' => 36]);
-        Subject::create(['name' => 'Pemrograman Web']);
+        // Fase 5: Classes, Rooms, dan Subject sengaja dibiarkan KOSONG (0 data)
+        $this->assertEquals(0, Classes::count());
+        $this->assertEquals(0, Rooms::count());
+        $this->assertEquals(0, Subject::count());
+
+        // Pastikan hanya Siswa dan Guru ber-FET yang tersedia
         $this->teacher->update(['fet_staff_id' => '34']);
 
         Sanctum::actingAs($this->waka);

@@ -6136,3 +6136,288 @@ Verifikasi regresi seluruh suite terkait:
 ### 77.5 Kesimpulan & Kesiapan Menuju Fase 5
 
 Fase 4 telah selesai 100% dan seluruh fungsionalitas impor siswa, auto-create master kelas, serta auto-provisioning akun orang tua berjalan stabil dan terverifikasi secara atomik. Dengan rampungnya Fase 3 (Guru) dan Fase 4 (Siswa & Kelas), kedua master data wajib untuk jadwal KBM telah siap. Sistem kini siap melanjutkan ke **Fase 5: Penyelarasan Aturan Prasyarat Master Data (Hanya Siswa & Guru)**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 5 (Penyelarasan Aturan Prasyarat Master Data - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 5 (Penyelarasan Aturan Prasyarat Master Data — Hanya Siswa & Guru)  
+**Acuan Spesifikasi:** `MD/PHASE_5_IMPLEMENTATION_PLAN.md` & `MD/NEW_FEATURE_IMPLEMENTATION_PLAN.md` (v4.5)  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 78. Implementasi Fase 5: Penyelarasan Aturan Prasyarat Master Data
+
+### 78.1 Ringkasan Perubahan & Tujuan
+Fase 5 merealisasikan dekopling aturan validasi prasyarat master data antara impor berkas PDF jadwal FET (`POST /api/schedule-imports`) dan penginputan jadwal manual konvensional (`POST /api/schedules`). 
+
+Pada versi sistem sebelumnya (SCP v4.0), upload jadwal PDF mensyaratkan tersedianya 4 entitas lengkap (kelas, guru, mapel, dan ruangan) ditambah nomor staf FET. Karena pada SCP v4.5 kelas telah digenerate otomatis saat impor siswa (Fase 4), serta ruangan dan mata pelajaran akan didaftarkan otomatis oleh antrean worker PDF (Fase 6), aturan prasyarat impor PDF diselaraskan agar:
+1. **Hanya Mensyaratkan Data Siswa & Guru Ber-ID FET:**
+   - Minimal terdapat 1 user siswa aktif (`role = 'student'`, `deleted_at IS NULL`).
+   - Minimal terdapat 1 user guru aktif (`role = 'teacher'`, `deleted_at IS NULL`).
+   - Minimal terdapat 1 user guru aktif yang memiliki `fet_staff_id` (`fet_staff_id IS NOT NULL AND fet_staff_id != ''`).
+   - Menghapus kewajiban keberadaan data kelas, mata pelajaran, dan ruangan pada validasi impor PDF.
+2. **Proteksi Integritas Jadwal Manual:**
+   - Method `validateForManualSchedule()` tetap utuh dan ketat mewajibkan 4 entitas lengkap (`classes`, `teachers`, `subjects`, `rooms`) guna mencegah anomali pada pembuatan jadwal manual.
+3. **Penyelarasan Seluruh Rangkaian Pengujian Otomatis:**
+   - Memperbarui skenario pengujian di `tests/Feature/MasterDataPrerequisiteRuleTest.php` menjadi 11 test cases (73 assertions), membuktikan bahwa upload PDF lolos dengan status `202 Accepted` meskipun tabel `classes`, `subjects`, dan `rooms` kosong melompong (0 data).
+   - Menyelaraskan fixture `setUp()` pada `tests/Feature/ScheduleImportTest.php` dengan menyertakan akun siswa aktif agar pengujian upload PDF tetap valid.
+
+---
+
+### 78.2 Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Services/MasterDataPrerequisiteService.php` | Diubah | Mendekopling method `validateForPdfImport()` (hanya cek siswa & guru ber-ID FET) dan mempertahankan `validateForManualSchedule()` mengevaluasi 4 master data via `evaluateManual()`. |
+| 2 | `tests/Feature/MasterDataPrerequisiteRuleTest.php` | Diubah | Memperbarui pengujian prasyarat PDF: siswa kosong (422), guru kosong (422), guru tanpa fet_staff_id (422), keduanya kosong (422), dan upload sukses 202 saat classes/rooms/subjects kosong (0 record). |
+| 3 | `tests/Feature/ScheduleImportTest.php` | Diubah | Menambahkan seed user siswa pada `setUp()` agar selaras dengan aturan prasyarat baru. |
+| 4 | `MD/PHASE_5_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen perencanaan implementasi terstruktur Fase 5. |
+| 5 | `MD/Development.md` | Diubah | Dokumentasi teknis implementasi Fase 5. |
+
+---
+
+### 78.3 Potongan Kode Utama
+
+#### 1. Penyelarasan Service (`MasterDataPrerequisiteService.php`)
+```php
+public function validateForManualSchedule(): array
+{
+    return $this->evaluateManual([
+        'classes' => Classes::whereNull('deleted_at')->exists(),
+        'teachers' => User::where('role', 'teacher')->whereNull('deleted_at')->exists(),
+        'subjects' => Subject::whereNull('deleted_at')->exists(),
+        'rooms' => Rooms::whereNull('deleted_at')->exists(),
+    ]);
+}
+
+public function validateForPdfImport(): array
+{
+    $hasStudents = User::where('role', 'student')->whereNull('deleted_at')->exists();
+    $hasTeachers = User::where('role', 'teacher')->whereNull('deleted_at')->exists();
+    $hasTeachersWithFetId = User::where('role', 'teacher')
+        ->whereNull('deleted_at')
+        ->whereNotNull('fet_staff_id')
+        ->where('fet_staff_id', '!=', '')
+        ->exists();
+
+    $missing = [];
+    $errors = [];
+
+    if (!$hasStudents) {
+        $missing[] = 'students';
+        $errors['students'] = ['Master data siswa masih kosong. Waka wajib mengimpor data siswa terlebih dahulu.'];
+    }
+
+    if (!$hasTeachers) {
+        $missing[] = 'teachers';
+        $errors['teachers'] = ['Master data guru masih kosong. Waka wajib mengimpor data guru terlebih dahulu.'];
+    } elseif (!$hasTeachersWithFetId) {
+        $missing[] = 'fet_staff_id';
+        $errors['fet_staff_id'] = ['Belum ada guru yang memiliki nomor staf FET (fet_staff_id). Waka wajib melengkapi fet_staff_id guru untuk import PDF.'];
+    }
+
+    return [
+        'is_valid' => empty($missing),
+        'missing' => $missing,
+        'errors' => $errors,
+    ];
+}
+```
+
+---
+
+### 78.4 Hasil Pengujian Otomatis
+
+#### 1. `MasterDataPrerequisiteRuleTest.php`
+```bash
+PASS  Tests\Feature\MasterDataPrerequisiteRuleTest
+✓ manual schedule creation is rejected when master data is completely empty     0.18s
+✓ manual schedule creation is rejected when some master data is missing          0.12s
+✓ manual schedule creation is allowed when master data is complete              0.13s
+✓ pdf import upload is rejected when master data is empty                       0.12s
+✓ pdf import upload is rejected when students are empty                         0.11s
+✓ pdf import upload is rejected when teachers are empty                         0.11s
+✓ pdf import upload is rejected when teachers lack fet staff id                 0.12s
+✓ pdf import upload is allowed when only students and teachers with fet exist   0.13s
+✓ confirm import is rejected when matched count is zero                         0.13s
+✓ confirm import is allowed when matched rows exist                             0.13s
+✓ non waka users cannot access schedule store and import                        0.13s
+
+Tests:    11 passed (73 assertions)
+Duration: 1.36s
+```
+
+#### 2. `ScheduleImportTest.php` & `ScheduleTest.php` (Zero-Regression Verification)
+```bash
+PASS  Tests\Feature\ScheduleImportTest
+Tests:    9 passed (31 assertions)
+Duration: 1.59s
+
+PASS  Tests\Feature\ScheduleTest
+Tests:    9 passed (27 assertions)
+Duration: 1.28s
+
+PASS  Tests\Feature\TeacherImportTest
+Tests:    15 passed (72 assertions)
+Duration: 2.59s
+
+PASS  Tests\Feature\StudentImportTest
+Tests:    16 passed (95 assertions)
+Duration: 2.44s
+```
+
+---
+
+### 78.5 Kesimpulan & Kesiapan Menuju Fase 6
+
+Fase 5 telah selesai 100% dan seluruh target keberhasilan telah terpenuhi secara paripurna:
+1. Validasi impor PDF kini hanya bergantung pada ketersediaan data siswa dan guru ber-ID FET.
+2. Form jadwal manual tetap terlindungi secara ketat oleh validasi 4 master data konvensional.
+3. Seluruh unit/feature test terkait lulus 100% tanpa adanya regresi sistem.
+
+Sistem backend SCP v4.5 kini berada dalam status siap untuk melanjutkan ke **Fase 6: Pra-Registrasi Otomatis Ruangan & Mapel pada Worker PDF (`ParseSchedulePdfJob`)**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 6 (Auto-Registration Master Data pada PDF Schedule Worker - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 6 (Auto-Registration Master Data pada PDF Schedule Worker)  
+**Acuan Spesifikasi:** `MD/PHASE_6_IMPLEMENTATION_PLAN.md` & `MD/NEW_FEATURE_IMPLEMENTATION_PLAN.md` (v4.5)  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 79. Implementasi Fase 6: Auto-Registration Master Data pada PDF Schedule Worker
+
+### 79.1 Ringkasan Perubahan & Tujuan
+Fase 6 mengimplementasikan modul pra-registrasi otomatis (*auto-registration*) untuk entitas Ruangan (`Rooms`), Mata Pelajaran (`Subject`), dan Kelas (`Classes` fallback) langsung dari berkas PDF jadwal FET di dalam antrean worker latar belakang (`ParseSchedulePdfJob`).
+
+Sebelumnya, jika Waka Kurikulum belum mendaftarkan ruangan dan mata pelajaran secara manual sebelum mengunggah PDF, proses pencocokan baris jadwal akan gagal mencocokkan entitas tersebut sehingga mayoritas baris berstatus `unmatched` dan tidak dapat dikonfirmasi ke tabel `schedules`.
+
+Capaian utama pada fase ini meliputi:
+1. **Auto-Create Rooms dengan Kapasitas Default 36**:
+   - Mengekstrak seluruh kode ruangan fisik unik (`ruang_final` dengan fallback `ruang_kelas`).
+   - Melakukan sanitasi nilai kosong dan memeriksa keberadaan via `findRoom()` guna mencegah duplikasi (misal `"12"` vs `"Ruang 12"`).
+   - Mendaftarkan ruangan baru dengan kapasitas default **36**.
+2. **Auto-Create Subjects**:
+   - Mengekstrak nama mata pelajaran unik (`mapel_mentah`).
+   - Memfilter nilai kosong dan placeholder non-data seperti `"-x-"`, `"---"`, `"-"`.
+   - Mendaftarkan mata pelajaran baru ke tabel `subjects` secara idempoten via `findSubject()`.
+3. **Fallback Auto-Create Classes**:
+   - Mengekstrak nama rombel kelas (`kelas_mentah`) sebagai jaring pengaman.
+   - Menggunakan algoritma deteksi tingkat kelas berbasis regex yang selaras dengan Fase 4 (`XII` $\rightarrow$ 12, `XI` $\rightarrow$ 11, `X` $\rightarrow$ 10, angka 10/11/12, fallback 10).
+   - Memeriksa via `findClass()` agar kebal terhadap variasi spasi.
+4. **Reload Koleksi Master Data Sebelum Matching**:
+   - Memuat ulang seluruh koleksi master data dari database (`Classes::all()`, `Subject::all()`, `Rooms::all()`, `User(teacher)->get()`) tepat setelah auto-registration selesai dan sebelum perulangan pencocokan jadwal dimulai.
+   - Menjamin bahwa baris jadwal yang memiliki guru terdaftar langsung mendapatkan status `matched`.
+5. **Transaksional & Pengujian Komprehensif**:
+   - Seluruh proses auto-create dibungkus dalam `DB::transaction()`.
+   - Memperluas `tests/Feature/ParseSchedulePdfJobTest.php` menjadi 6 test cases komprehensif (81 assertions) yang memverifikasi auto-create rooms, pencegahan duplikasi, pengabaian placeholder mapel, deteksi level kelas, dan eksekusi end-to-end PDF parse job saat tabel rooms dan subjects awalnya kosong (0 record).
+
+---
+
+### 79.2 Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `app/Jobs/ParseSchedulePdfJob.php` | Diubah | Menambahkan method `autoRegisterMasterData()`, `autoRegisterRooms()`, `autoRegisterSubjects()`, `autoRegisterClasses()`, serta reload master data sebelum loop matching. |
+| 2 | `tests/Feature/ParseSchedulePdfJobTest.php` | Diubah | Menambahkan 5 skenario test unit & integrasi untuk auto-registration master data (81 assertions, 100% lolos). |
+| 3 | `MD/PHASE_6_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen perencanaan implementasi terstruktur Fase 6. |
+| 4 | `MD/Development.md` | Diubah | Dokumentasi teknis implementasi Fase 6. |
+
+---
+
+### 79.3 Potongan Kode Utama
+
+#### 1. Inisiasi Auto-Registration & Reload Master Data (`ParseSchedulePdfJob.php`)
+```php
+if (!is_array($parseData)) {
+    $import->update(['status' => 'failed']);
+    Log::error('Python Parser Output is not valid JSON array.');
+    return;
+}
+
+// Auto-register Master Data (Rooms, Subjects, Fallback Classes)
+$this->autoRegisterMasterData($parseData);
+
+// Preload / Reload master data to ensure all newly registered entities are in-memory
+$allClasses = Classes::all();
+$allTeachers = User::where('role', 'teacher')->get();
+$allSubjects = Subject::all();
+$allRooms = Rooms::all();
+```
+
+#### 2. Logika Auto-Create Master Data Transaksional
+```php
+public function autoRegisterMasterData(array $parseData): void
+{
+    DB::transaction(function () use ($parseData) {
+        $this->autoRegisterRooms($parseData);
+        $this->autoRegisterSubjects($parseData);
+        $this->autoRegisterClasses($parseData);
+    });
+}
+
+public function autoRegisterRooms(array $parseData): void
+{
+    $existingRooms = Rooms::all();
+
+    $uniqueRooms = collect($parseData)
+        ->map(function ($row) {
+            $code = $row['ruang_final'] ?? $row['ruang_kelas'] ?? null;
+            return $code ? trim((string) $code) : null;
+        })
+        ->filter(fn ($code) => !empty($code))
+        ->unique();
+
+    foreach ($uniqueRooms as $roomCode) {
+        if (!$this->findRoom($existingRooms, $roomCode)) {
+            $newRoom = Rooms::create([
+                'name' => $roomCode,
+                'capacity' => 36,
+            ]);
+            $existingRooms->push($newRoom);
+        }
+    }
+}
+```
+
+---
+
+### 79.4 Hasil Pengujian Otomatis
+
+#### 1. `ParseSchedulePdfJobTest.php`
+```bash
+PASS  Tests\Feature\ParseSchedulePdfJobTest
+✓ parse job executes python parser and populates rows                                   9.82s
+✓ auto register rooms creates rooms with default capacity and prevents duplicates       0.12s
+✓ auto register rooms reuses existing rooms without creating duplicates                 0.12s
+✓ auto register subjects creates subjects and ignores placeholders                      0.12s
+✓ auto register classes detects levels correctly and prevents duplicates                0.12s
+✓ parse job auto registers rooms and subjects when initially empty                      9.48s
+
+Tests:    6 passed (81 assertions)
+Duration: 19.78s
+```
+
+#### 2. Verifikasi Regresi Modul Terkait (Zero-Regression)
+- `ScheduleImportTest`: **9 passed, 31 assertions (0 failures)**
+- `MasterDataPrerequisiteRuleTest`: **11 passed, 73 assertions (0 failures)**
+- `TeacherImportTest`: **15 passed, 72 assertions (0 failures)**
+- `StudentImportTest`: **16 passed, 95 assertions (0 failures)**
+
+---
+
+### 79.5 Kesimpulan & Kesiapan Menuju Fase 7
+
+Fase 6 telah tuntas 100%. Dengan diimplementasikannya auto-registration pada antrean worker, dokumen PDF jadwal FET kini dapat langsung diparsing dan dipetakan ke entitas ruangan serta mata pelajaran tanpa memerlukan entri master data manual sebelumnya. 
+
+Seluruh dependensi fitur baru SCP v4.5 (Fase 1 s.d. Fase 6) kini telah lengkap dan terverifikasi stabil. Sistem siap melangkah ke tahap akhir, yaitu **Fase 7: Pengujian Komprehensif & Verifikasi Zero-Regression**.
