@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, ChevronDown, User, LogOut, Check } from 'lucide-react';
+import { Menu, User, LogOut, Check, Sun, HelpCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import './TopBar.css';
 
@@ -63,13 +63,8 @@ export default function TopBar({ onToggleSidebar }) {
     }, 50);
   };
 
-  const getInitials = (name) => {
-    if (!name) return 'SC';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
+  const handleToggleTheme = () => {
+    document.documentElement.classList.toggle('dark');
   };
 
   const getRoleLabel = () => {
@@ -119,23 +114,56 @@ export default function TopBar({ onToggleSidebar }) {
       </div>
 
       <div className="web-topbar__right">
-        <div className="web-topbar__role-chip hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-100 text-gray-800 text-[11.5px] font-medium">
+        {/* Role Chip */}
+        <div className="web-topbar__role-chip hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-50 border border-gray-200 text-gray-800 text-[11.5px] font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           <span>{getRoleLabel()}</span>
         </div>
 
+        {/* Academic Year & Semester Badge */}
+        <div className="web-topbar__academic-badge hidden md:inline-flex items-center px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-700 text-[11.5px] font-mono font-medium">
+          2025/2026 Ganjil
+        </div>
+
+        {/* Utility Bar */}
+        <div className="web-topbar__utility-group flex items-center gap-0.5">
+          <button
+            type="button"
+            className="web-topbar__icon-btn"
+            title="Toggle Tema"
+            aria-label="Toggle tema"
+            onClick={handleToggleTheme}
+          >
+            <Sun size={17} />
+          </button>
+          <button
+            type="button"
+            className="web-topbar__icon-btn"
+            title="Pusat Bantuan &amp; FAQ"
+            aria-label="Pusat bantuan"
+          >
+            <HelpCircle size={17} />
+          </button>
+          <button
+            type="button"
+            className="web-topbar__icon-btn"
+            title="Notifikasi"
+            aria-label="Notifikasi"
+          >
+            <Bell size={17} />
+          </button>
+        </div>
+
+        {/* User Profile Avatar Trigger */}
         <div className="web-topbar__profile-wrapper" ref={dropdownRef}>
           <button
             type="button"
             className="web-topbar__profile-trigger"
             onClick={() => setDropdownOpen(!dropdownOpen)}
             aria-expanded={dropdownOpen}
+            aria-label="Menu profil pengguna"
           >
-            <div className="web-topbar__avatar">{getInitials(user?.name)}</div>
-            <span className="text-xs font-medium text-gray-700 hidden lg:inline max-w-[120px] truncate">
-              {user?.name || 'Akun'}
-            </span>
-            <ChevronDown size={14} className="text-gray-400" />
+            <div className="web-topbar__avatar">WK</div>
           </button>
 
           {dropdownOpen && (

@@ -4,14 +4,14 @@
    ========================================================================== */
 
 .student-home {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 3.5rem;
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 @media (min-width: 640px) {
   .student-home {
-    padding: 2rem 1.5rem 4rem;
+    padding: 24px 32px;
   }
 }
 

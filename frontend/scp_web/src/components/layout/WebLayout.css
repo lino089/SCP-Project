@@ -47,7 +47,8 @@
 .web-app-main {
   flex: 1;
   min-width: 0;
-  background-color: #F8FAFC;
+  background-color: #FFFFFF;
   min-height: calc(100vh - 56px);
   overflow-y: auto;
+  box-sizing: border-box;
 }

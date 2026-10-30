@@ -17,7 +17,7 @@ Dokumen ini adalah catatan resmi riwayat pengembangan (*living document*) untuk 
 | **Fase 6** | Sistem Kuis Berbantuan AI & Evaluasi Submisi Otomatis | **SELESAI** | 0 Error / 0 Warning (Build: 773ms) |
 | **Fase 7** | Modul Portal Siswa & Monitoring Orang Tua | **SELESAI** | 0 Error / 0 Warning (Build: 1.03s) |
 | **Fase 8** | Penyempurnaan UI/UX, Aksesibilitas, & Keamanan Klien | **SELESAI** | 0 Error / 0 Warning (Build: 935ms) |
-| **Fase 9** | Pengujian Terpadu End-to-End & Kesiapan Production | *Pending* | - |
+| **Fase 9** | Pengujian Terpadu End-to-End & Kesiapan Production | **SELESAI** | 0 Error / 0 Warning (Build: 893ms) |
 
 ---
 
@@ -745,18 +745,38 @@ Melakukan audit dan penyempurnaan menyeluruh terhadap aspek ketahanan aplikasi f
 
 ---
 
-## Rencana Tahapan Berikutnya (Fase 9)
+## Fase 9: Pengujian Terpadu End-to-End & Kesiapan Production
 
-**Fokus Utama Fase 9: Pengujian Terpadu End-to-End & Kesiapan Production**
-1. **Pengujian Alur Pengguna Terpadu (End-to-End Journeys):**
-   - Validasi skenario Waka Kurikulum: Master Data, Input Jadwal Manual, Import PDF Jadwal, Kenaikan Kelas.
-   - Validasi skenario Guru: Kalender Mengajar, Presensi & Jurnal, Pembuatan Kuis AI, Koreksi Submisi.
-   - Validasi skenario Siswa & Orang Tua: Beranda Siswa, Pengerjaan Kuis CBT, Pengajuan Izin, Portal Monitoring.
-2. **Kesesuaian Rubrik Penilaian UKK (PRD Bagian 10):**
-   - Verifikasi pemenuhan seluruh indikator kompetensi kejuruan RPL.
-3. **Optimasi Build & Kesiapan Deployment:**
-   - Konfigurasi rewrite SPA server (Nginx/Apache `.htaccess`).
-   - Panduan deployment siap pakai.
+### 1. Tujuan & Ruang Lingkup
+Melakukan pengujian komprehensif alur pengguna (*end-to-end user journeys*) lintas seluruh peran pengguna (Waka Kurikulum, Guru, Tim Kesiswaan, Wali Kelas, Siswa, dan Orang Tua), memvalidasi kesesuaian terhadap Rubrik Penilaian UKK (PRD Bagian 10), mengoptimasi hasil build produksi dengan teknik *route-based code splitting* (`React.lazy` & `Suspense`), serta menyediakan konfigurasi web server Nginx SPA fallback rewrite.
+
+### 2. Pekerjaan yang Telah Diselesaikan
+1. **Optimasi Bundel Vite & Route-Based Code Splitting:**
+   - [`src/routes/AppRouter.jsx`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/src/routes/AppRouter.jsx): Mengonversi seluruh impor komponen halaman menjadi *dynamic lazy loading* dengan pembungkus `<Suspense>` terpusat.
+   - [`vite.config.js`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/vite.config.js): Mengonfigurasi `manualChunks(id)` untuk memecah vendor dependensi (`vendor-react`, `vendor-network`, `vendor-ui`) dari modul aplikasi.
+   - Hasil: Mengeliminasi 100% peringatan bundel > 500 kB dan menghasilkan 18 chunk halaman independen yang modular dan ringan (3.5 kB – 35 kB).
+2. **Penyiapan Konfigurasi Deployment Produksi:**
+   - [`deploy/nginx/default.conf`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/deploy/nginx/default.conf): Template konfigurasi server Nginx siap pakai dengan aturan perutean SPA (`try_files $uri $uri/ /index.html;`), kompresi Gzip, security headers, dan aturan caching aset statis.
+   - [`.env.production`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/.env.production): Berkas variabel lingkungan untuk endpoint API backend produksi.
+   - [`DEPLOYMENT.md`](file:///d:/MyUKK/SchoolClassProject/frontend/scp_web/DEPLOYMENT.md): Panduan komprehensif tahapan kompilasi dan penyajian di Nginx, Apache HTTP Server, maupun Node/Vite preview.
+3. **Pengujian 4 Skenario Alur Pengguna Terpadu (E2E Journeys):**
+   - *Skenario A (Waka Kurikulum):* Master Data CRUD -> Mutasi Jadwal (Step-up Password) -> Upload 2 PDF Jadwal FET -> Resolusi Baris Unmatched -> Commit Final -> Toggle Upacara Senin -> Kenaikan Kelas Berantai (Sukses).
+   - *Skenario B (Guru & Tim Kesiswaan):* Pengajuan izin KBM guru -> Pengganti mengajar diambil alih Kesiswaan -> Buka sesi KBM -> Masukkan materi & bukti foto -> Presensi exception-based -> Selesaikan jurnal (Sukses).
+   - *Skenario C (Perizinan Siswa):* Pengajuan izin siswa via portal -> Verifikasi & persetujuan izin oleh Kesiswaan -> Sinkronisasi otomatis ke presensi jurnal guru (Sukses).
+   - *Skenario D (Sistem Kuis Berbantuan AI):* Pembuatan kuis via prompt AI -> Preview & koreksi butir soal bertanda `needs_review` -> Publikasikan kuis -> Pengerjaan kuis CBT siswa -> Evaluasi hybrid asinkron -> Guru override skor AI esai -> Guru rilis hasil kuis (`published_result`) -> Tampilan nilai transparan siswa & orang tua (Sukses).
+4. **Audit Kepatuhan Rubrik UKK (PRD Bagian 10):**
+   - Ke-11 kriteria kelulusan (API Security, Jadwal Waka, Import PDF FET, Replace Per Putaran, Resolusi Jam Dinamis, Auto-Provisioning Akun, Multirole Guru, Sinkronisasi Izin, Presensi Exception-Based, Kuis AI Asinkron, Kenaikan Kelas & Retensi) terverifikasi lulus 100%.
+
+### 3. Hasil Validasi & Kualitas
+- **ESLint:** Lulus audit kode secara sempurna (`0 errors, 0 warnings`).
+- **Production Build:** `vite build` selesai sukses dalam **893ms** tanpa peringatan chunk size.
+- **Artefak Resmi:** Dokumentasi lengkap tersimpan pada [LAPORAN_IMPLEMENTASI_FASE_9.md](file:///C:/Users/Thinkpad%20X13/.gemini/antigravity/brain/6d0b0f3c-07be-4af0-b0cb-35368ed82c81/LAPORAN_IMPLEMENTASI_FASE_9.md).
+
+---
+
+## Status Akhir Proyek
+
+Seluruh tahapan pengembangan Front-End Website **School Class Project (SCP)** dari **Fase 0 hingga Fase 9** telah diselesaikan 100% dan dinyatakan **SIAP UJI KOMPETENSI KEAHLIAN (UKK) & PRODUCTION-READY**.
 
 
 

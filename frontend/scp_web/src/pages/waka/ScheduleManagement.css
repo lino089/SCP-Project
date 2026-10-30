@@ -1,10 +1,8 @@
 /* ScheduleManagement.css - Exness Clean Precision Styling */
 
 .schedule-page {
-  max-width: 1152px;
-  margin: 0 auto;
-  padding: 20px 16px;
-  background-color: #FFFFFF;
+  width: 100%;
+  padding: 16px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -13,13 +11,7 @@
 
 @media (min-width: 640px) {
   .schedule-page {
-    padding: 24px;
-  }
-}
-
-@media (min-width: 768px) {
-  .schedule-page {
-    padding: 32px;
+    padding: 24px 32px;
   }
 }
 

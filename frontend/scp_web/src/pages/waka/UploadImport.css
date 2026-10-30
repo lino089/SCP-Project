@@ -1,22 +1,14 @@
 /* UploadImport.css - Exness Clean Flat Precision Styling */
 
 .upload-container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 20px 16px;
-  background-color: #FFFFFF;
+  width: 100%;
+  padding: 16px;
   box-sizing: border-box;
 }
 
 @media (min-width: 640px) {
   .upload-container {
-    padding: 24px;
-  }
-}
-
-@media (min-width: 768px) {
-  .upload-container {
-    padding: 32px;
+    padding: 24px 32px;
   }
 }
 

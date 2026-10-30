@@ -67,42 +67,100 @@
 .web-topbar__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.web-topbar__role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.web-topbar__academic-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  font-size: 11.5px;
+  font-family: var(--font-family-mono);
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.web-topbar__utility-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.web-topbar__icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.web-topbar__icon-btn:hover {
+  background-color: #F1F5F9;
+  color: #0F172A;
 }
 
 .web-topbar__profile-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .web-topbar__profile-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  justify-content: center;
+  padding: 0;
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  border-radius: 50%;
+  transition: opacity 0.15s ease;
 }
 
 .web-topbar__profile-trigger:hover {
-  background-color: #F3F4F6;
-  border-color: #E5E7EB;
+  opacity: 0.85;
 }
 
 .web-topbar__avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background-color: #0F172A;
-  color: #FFFFFF;
+  background-color: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  color: #0F172A;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   font-family: var(--font-family-mono);
+  letter-spacing: -0.02em;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .web-topbar__dropdown {
