@@ -5657,3 +5657,282 @@ Fase 1 telah selesai 100% sesuai spesifikasi `MD/NewFeature.md` dan `MD/FASE_1_I
 - **Fondasi Streaming**: `spatie/simple-excel` telah terintegrasi dengan baik dan terbukti andal dalam streaming data tanpa konsumsi memori berlebih.
 - **Master Data Guru**: Telah siap menerima input massal dengan pengamanan integritas data NIP, hash password, dan penanda `fet_staff_id`.
 - **Langkah Selanjutnya**: Sistem telah siap untuk dilanjutkan ke **Fase 2 (Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat)**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 2 (Skema Basis Data & Penyelarasan Model Siswa - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 2 (Skema Basis Data & Penyelarasan Model Siswa - Kolom Gender & NISN)  
+**Acuan Spesifikasi:** `MD/PHASE_2_IMPLEMENTATION_PLAN.md` & `MD/NewFeature.md` (v4.5)  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 75. Implementasi Fase 2: Skema Basis Data & Penyelarasan Model Siswa
+
+### 75.1 Ringkasan Perubahan & Tujuan
+Fase 2 bertujuan untuk menyelaraskan skema database `users` dan model Eloquent `User.php` agar siap menerima data jenis kelamin (`gender`) dan Nomor Induk Siswa Nasional (`nisn`) sesuai spesifikasi kontrak template Excel siswa pada inisiatif SCP v4.5.
+
+Tujuan utama yang telah dicapai meliputi:
+1. **Migration Skema Tabel `users`**:
+   - Menambahkan kolom `gender` berjenis `enum('L', 'P')` yang bersifat nullable.
+   - Menambahkan kolom `nisn` berjenis `string(20)` yang bersifat nullable dan unique.
+   - Menyediakan method `down()` yang membersihkan unique index terlebih dahulu (`$table->dropUnique(['nisn'])`) sebelum menghapus kolom (`$table->dropColumn(['gender', 'nisn'])`), menjamin kompatibilitas penuh baik pada PostgreSQL maupun SQLite.
+2. **Penyelarasan Model Eloquent `User.php`**:
+   - Menambahkan `'gender'` dan `'nisn'` ke dalam atribut PHP 8 `#[Fillable([...])]` sehingga aman dari *mass-assignment protection*.
+3. **Preservasi Nilai Teks & Multi-Null Unique Constraint**:
+   - NISN disimpan sebagai tipe teks murni (`VARCHAR(20)`) guna mencegah hilangnya angka nol di awal (*leading zero*).
+   - Indeks unik nullable mengizinkan multiple akun non-siswa (Waka, Guru, Orang Tua) maupun siswa tanpa NISN untuk bernilai `NULL` tanpa memicu benturan constraint unik.
+
+---
+
+### 75.2 Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `database/migrations/2026_10_30_000001_add_gender_and_nisn_to_users_table.php` | Dibuat | Migration penambahan kolom `gender` dan `nisn` beserta mekanisme rollback bersih. |
+| 2 | `app/Models/User.php` | Diubah | Mendaftarkan `'gender'` dan `'nisn'` ke dalam atribut `#[Fillable]`. |
+| 3 | `tests/Feature/UserGenderAndNisnSchemaTest.php` | Dibuat | Automated feature test suite mencakup 7 skenario pengujian skema, leading zero, unique constraint, mass-assignment, dan reversibilitas rollback. |
+| 4 | `MD/PHASE_2_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen perencanaan teknis terstruktur Fase 2. |
+| 5 | `MD/Development.md` | Diubah | Dokumentasi pelaksanaan implementasi Fase 2. |
+
+---
+
+### 75.3 Potongan Kode Utama
+
+#### Migration (`database/migrations/2026_10_30_000001_add_gender_and_nisn_to_users_table.php`)
+```php
+public function up(): void
+{
+    Schema::table('users', function (Blueprint $table) {
+        $table->enum('gender', ['L', 'P'])->nullable()->after('role');
+        $table->string('nisn', 20)->nullable()->unique()->after('nis_nip');
+    });
+}
+
+public function down(): void
+{
+    Schema::table('users', function (Blueprint $table) {
+        $table->dropUnique(['nisn']);
+        $table->dropColumn(['gender', 'nisn']);
+    });
+}
+```
+
+#### Model `User.php` (`app/Models/User.php`)
+```php
+#[Fillable([
+    'name',
+    'email',
+    'email_verified_at',
+    'password',
+    'role',
+    'nis_nip',
+    'gender',
+    'nisn',
+    'must_change_password',
+    'class_id',
+    'linked_student_id',
+    'fet_staff_id',
+    'google_id',
+    'phone_number',
+    'graduation_date',
+    'is_held_back'
+])]
+```
+
+---
+
+### 75.4 Hasil Verifikasi & Pengujian Otomatis
+
+Pengujian dilakukan melalui [UserGenderAndNisnSchemaTest.php](file:///d:/MyUKK/SchoolClassProject/scp/tests/Feature/UserGenderAndNisnSchemaTest.php) dengan **7 test cases** dan **28 assertions**:
+
+| Kasus Pengujian | Deskripsi & Validasi | Status |
+|---|---|---|
+| `test_users_table_has_gender_and_nisn_columns` | Memastikan kolom `gender` dan `nisn` terdeteksi di tabel `users`. | **PASSED** |
+| `test_user_can_be_created_with_male_gender_and_leading_zero_nisn` | Memastikan siswa laki-laki (`L`) dan format NISN berawalan angka nol (`0012345678`) tersimpan utuh tanpa terpotong. | **PASSED** |
+| `test_user_can_be_created_with_female_gender` | Memastikan siswa perempuan (`P`) tersimpan dengan benar di basis data. | **PASSED** |
+| `test_nisn_must_be_unique_for_non_null_values` | Memastikan pembuatan siswa kedua dengan NISN yang sama ditolak oleh database (`QueryException`). | **PASSED** |
+| `test_multiple_users_can_have_null_nisn_and_gender` | Memastikan multi-akun dengan nilai `null` pada `nisn` dan `gender` dapat disimpan berdampingan tanpa benturan unique constraint. | **PASSED** |
+| `test_mass_assignment_protection_allows_gender_and_nisn` | Memastikan mutasi via `User::create` dan `$user->update` berhasil menyimpan `gender` dan `nisn` tanpa terkena mass-assignment filter. | **PASSED** |
+| `test_migration_can_be_rolled_back_and_reapplied_cleanly` | Memastikan perintah rollback (`migrate:rollback --step=1`) dan re-apply (`migrate`) berjalan bersih tanpa error constraint/index. | **PASSED** |
+
+#### Hasil Eksekusi Test Runner:
+```bash
+PASS  Tests\Feature\UserGenderAndNisnSchemaTest
+✓ users table has gender and nisn columns                                   0.05s
+✓ user can be created with male gender and leading zero nisn                0.18s
+✓ user can be created with female gender                                    0.13s
+✓ nisn must be unique for non null values                                   0.14s
+✓ multiple users can have null nisn and gender                              0.15s
+✓ mass assignment protection allows gender and nisn                         0.14s
+✓ migration can be rolled back and reapplied cleanly                        0.03s
+
+Tests:    7 passed (28 assertions)
+Duration: 0.81s
+```
+
+Verifikasi regresi juga dijalankan pada suite terkait:
+- `StudentManagementTest`: **6 passed, 27 assertions (0 failures)**
+- `TeacherImportTest`: **8 passed, 41 assertions (0 failures)**
+- `ModelStandardizationTest`: **2 passed, 4 assertions (0 failures)**
+
+---
+
+### 75.5 Kesimpulan & Kesiapan Menuju Fase Selanjutnya
+
+Fase 2 telah diselesaikan 100% dengan integritas basis data dan model Eloquent yang terverifikasi penuh. Skema basis data kini telah siap untuk menampung aliran data siswa pada fase berikutnya (Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat).
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 3 (Modul Impor Guru & Auto-Provisioning Akun - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 3 (Modul Impor Guru & Auto-Provisioning Akun)  
+**Acuan Spesifikasi:** `MD/PHASE_3_IMPLEMENTATION_PLAN.md` & `MD/NewFeature.md` (v4.5)  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 76. Implementasi Fase 3: Modul Impor Guru & Auto-Provisioning Akun
+
+### 76.1 Ringkasan Perubahan & Tujuan
+Fase 3 menyempurnakan dan memfinalisasi modul impor guru massal dari berkas spreadsheet Excel (`.xlsx`) ke sistem backend SCP v4.5. Fitur ini dirancang untuk memangkas proses manual pendaftaran guru oleh Waka Kurikulum dan menyiapkan data staf pengajar lengkap dengan `fet_staff_id` sebagai prasyarat pemrosesan jadwal FET.
+
+Capaian utama pada fase ini meliputi:
+1. **Dukungan Berkas Template Fisik & Streaming Fallback**:
+   - Template resmi `guru_import_template.xlsx` tersedia di direktori `storage/app/templates/guru_import_template.xlsx` dengan header: `nip`, `name`, `fet_staff_id`, `email`, dan `phone_number`.
+   - Method `TeacherController::downloadTemplate()` menyajikan berkas fisik jika tersedia di storage atau mengalirkan secara dinamis (*streamDownload*) jika berkas fisik belum dibuat.
+2. **Eliminasi Celah In-Sheet Duplicate Email**:
+   - Menambahkan pelacakan `$seenEmails` di dalam loop validasi baris Excel `TeacherController::import()`.
+   - Mengeliminasi potensi HTTP 500 error akibat pelanggaran constraint unik database ketika terdapat duplikasi email dalam berkas yang sama, menggantikannya dengan respons HTTP 422 JSON terstruktur.
+3. **Penyelarasan Kebijakan Email Opsional**:
+   - Jika guru tidak memiliki email di berkas Excel, field disimpan sebagai `null` (sesuai arahan pengguna, guru dapat melengkapi email aktifnya sendiri melalui profil).
+   - Jika email diisi, format divalidasi via `filter_var` dan keunikannya diperiksa terhadap berkas maupun database.
+4. **Pengujian Komprehensif (15 Test Cases)**:
+   - Memperluas `tests/Feature/TeacherImportTest.php` menjadi 15 test cases yang mencakup seluruh skenario otorisasi, download template, validasi format, batas ukuran 5 MB, baris kosong, in-sheet duplicate (NIP, FET ID, email), database collision (NIP, FET ID), dan pembatalan transaksi (*all-or-nothing rollback*).
+
+---
+
+### 76.2 Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `storage/app/templates/guru_import_template.xlsx` | Dibuat | Berkas template spreadsheet resmi untuk impor guru (5 kolom). |
+| 2 | `app/Http/Controllers/API/TeacherController.php` | Diubah | Mendukung download dari storage/templates, validasi in-sheet duplicate email, dan sanitasi input. |
+| 3 | `tests/Feature/TeacherImportTest.php` | Diubah | Memperluas cakupan pengujian menjadi 15 test cases dengan 72 assertions (100% lolos). |
+| 4 | `MD/PHASE_3_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen perencanaan teknis terstruktur Fase 3. |
+| 5 | `MD/Development.md` | Diubah | Dokumentasi implementasi Fase 3. |
+
+---
+
+### 76.3 Potongan Kode Utama
+
+#### 1. Download Template (`TeacherController::downloadTemplate`)
+```php
+public function downloadTemplate(): \Symfony\Component\HttpFoundation\Response
+{
+    $templatePath = storage_path('app/templates/guru_import_template.xlsx');
+    if (!file_exists($templatePath)) {
+        $templatePath = storage_path('app/templates/template_import_guru.xlsx');
+    }
+
+    if (file_exists($templatePath)) {
+        return response()->download($templatePath, 'guru_import_template.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    return response()->streamDownload(function () {
+        $writer = SimpleExcelWriter::create('php://output', 'xlsx');
+        $writer->addRows([
+            [
+                'nip' => '198001012010011002',
+                'name' => 'Budi Santoso, S.Pd.',
+                'fet_staff_id' => '1',
+                'email' => 'budi.santoso@sekolah.sch.id',
+                'phone_number' => '081234567890',
+            ],
+            [
+                'nip' => '198502022015022003',
+                'name' => 'Dewi Lestari, M.Pd.',
+                'fet_staff_id' => '14',
+                'email' => 'dewi.lestari@sekolah.sch.id',
+                'phone_number' => '082345678901',
+            ],
+        ]);
+        $writer->close();
+    }, 'guru_import_template.xlsx', [
+        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+}
+```
+
+#### 2. Deteksi Duplikasi Email In-Sheet (`TeacherController::import`)
+```php
+// Validasi Email jika diisi
+if ($rawEmail !== '') {
+    if (!filter_var($rawEmail, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = [
+            'row' => $rowNumber,
+            'attribute' => 'email',
+            'message' => "Format email '{$rawEmail}' tidak valid.",
+        ];
+    } elseif (isset($seenEmails[$rawEmail])) {
+        $errors[] = [
+            'row' => $rowNumber,
+            'attribute' => 'email',
+            'message' => "Email '{$rawEmail}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenEmails[$rawEmail]}).",
+        ];
+    } elseif (User::where('email', $rawEmail)->whereNull('deleted_at')->exists()) {
+        $errors[] = [
+            'row' => $rowNumber,
+            'attribute' => 'email',
+            'message' => "Email '{$rawEmail}' sudah terdaftar di sistem.",
+        ];
+    } else {
+        $seenEmails[$rawEmail] = $rowNumber;
+    }
+}
+```
+
+---
+
+### 76.4 Hasil Pengujian Otomatis (`TeacherImportTest.php`)
+
+```bash
+PASS  Tests\Feature\TeacherImportTest
+✓ guest cannot download teacher template or import                         1.24s
+✓ non waka cannot download teacher template or import                      0.15s
+✓ waka can download teacher import template                                0.12s
+✓ waka can import valid teachers excel                                     0.28s
+✓ import fails when file is missing or invalid extension                   0.12s
+✓ import fails when file exceeds max size                                  0.13s
+✓ import fails when header is invalid                                      0.14s
+✓ import fails when excel has no data rows                                 0.13s
+✓ import fails when required fields are empty                              0.15s
+✓ import fails and rollbacks on in sheet duplicate nip                     0.16s
+✓ import fails and rollbacks on in sheet duplicate fet staff id            0.15s
+✓ import fails and rollbacks on in sheet duplicate email                   0.15s
+✓ import fails and rollbacks on database nip collision                     0.16s
+✓ import fails and rollbacks on database fet staff id collision            0.15s
+✓ import fails on invalid email format                                     0.14s
+
+Tests:    15 passed (72 assertions)
+Duration: 3.42s
+```
+
+Verifikasi regresi seluruh suite terkait:
+- `TeacherManagementTest`: **9 passed, 31 assertions (0 failures)**
+- `UserGenderAndNisnSchemaTest`: **7 passed, 28 assertions (0 failures)**
+
+---
+
+### 76.5 Kesimpulan & Kesiapan Menuju Fase 4
+
+Modul Impor Guru & Auto-Provisioning Akun telah selesai 100% dengan standar keamanan, integritas data, dan pengujian menyeluruh. Sistem kini siap untuk melangkah ke **Fase 4: Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat**.

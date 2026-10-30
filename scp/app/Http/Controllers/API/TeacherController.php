@@ -20,8 +20,19 @@ class TeacherController extends Controller
     /**
      * Mengunduh berkas template Excel untuk impor guru.
      */
-    public function downloadTemplate(): StreamedResponse
+    public function downloadTemplate(): \Symfony\Component\HttpFoundation\Response
     {
+        $templatePath = storage_path('app/templates/guru_import_template.xlsx');
+        if (!file_exists($templatePath)) {
+            $templatePath = storage_path('app/templates/template_import_guru.xlsx');
+        }
+
+        if (file_exists($templatePath)) {
+            return response()->download($templatePath, 'guru_import_template.xlsx', [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        }
+
         return response()->streamDownload(function () {
             $writer = SimpleExcelWriter::create('php://output', 'xlsx');
 
@@ -102,6 +113,7 @@ class TeacherController extends Controller
         $errors = [];
         $seenNips = [];
         $seenFetStaffIds = [];
+        $seenEmails = [];
         $validTeachers = [];
 
         foreach ($rows as $row) {
@@ -182,12 +194,20 @@ class TeacherController extends Controller
                         'attribute' => 'email',
                         'message' => "Format email '{$rawEmail}' tidak valid.",
                     ];
+                } elseif (isset($seenEmails[$rawEmail])) {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'email',
+                        'message' => "Email '{$rawEmail}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenEmails[$rawEmail]}).",
+                    ];
                 } elseif (User::where('email', $rawEmail)->whereNull('deleted_at')->exists()) {
                     $errors[] = [
                         'row' => $rowNumber,
                         'attribute' => 'email',
                         'message' => "Email '{$rawEmail}' sudah terdaftar di sistem.",
                     ];
+                } else {
+                    $seenEmails[$rawEmail] = $rowNumber;
                 }
             }
 

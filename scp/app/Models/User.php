@@ -21,6 +21,8 @@ use Laravel\Sanctum\HasApiTokens;
     'password',
     'role',
     'nis_nip',
+    'gender',
+    'nisn',
     'must_change_password',
     'class_id',
     'linked_student_id',

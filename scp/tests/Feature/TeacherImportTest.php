@@ -51,11 +51,16 @@ class TeacherImportTest extends TestCase
         ]);
     }
 
-    private function createTempExcel(array $rows): string
+    private function createTempExcel(array $rows, ?array $headers = null): string
     {
         $tempPath = tempnam(sys_get_temp_dir(), 'test_teacher_') . '.xlsx';
         $writer = SimpleExcelWriter::create($tempPath);
-        $writer->addRows($rows);
+        if ($headers !== null) {
+            $writer->addHeader($headers);
+        }
+        if (!empty($rows)) {
+            $writer->addRows($rows);
+        }
         $writer->close();
 
         return $tempPath;
@@ -173,6 +178,21 @@ class TeacherImportTest extends TestCase
             ->assertJsonValidationErrors(['file']);
     }
 
+    public function test_import_fails_when_file_exceeds_max_size(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // 5121 KB exceeds max 5120 KB limit
+        $fakeHugeFile = UploadedFile::fake()->create('guru_huge.xlsx', 5121, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $fakeHugeFile,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['file']);
+    }
+
     public function test_import_fails_when_header_is_invalid(): void
     {
         Sanctum::actingAs($this->waka);
@@ -204,7 +224,72 @@ class TeacherImportTest extends TestCase
         }
     }
 
-    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_nip_or_fet_staff_id(): void
+    public function test_import_fails_when_excel_has_no_data_rows(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([], ['nip', 'name', 'fet_staff_id', 'email', 'phone_number']);
+
+        $file = new UploadedFile($filePath, 'guru_empty_rows.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Berkas Excel tidak memuat data guru.',
+            ]);
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_when_required_fields_are_empty(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '',
+                'name' => 'Guru Tanpa NIP',
+                'fet_staff_id' => '',
+            ],
+            [
+                'nip' => '199901012022011001',
+                'name' => '',
+                'fet_staff_id' => 'FET99',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_empty_fields.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $errors = $response->json('errors');
+        $this->assertNotEmpty($errors);
+
+        $attributes = array_column($errors, 'attribute');
+        $this->assertContains('nip', $attributes);
+        $this->assertContains('name', $attributes);
+        $this->assertContains('fet_staff_id', $attributes);
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_nip(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -221,7 +306,7 @@ class TeacherImportTest extends TestCase
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'guru_duplicate.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'guru_duplicate_nip.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/teachers/import', [
             'file' => $file,
@@ -238,6 +323,90 @@ class TeacherImportTest extends TestCase
 
         // Rollback: Guru Satu should NOT be inserted into database
         $this->assertNull(User::where('nis_nip', '199001012020011005')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_fet_staff_id(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Guru Satu',
+                'fet_staff_id' => 'SAME_FET_ID',
+            ],
+            [
+                'nip' => '199002022020022006',
+                'name' => 'Guru Dua',
+                'fet_staff_id' => 'SAME_FET_ID', // Duplicate FET Staff ID in row 3
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_duplicate_fet.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals(3, $response->json('errors.0.row'));
+        $this->assertEquals('fet_staff_id', $response->json('errors.0.attribute'));
+
+        // Rollback: no records inserted
+        $this->assertNull(User::where('nis_nip', '199001012020011005')->first());
+        $this->assertNull(User::where('nis_nip', '199002022020022006')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_email(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Guru Satu',
+                'fet_staff_id' => 'FET01',
+                'email' => 'duplicate.email@sekolah.sch.id',
+            ],
+            [
+                'nip' => '199002022020022006',
+                'name' => 'Guru Dua',
+                'fet_staff_id' => 'FET02',
+                'email' => 'duplicate.email@sekolah.sch.id', // Duplicate email in row 3
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_duplicate_email.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals(3, $response->json('errors.0.row'));
+        $this->assertEquals('email', $response->json('errors.0.attribute'));
+
+        // Rollback: no records inserted
+        $this->assertNull(User::where('nis_nip', '199001012020011005')->first());
+        $this->assertNull(User::where('nis_nip', '199002022020022006')->first());
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -262,7 +431,7 @@ class TeacherImportTest extends TestCase
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'guru_collision.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'guru_collision_nip.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/teachers/import', [
             'file' => $file,
@@ -279,6 +448,74 @@ class TeacherImportTest extends TestCase
 
         // Rollback: Guru Baru should NOT be inserted into database
         $this->assertNull(User::where('nis_nip', '199505052020011010')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_and_rollbacks_on_database_fet_staff_id_collision(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // $this->teacher already exists with fet_staff_id = 'BS01'
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199505052020011010',
+                'name' => 'Guru Baru',
+                'fet_staff_id' => 'BS01', // Collides with existing fet_staff_id in DB
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_collision_fet.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals(2, $response->json('errors.0.row'));
+        $this->assertEquals('fet_staff_id', $response->json('errors.0.attribute'));
+
+        // Rollback
+        $this->assertNull(User::where('nis_nip', '199505052020011010')->first());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_fails_on_invalid_email_format(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $filePath = $this->createTempExcel([
+            [
+                'nip' => '199001012020011005',
+                'name' => 'Guru Email Salah',
+                'fet_staff_id' => 'FET99',
+                'email' => 'invalid-email-format',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'guru_invalid_email.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/teachers/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+            ]);
+
+        $this->assertEquals('email', $response->json('errors.0.attribute'));
 
         if (file_exists($filePath)) {
             @unlink($filePath);
