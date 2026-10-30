@@ -93,6 +93,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/teachers/{id}/assignments/{assignment_id}', [TeacherController::class, 'revokeRole']);
 
         // 9.3 Master Data Students & Hold-Back
+        Route::get('/students/import-template', [StudentController::class, 'downloadTemplate']);
+        Route::post('/students/import', [StudentController::class, 'import']);
         Route::post('/students', [StudentController::class, 'store']);
         Route::put('/students/{id}', [StudentController::class, 'update']);
         Route::delete('/students/{id}', [StudentController::class, 'destroy']);

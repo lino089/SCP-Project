@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Classes;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,9 +11,357 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Spatie\SimpleExcel\SimpleExcelReader;
+use Spatie\SimpleExcel\SimpleExcelWriter;
+use Symfony\Component\HttpFoundation\Response;
 
 class StudentController extends Controller
 {
+    /**
+     * Mengunduh berkas template Excel untuk impor siswa.
+     */
+    public function downloadTemplate(): Response
+    {
+        $templatePath = storage_path('app/templates/template_import_siswa.xlsx');
+        if (!file_exists($templatePath)) {
+            $templatePath = storage_path('app/templates/siswa_import_template.xlsx');
+        }
+
+        if (file_exists($templatePath)) {
+            return response()->download($templatePath, 'siswa_import_template.xlsx', [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        }
+
+        return response()->streamDownload(function () {
+            $writer = SimpleExcelWriter::create('php://output', 'xlsx');
+
+            $writer->addRows([
+                [
+                    'nis' => '12045',
+                    'name' => 'Ahmad Fauzan Pratama',
+                    'class_name' => 'X RPL 1',
+                    'gender' => 'L',
+                    'nisn' => '0081234567',
+                    'parent_name' => 'Bambang Pratama',
+                    'parent_phone' => '081223344556',
+                ],
+                [
+                    'nis' => '12046',
+                    'name' => 'Anisa Rahmawati',
+                    'class_name' => 'X RPL 1',
+                    'gender' => 'P',
+                    'nisn' => '0089876543',
+                    'parent_name' => 'Siti Aminah',
+                    'parent_phone' => '081334455667',
+                ],
+                [
+                    'nis' => '11580',
+                    'name' => 'Budi Santoso',
+                    'class_name' => 'XI TKJ 2',
+                    'gender' => 'L',
+                    'nisn' => '0071122334',
+                    'parent_name' => 'Joko Santoso',
+                    'parent_phone' => '085712345678',
+                ],
+            ]);
+
+            $writer->close();
+        }, 'siswa_import_template.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Mengimpor data siswa dan auto-create kelas dari berkas Excel (.xlsx).
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'mimes:xlsx',
+                'max:5120',
+            ],
+        ], [
+            'file.required' => 'Berkas Excel siswa wajib diunggah.',
+            'file.mimes' => 'Berkas harus berupa spreadsheet dengan ekstensi .xlsx.',
+            'file.max' => 'Ukuran berkas tidak boleh melebihi 5 MB.',
+        ]);
+
+        $uploadedFile = $request->file('file');
+        $reader = SimpleExcelReader::create($uploadedFile->getRealPath())->trimHeaderRow()->headersToSnakeCase();
+        $headers = $reader->getHeaders();
+
+        if (empty($headers)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Berkas Excel tidak memuat data siswa atau header kosong.',
+                'errors' => null,
+            ], 422);
+        }
+
+        $requiredHeaders = ['nis', 'name', 'class_name', 'gender'];
+        $missingHeaders = array_diff($requiredHeaders, $headers);
+
+        if (!empty($missingHeaders)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format berkas tidak valid. Kolom header ' . implode(', ', $missingHeaders) . ' wajib tersedia.',
+                'errors' => null,
+            ], 422);
+        }
+
+        $rows = $reader->getRows();
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Berkas Excel tidak memuat data siswa.',
+                'errors' => null,
+            ], 422);
+        }
+
+        $rowNumber = 1;
+        $errors = [];
+        $seenNis = [];
+        $seenNisns = [];
+        $validRows = [];
+
+        foreach ($rows as $row) {
+            $rowNumber++;
+
+            $rawNis = isset($row['nis']) ? trim((string) $row['nis']) : '';
+            $rawName = isset($row['name']) ? trim((string) $row['name']) : '';
+            $rawClassName = isset($row['class_name']) ? trim((string) $row['class_name']) : '';
+            $rawGender = isset($row['gender']) ? strtoupper(trim((string) $row['gender'])) : '';
+            $rawNisn = isset($row['nisn']) ? trim((string) $row['nisn']) : '';
+            $rawParentName = isset($row['parent_name']) ? trim((string) $row['parent_name']) : '';
+            $rawParentPhone = isset($row['parent_phone']) ? trim((string) $row['parent_phone']) : '';
+
+            // 1. Validasi NIS
+            if ($rawNis === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nis',
+                    'message' => 'Kolom NIS wajib diisi.',
+                ];
+            } elseif (isset($seenNis[$rawNis])) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nis',
+                    'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNis[$rawNis]}).",
+                ];
+            } elseif (User::where('nis_nip', $rawNis)->whereNull('deleted_at')->exists()) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nis',
+                    'message' => "NIS '{$rawNis}' sudah terdaftar di sistem.",
+                ];
+            } elseif (User::where('nis_nip', 'P-' . $rawNis)->whereNull('deleted_at')->exists()) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nis',
+                    'message' => "Akun orang tua untuk NIS '{$rawNis}' sudah terdaftar di sistem.",
+                ];
+            } else {
+                $seenNis[$rawNis] = $rowNumber;
+            }
+
+            // 2. Validasi Nama
+            if ($rawName === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'name',
+                    'message' => 'Kolom nama siswa wajib diisi.',
+                ];
+            } elseif (mb_strlen($rawName) > 100) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'name',
+                    'message' => 'Nama siswa tidak boleh melebihi 100 karakter.',
+                ];
+            }
+
+            // 3. Validasi Nama Kelas
+            if ($rawClassName === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'class_name',
+                    'message' => 'Kolom kelas wajib diisi.',
+                ];
+            } elseif (mb_strlen($rawClassName) > 50) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'class_name',
+                    'message' => 'Nama kelas tidak boleh melebihi 50 karakter.',
+                ];
+            }
+
+            // 4. Validasi Gender
+            if ($rawGender === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'gender',
+                    'message' => 'Kolom jenis kelamin wajib diisi.',
+                ];
+            } elseif (!in_array($rawGender, ['L', 'P'], true)) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'gender',
+                    'message' => 'Jenis kelamin harus bernilai L atau P.',
+                ];
+            }
+
+            // 5. Validasi NISN (Opsional)
+            if ($rawNisn !== '') {
+                if (mb_strlen($rawNisn) > 20) {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'nisn',
+                        'message' => 'NISN tidak boleh melebihi 20 karakter.',
+                    ];
+                } elseif (isset($seenNisns[$rawNisn])) {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'nisn',
+                        'message' => "NISN '{$rawNisn}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNisns[$rawNisn]}).",
+                    ];
+                } elseif (User::where('nisn', $rawNisn)->whereNull('deleted_at')->exists()) {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'nisn',
+                        'message' => "NISN '{$rawNisn}' sudah terdaftar di sistem.",
+                    ];
+                } else {
+                    $seenNisns[$rawNisn] = $rowNumber;
+                }
+            }
+
+            // 6. Validasi Nama & Telepon Orang Tua (Opsional)
+            if ($rawParentName !== '' && mb_strlen($rawParentName) > 100) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'parent_name',
+                    'message' => 'Nama orang tua tidak boleh melebihi 100 karakter.',
+                ];
+            }
+
+            if ($rawParentPhone !== '' && mb_strlen($rawParentPhone) > 20) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'parent_phone',
+                    'message' => 'Nomor telepon orang tua tidak boleh melebihi 20 karakter.',
+                ];
+            }
+
+            $validRows[] = [
+                'nis' => $rawNis,
+                'name' => $rawName,
+                'class_name' => trim(preg_replace('/\s+/', ' ', $rawClassName)),
+                'gender' => $rawGender,
+                'nisn' => $rawNisn !== '' ? $rawNisn : null,
+                'parent_name' => $rawParentName !== '' ? $rawParentName : null,
+                'parent_phone' => $rawParentPhone !== '' ? $rawParentPhone : null,
+            ];
+        }
+
+        if (!empty($errors)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi berkas gagal pada beberapa baris.',
+                'errors' => $errors,
+            ], 422);
+        }
+
+        $summary = DB::transaction(function () use ($validRows) {
+            $classMap = [];
+            $classesCreated = 0;
+            $classesExisting = 0;
+
+            // Kumpulkan kelas unik
+            $distinctClasses = array_unique(array_column($validRows, 'class_name'));
+
+            foreach ($distinctClasses as $className) {
+                $existingClass = Classes::where('name', $className)->whereNull('deleted_at')->first();
+
+                if ($existingClass) {
+                    $classMap[$className] = $existingClass->id;
+                    $classesExisting++;
+                } else {
+                    // Deteksi level kelas
+                    if (preg_match('/^XII(\s|-|_|$)/i', $className)) {
+                        $level = '12';
+                    } elseif (preg_match('/^XI(\s|-|_|$)/i', $className)) {
+                        $level = '11';
+                    } elseif (preg_match('/^X(\s|-|_|$)/i', $className)) {
+                        $level = '10';
+                    } elseif (preg_match('/^12(\s|-|_|$)/', $className)) {
+                        $level = '12';
+                    } elseif (preg_match('/^11(\s|-|_|$)/', $className)) {
+                        $level = '11';
+                    } elseif (preg_match('/^10(\s|-|_|$)/', $className)) {
+                        $level = '10';
+                    } else {
+                        $level = '10'; // Fallback default
+                    }
+
+                    $newClass = Classes::create([
+                        'name' => $className,
+                        'level' => $level,
+                        'next_class_id' => null,
+                    ]);
+
+                    $classMap[$className] = $newClass->id;
+                    $classesCreated++;
+                }
+            }
+
+            $studentsImported = 0;
+            $parentsImported = 0;
+
+            foreach ($validRows as $row) {
+                $classId = $classMap[$row['class_name']];
+
+                $student = User::create([
+                    'name' => $row['name'],
+                    'role' => 'student',
+                    'nis_nip' => $row['nis'],
+                    'password' => Hash::make($row['nis']),
+                    'class_id' => $classId,
+                    'gender' => $row['gender'],
+                    'nisn' => $row['nisn'],
+                    'is_held_back' => false,
+                    'must_change_password' => true,
+                ]);
+                $studentsImported++;
+
+                User::create([
+                    'name' => $row['parent_name'] ?: ('Wali dari ' . $row['name']),
+                    'role' => 'parent',
+                    'nis_nip' => 'P-' . $row['nis'],
+                    'linked_student_id' => $student->id,
+                    'password' => Hash::make($row['nis']),
+                    'phone_number' => $row['parent_phone'],
+                    'must_change_password' => true,
+                ]);
+                $parentsImported++;
+            }
+
+            return [
+                'classes_created' => $classesCreated,
+                'classes_existing' => $classesExisting,
+                'students_imported' => $studentsImported,
+                'parents_imported' => $parentsImported,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data siswa dan kelas berhasil diimpor.',
+            'data' => $summary,
+        ], 201);
+    }
     /**
      * Menampilkan daftar siswa (berpaginasi).
      */

@@ -5936,3 +5936,203 @@ Verifikasi regresi seluruh suite terkait:
 ### 76.5 Kesimpulan & Kesiapan Menuju Fase 4
 
 Modul Impor Guru & Auto-Provisioning Akun telah selesai 100% dengan standar keamanan, integritas data, dan pengujian menyeluruh. Sistem kini siap untuk melangkah ke **Fase 4: Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat**.
+
+
+---
+
+# Dokumentasi Perkembangan Proyek: Fase 4 (Modul Impor Siswa & Auto-Create Kelas - SCP v4.5)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API  
+**Fase:** Fase 4 (Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat)  
+**Acuan Spesifikasi:** `MD/PHASE_4_IMPLEMENTATION_PLAN.md` & `MD/NewFeature.md` (v4.5)  
+**Waktu Eksekusi:** 2026-10-30  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+---
+
+## 77. Implementasi Fase 4: Modul Impor Siswa & Auto-Create Kelas Berbasis Tingkat
+
+### 77.1 Ringkasan Perubahan & Tujuan
+Fase 4 mengimplementasikan modul impor massal data siswa dan otomatisasi pembuatan master kelas (rombongan belajar) langsung dari berkas spreadsheet Excel (`.xlsx`) ke sistem backend SCP v4.5. Fitur ini mengeliminasi beban administratif manual Waka Kurikulum dalam mendaftarkan puluhan kelas dan ratusan siswa beserta akun orang tuanya.
+
+Capaian utama pada fase ini meliputi:
+1. **Endpoint API Master Data Siswa**:
+   - `GET /api/students/import-template`: Mengunduh template Excel siswa berstandar (`siswa_import_template.xlsx`) yang disajikan langsung dari berkas fisik di `storage/app/templates/template_import_siswa.xlsx` dengan streaming dinamis fallback.
+   - `POST /api/students/import`: Mengunggah berkas Excel dan memproses ingestion data siswa secara streaming.
+   - Keduanya terlindungi oleh middleware `['auth:sanctum', 'throttle:api', 'role:vice_principal']`.
+2. **Auto-Create Master Kelas (*Level Detection*)**:
+   - Sistem secara cerdas mendeteksi tingkatan kelas (level 10, 11, atau 12) dari prefiks nama rombel menggunakan regular expression:
+     - Awalan `XII` $\rightarrow$ level `12`
+     - Awalan `XI` $\rightarrow$ level `11`
+     - Awalan `X` $\rightarrow$ level `10`
+     - Format angka (`12`, `11`, `10`) $\rightarrow$ level `12`, `11`, `10`
+     - Format non-standar $\rightarrow$ fallback level `10`
+   - Kelas yang sudah terdaftar di database digunakan kembali tanpa duplikasi (*idempotent*).
+   - Sanitasi spasi ganda dilakukan otomatis (`preg_replace('/\s+/', ' ', $className)`).
+3. **Auto-Provisioning Akun Siswa & Akun Orang Tua Berpasangan**:
+   - **Siswa**: Dibuatkan akun dengan `role = 'student'`, `nis_nip = NIS`, `password = Hash(NIS)`, `class_id = ID kelas terkait`, `gender` ('L'/'P'), `nisn`, `is_held_back = false`, dan `must_change_password = true`.
+   - **Orang Tua**: Dibuatkan akun dengan `role = 'parent'`, `name` dari nama orang tua (atau fallback `"Wali dari " . $name`), `nis_nip = "P-" . $nis` (username unik per anak), `password = Hash(NIS)`, `linked_student_id = $student->id`, `phone_number` dari nomor telepon orang tua, dan `must_change_password = true`.
+   - **Dukungan Siswa Bersaudara (*Sibling Support*)**: Orang tua dari dua atau lebih anak dapat menggunakan nomor telepon yang sama tanpa benturan basis data karena kolom `phone_number` tidak memiliki unique constraint dan kredensial login terisolasi rapi melalui `P-{NIS}`.
+4. **Integritas Transaksi Atomik (*All-or-Nothing*)**:
+   - Pembuatan kelas, akun siswa, dan akun orang tua berada dalam `DB::transaction()`.
+   - Apabila terdapat satu baris yang gagal validasi (NIS kosong/duplikat, NISN duplikat, gender invalid, dsb), seluruh operasi dibatalkan (*rollback*) dan sistem mengembalikan status HTTP 422 JSON terstruktur dengan penunjuk nomor baris (`row`), atribut, dan pesan kesalahan.
+   - Jika berhasil, mengembalikan respons HTTP 201 Created dengan ringkasan:
+     `{ classes_created, classes_existing, students_imported, parents_imported }`.
+
+---
+
+### 77.2 Daftar File yang Dibuat atau Diubah
+
+| No | File Path | Status | Fungsi & Tanggung Jawab |
+|---|---|---|---|
+| 1 | `routes/api.php` | Diubah | Mendaftarkan rute `GET /api/students/import-template` dan `POST /api/students/import` pada grup middleware Waka Kurikulum. |
+| 2 | `app/Http/Controllers/API/StudentController.php` | Diubah | Mengimplementasikan method `downloadTemplate()` dan `import()` (validasi streaming, auto-create kelas, auto-provisioning siswa & orang tua). |
+| 3 | `tests/Feature/StudentImportTest.php` | Dibuat | Automated feature test suite mencakup 16 skenario pengujian komprehensif (95 assertions). |
+| 4 | `MD/PHASE_4_IMPLEMENTATION_PLAN.md` | Dibuat | Dokumen perencanaan teknis terstruktur Fase 4. |
+| 5 | `MD/Development.md` | Diubah | Dokumentasi implementasi Fase 4. |
+
+---
+
+### 77.3 Potongan Kode Utama
+
+#### 1. Download Template Siswa (`StudentController::downloadTemplate`)
+```php
+public function downloadTemplate(): Response
+{
+    $templatePath = storage_path('app/templates/template_import_siswa.xlsx');
+    if (!file_exists($templatePath)) {
+        $templatePath = storage_path('app/templates/siswa_import_template.xlsx');
+    }
+
+    if (file_exists($templatePath)) {
+        return response()->download($templatePath, 'siswa_import_template.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    return response()->streamDownload(function () {
+        $writer = SimpleExcelWriter::create('php://output', 'xlsx');
+        $writer->addRows([
+            [
+                'nis' => '12045',
+                'name' => 'Ahmad Fauzan Pratama',
+                'class_name' => 'X RPL 1',
+                'gender' => 'L',
+                'nisn' => '0081234567',
+                'parent_name' => 'Bambang Pratama',
+                'parent_phone' => '081223344556',
+            ],
+            // ...
+        ]);
+        $writer->close();
+    }, 'siswa_import_template.xlsx', [
+        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+}
+```
+
+#### 2. Auto-Create Kelas & Level Detection (`StudentController::import`)
+```php
+foreach ($distinctClasses as $className) {
+    $existingClass = Classes::where('name', $className)->whereNull('deleted_at')->first();
+
+    if ($existingClass) {
+        $classMap[$className] = $existingClass->id;
+        $classesExisting++;
+    } else {
+        if (preg_match('/^XII(\s|-|_|$)/i', $className)) {
+            $level = '12';
+        } elseif (preg_match('/^XI(\s|-|_|$)/i', $className)) {
+            $level = '11';
+        } elseif (preg_match('/^X(\s|-|_|$)/i', $className)) {
+            $level = '10';
+        } elseif (preg_match('/^12(\s|-|_|$)/', $className)) {
+            $level = '12';
+        } elseif (preg_match('/^11(\s|-|_|$)/', $className)) {
+            $level = '11';
+        } elseif (preg_match('/^10(\s|-|_|$)/', $className)) {
+            $level = '10';
+        } else {
+            $level = '10'; // Fallback default
+        }
+
+        $newClass = Classes::create([
+            'name' => $className,
+            'level' => $level,
+            'next_class_id' => null,
+        ]);
+
+        $classMap[$className] = $newClass->id;
+        $classesCreated++;
+    }
+}
+```
+
+#### 3. Auto-Provisioning Akun Siswa & Orang Tua Berpasangan
+```php
+foreach ($validRows as $row) {
+    $classId = $classMap[$row['class_name']];
+
+    $student = User::create([
+        'name' => $row['name'],
+        'role' => 'student',
+        'nis_nip' => $row['nis'],
+        'password' => Hash::make($row['nis']),
+        'class_id' => $classId,
+        'gender' => $row['gender'],
+        'nisn' => $row['nisn'],
+        'is_held_back' => false,
+        'must_change_password' => true,
+    ]);
+    $studentsImported++;
+
+    User::create([
+        'name' => $row['parent_name'] ?: ('Wali dari ' . $row['name']),
+        'role' => 'parent',
+        'nis_nip' => 'P-' . $row['nis'],
+        'linked_student_id' => $student->id,
+        'password' => Hash::make($row['nis']),
+        'phone_number' => $row['parent_phone'],
+        'must_change_password' => true,
+    ]);
+    $parentsImported++;
+}
+```
+
+---
+
+### 77.4 Hasil Pengujian Otomatis (`StudentImportTest.php`)
+
+```bash
+PASS  Tests\Feature\StudentImportTest
+✓ guest cannot download student template or import                         1.24s
+✓ non waka cannot download student template or import                      0.15s
+✓ waka can download student import template                                0.12s
+✓ waka can import valid students and auto creates classes                  0.32s
+✓ import reuses existing classes without duplication                       0.16s
+✓ auto create class level detection x xi xii and fallback                  0.18s
+✓ import fails when file is missing or invalid extension                   0.12s
+✓ import fails when file exceeds max size                                  0.13s
+✓ import fails when header is invalid                                      0.14s
+✓ import fails when excel has no data rows                                 0.13s
+✓ import fails when required fields are empty                              0.15s
+✓ import fails when gender is invalid                                      0.14s
+✓ import fails and rollbacks on in sheet duplicate nis                     0.16s
+✓ import fails and rollbacks on in sheet duplicate nisn                    0.15s
+✓ import fails and rollbacks on database nis collision                     0.16s
+✓ import handles siblings with same parent phone cleanly                   0.15s
+
+Tests:    16 passed (95 assertions)
+Duration: 2.48s
+```
+
+Verifikasi regresi seluruh suite terkait:
+- `StudentManagementTest`: **6 passed, 27 assertions (0 failures)**
+- `TeacherImportTest`: **15 passed, 72 assertions (0 failures)**
+- `SchoolClassTest`: **2 passed, 9 assertions (0 failures)**
+
+---
+
+### 77.5 Kesimpulan & Kesiapan Menuju Fase 5
+
+Fase 4 telah selesai 100% dan seluruh fungsionalitas impor siswa, auto-create master kelas, serta auto-provisioning akun orang tua berjalan stabil dan terverifikasi secara atomik. Dengan rampungnya Fase 3 (Guru) dan Fase 4 (Siswa & Kelas), kedua master data wajib untuk jadwal KBM telah siap. Sistem kini siap melanjutkan ke **Fase 5: Penyelarasan Aturan Prasyarat Master Data (Hanya Siswa & Guru)**.
