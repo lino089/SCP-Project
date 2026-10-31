@@ -57,6 +57,13 @@ class AuthController extends Controller
     public function me(Request $request){
         $user = $request->user()->load('assignments');
 
+        if ($user->role === 'parent') {
+            $user->load([
+                'linkedStudent:id,name,nis_nip,class_id,gender',
+                'linkedStudent.schoolClass:id,name,level',
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Data profil berhasil diambil',

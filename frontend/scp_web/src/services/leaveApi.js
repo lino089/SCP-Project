@@ -360,6 +360,45 @@ export const leaveApi = {
       };
     }
   },
+
+  /**
+   * Mengajukan izin mengajar guru beserta lampiran dan tugas titipan.
+   * POST /api/teacher-leave-requests (multipart/form-data)
+   */
+  async submitTeacherLeaveRequest(dataOrFormData) {
+    let payload = dataOrFormData;
+    if (!(dataOrFormData instanceof FormData)) {
+      payload = new FormData();
+      if (dataOrFormData.date) payload.append('date', dataOrFormData.date);
+      if (dataOrFormData.reason) payload.append('reason', dataOrFormData.reason);
+      if (Array.isArray(dataOrFormData.schedule_ids) && dataOrFormData.schedule_ids.length > 0) {
+        payload.append('schedule_ids', JSON.stringify(dataOrFormData.schedule_ids.map(Number)));
+      }
+      if (dataOrFormData.attachment instanceof File) {
+        payload.append('attachment', dataOrFormData.attachment);
+      }
+      if (dataOrFormData.task_instruction) {
+        payload.append('task_instruction', dataOrFormData.task_instruction);
+      }
+      if (dataOrFormData.task_attachment instanceof File) {
+        payload.append('task_attachment', dataOrFormData.task_attachment);
+      }
+    }
+
+    return api.post('/teacher-leave-requests', payload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  /**
+   * Mengambil daftar perizinan mengajar guru (auto-scoped untuk guru yang login).
+   * GET /api/teacher-leave-requests
+   */
+  async getTeacherLeaveRequests(params = {}) {
+    return api.get('/teacher-leave-requests', { params });
+  },
 };
 
 export default leaveApi;

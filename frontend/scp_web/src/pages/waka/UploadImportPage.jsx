@@ -2,14 +2,20 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
+  XCircle,
+  AlertTriangle,
   ArrowRight,
   RefreshCw,
   Upload,
   AlertCircle,
   HelpCircle,
+  Info,
+  ExternalLink,
 } from 'lucide-react';
 import { Button, FileUpload, ProgressBar, Badge } from '../../components/shared';
 import { scheduleImportApi } from '../../services/scheduleImportApi';
+import { studentApi, teacherApi } from '../../services/masterDataApi';
+import { checkPdfImportPrerequisites } from '../../utils/prerequisiteHelper';
 import './UploadImport.css';
 
 export default function UploadImportPage() {
@@ -19,6 +25,10 @@ export default function UploadImportPage() {
   const [selectedCycle, setSelectedCycle] = useState(1);
   const [classScheduleFile, setClassScheduleFile] = useState(null);
   const [roomScheduleFile, setRoomScheduleFile] = useState(null);
+
+  // Prerequisite gate states (SCP v4.5 Zero-Manual)
+  const [prerequisiteStatus, setPrerequisiteStatus] = useState(null);
+  const [prerequisiteLoading, setPrerequisiteLoading] = useState(true);
 
   // Processing state: 'idle' | 'uploading' | 'parsing' | 'preview_ready' | 'error'
   const [processStatus, setProcessStatus] = useState('idle');
@@ -37,12 +47,72 @@ export default function UploadImportPage() {
     };
   }, []);
 
+  // Check prerequisites on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPrerequisites() {
+      setPrerequisiteLoading(true);
+      try {
+        const [studentRes, teacherRes] = await Promise.allSettled([
+          studentApi.getStudents({ per_page: 1 }),
+          teacherApi.getTeachers({ per_page: 100 }),
+        ]);
+
+        const students =
+          studentRes.status === 'fulfilled' && studentRes.value?.data
+            ? Array.isArray(studentRes.value.data)
+              ? studentRes.value.data
+              : studentRes.value.data.data || []
+            : [];
+        const totalStudents =
+          studentRes.status === 'fulfilled'
+            ? (studentRes.value?.meta?.total ?? students.length)
+            : 0;
+
+        const teachers =
+          teacherRes.status === 'fulfilled' && teacherRes.value?.data
+            ? Array.isArray(teacherRes.value.data)
+              ? teacherRes.value.data
+              : teacherRes.value.data.data || []
+            : [];
+        const totalTeachers =
+          teacherRes.status === 'fulfilled'
+            ? (teacherRes.value?.meta?.total ?? teachers.length)
+            : 0;
+
+        const result = checkPdfImportPrerequisites({
+          students,
+          teachers,
+          totalStudents,
+          totalTeachers,
+        });
+
+        if (isMounted) {
+          setPrerequisiteStatus(result);
+        }
+      } catch (err) {
+        console.error('Gagal memeriksa prasyarat master data:', err);
+      } finally {
+        if (isMounted) {
+          setPrerequisiteLoading(false);
+        }
+      }
+    }
+
+    loadPrerequisites();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const isFormValid = Boolean(classScheduleFile && roomScheduleFile && selectedCycle);
   const isProcessing = processStatus === 'uploading' || processStatus === 'parsing';
 
   // Handle start import process
   const handleStartImport = async () => {
-    if (!isFormValid || isProcessing) return;
+    if (!isFormValid || isProcessing || !prerequisiteStatus?.isReady) return;
 
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
@@ -127,6 +197,110 @@ export default function UploadImportPage() {
           Unggah berkas jadwal hasil ekspor dari FET Timetable untuk diverifikasi dan dipetakan sebelum diterapkan.
         </p>
       </div>
+
+      {/* Prerequisite Checklist Banner (SCP v4.5 Zero-Manual) */}
+      {prerequisiteLoading ? (
+        <div className="upload-prerequisite-card upload-prerequisite-card--loading">
+          <RefreshCw size={16} className="animate-spin text-gray-500 shrink-0" />
+          <span className="text-xs text-gray-600">
+            Memverifikasi kelayakan Master Data prasyarat (Siswa &amp; Guru ber-FET)...
+          </span>
+        </div>
+      ) : (
+        prerequisiteStatus && (
+          <div
+            className={`upload-prerequisite-card ${
+              prerequisiteStatus.isReady
+                ? 'upload-prerequisite-card--ready'
+                : 'upload-prerequisite-card--warning'
+            }`}
+            role="region"
+            aria-label="Status Prasyarat Master Data"
+          >
+            <div className="upload-prerequisite-header">
+              <div className="flex items-center gap-2">
+                {prerequisiteStatus.isReady ? (
+                  <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                )}
+                <strong className="text-xs font-semibold text-gray-900">
+                  {prerequisiteStatus.isReady
+                    ? 'Prasyarat Master Data Terpenuhi (SCP v4.5 Zero-Manual)'
+                    : 'Prasyarat Master Data Belum Lengkap'}
+                </strong>
+              </div>
+              <Badge variant={prerequisiteStatus.isReady ? 'success' : 'warning'}>
+                {prerequisiteStatus.isReady ? 'Siap Impor' : 'Perlu Aksi Waka'}
+              </Badge>
+            </div>
+
+            <div className="upload-prerequisite-checklist">
+              {/* Item 1: Siswa */}
+              <div className="upload-prerequisite-item">
+                <div className="flex items-center gap-2">
+                  {prerequisiteStatus.checks.hasStudents ? (
+                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                  ) : (
+                    <XCircle size={15} className="text-red-500 shrink-0" />
+                  )}
+                  <span className="text-xs text-gray-700">
+                    Data Siswa Aktif Terdaftar:{' '}
+                    <strong className={prerequisiteStatus.checks.hasStudents ? 'text-gray-900' : 'text-red-600'}>
+                      {prerequisiteStatus.counts.studentCount} siswa
+                    </strong>
+                  </span>
+                </div>
+                {!prerequisiteStatus.checks.hasStudents && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={ExternalLink}
+                    onClick={() => navigate('/web/master-data')}
+                  >
+                    Impor Siswa
+                  </Button>
+                )}
+              </div>
+
+              {/* Item 2: Guru & FET ID */}
+              <div className="upload-prerequisite-item">
+                <div className="flex items-center gap-2">
+                  {prerequisiteStatus.checks.hasFetStaffId ? (
+                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                  ) : (
+                    <XCircle size={15} className="text-red-500 shrink-0" />
+                  )}
+                  <span className="text-xs text-gray-700">
+                    Data Guru &amp; Kode Staf FET Terisi:{' '}
+                    <strong className={prerequisiteStatus.checks.hasFetStaffId ? 'text-gray-900' : 'text-red-600'}>
+                      {prerequisiteStatus.counts.fetTeacherCount} dari {prerequisiteStatus.counts.teacherCount} guru ber-FET
+                    </strong>
+                  </span>
+                </div>
+                {!prerequisiteStatus.checks.hasFetStaffId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={ExternalLink}
+                    onClick={() => navigate('/web/master-data')}
+                  >
+                    Lengkapi FET ID Guru
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Zero-Manual Policy Note */}
+            <div className="upload-prerequisite-note">
+              <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-gray-600 m-0 leading-relaxed">
+                <strong>Kebijakan Zero-Manual v4.5:</strong> Master Ruangan dan Mata Pelajaran tidak perlu diinput manual. Sistem akan mengekstrak dan mendaftarkannya secara otomatis saat berkas PDF diproses.
+              </p>
+            </div>
+          </div>
+        )
+      )}
 
       {/* Error alert if any */}
       {errorMessage && (
@@ -230,13 +404,15 @@ export default function UploadImportPage() {
             <Button
               variant="primary"
               icon={Upload}
-              disabled={!isFormValid}
+              disabled={!isFormValid || !prerequisiteStatus?.isReady}
               onClick={handleStartImport}
             >
               Mulai Proses Impor &amp; Ekstraksi
             </Button>
             <span className="text-xs text-gray-400">
-              {isFormValid
+              {!prerequisiteStatus?.isReady
+                ? 'Lengkapi prasyarat Master Data (Siswa & Guru ber-FET) terlebih dahulu.'
+                : isFormValid
                 ? 'Kedua berkas siap diproses.'
                 : 'Pilih kedua berkas PDF untuk mengaktifkan tombol impor.'}
             </span>
@@ -284,7 +460,12 @@ export default function UploadImportPage() {
               <Button
                 variant="primary"
                 icon={ArrowRight}
-                onClick={() => navigate(`/web/review-import/${batchId || 'latest'}`)}
+                disabled={!batchId}
+                onClick={() => {
+                  if (batchId) {
+                    navigate(`/web/review-import/${batchId}`);
+                  }
+                }}
               >
                 Buka Halaman Tinjauan &amp; Resolusi
               </Button>

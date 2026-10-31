@@ -420,6 +420,17 @@ class StudentController extends Controller
                 Rule::unique('users', 'nis_nip')->whereNull('deleted_at'),
             ],
             'class_id' => 'required|integer|exists:classes,id',
+            'gender' => 'nullable|string|in:L,P,l,p',
+            'nisn' => [
+                'nullable',
+                'string',
+                'max:20',
+                Rule::unique('users', 'nisn')->whereNull('deleted_at'),
+            ],
+        ], [
+            'gender.in' => 'Jenis kelamin harus bernilai L atau P.',
+            'nisn.unique' => 'NISN sudah terdaftar.',
+            'nisn.max' => 'NISN tidak boleh melebihi 20 karakter.',
         ]);
 
         $result = DB::transaction(function () use ($request) {
@@ -432,6 +443,8 @@ class StudentController extends Controller
                 'password' => Hash::make($randomPassword),
                 'must_change_password' => true,
                 'class_id' => $request->class_id,
+                'gender' => $request->filled('gender') ? strtoupper(trim($request->gender)) : null,
+                'nisn' => $request->filled('nisn') ? trim($request->nisn) : null,
             ]);
 
             $parent = User::create([
@@ -473,14 +486,35 @@ class StudentController extends Controller
                 Rule::unique('users', 'nis_nip')->ignore($student->id)->whereNull('deleted_at'),
             ],
             'class_id' => 'required|integer|exists:classes,id',
+            'gender' => 'nullable|string|in:L,P,l,p',
+            'nisn' => [
+                'nullable',
+                'string',
+                'max:20',
+                Rule::unique('users', 'nisn')->ignore($student->id)->whereNull('deleted_at'),
+            ],
+        ], [
+            'gender.in' => 'Jenis kelamin harus bernilai L atau P.',
+            'nisn.unique' => 'NISN sudah terdaftar.',
+            'nisn.max' => 'NISN tidak boleh melebihi 20 karakter.',
         ]);
 
         DB::transaction(function () use ($student, $request) {
-            $student->update([
+            $updateData = [
                 'name' => $request->name,
                 'nis_nip' => $request->nis,
                 'class_id' => $request->class_id,
-            ]);
+            ];
+
+            if ($request->has('gender')) {
+                $updateData['gender'] = $request->filled('gender') ? strtoupper(trim($request->gender)) : null;
+            }
+
+            if ($request->has('nisn')) {
+                $updateData['nisn'] = $request->filled('nisn') ? trim($request->nisn) : null;
+            }
+
+            $student->update($updateData);
 
             // Sinkronkan username orang tua jika NIS berubah
             User::where('linked_student_id', $student->id)

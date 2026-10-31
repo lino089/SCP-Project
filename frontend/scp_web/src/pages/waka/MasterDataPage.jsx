@@ -280,6 +280,8 @@ export default function MasterDataPage() {
         setFormData({
           name: '',
           nis: '',
+          gender: '',
+          nisn: '',
           class_id: classList[0]?.id ? String(classList[0].id) : '1',
         });
         break;
@@ -320,6 +322,8 @@ export default function MasterDataPage() {
       setFormData({
         name: item.name || '',
         nis: item.nis_nip || item.nis || '',
+        gender: item.gender || '',
+        nisn: item.nisn || '',
         class_id: item.class_id ? String(item.class_id) : '',
       });
     }
@@ -419,6 +423,8 @@ export default function MasterDataPage() {
             name: formData.name,
             nis: formData.nis,
             class_id: Number(formData.class_id),
+            gender: formData.gender ? formData.gender : null,
+            nisn: formData.nisn ? formData.nisn.trim() : null,
           };
           try {
             const res = await studentApi.createStudent(payload);
@@ -426,6 +432,8 @@ export default function MasterDataPage() {
               id: Date.now(),
               ...payload,
               nis_nip: payload.nis,
+              gender: payload.gender,
+              nisn: payload.nisn,
               schoolClass: classList.find((c) => c.id === payload.class_id),
             };
             const parent = res.data?.parent || {
@@ -453,6 +461,8 @@ export default function MasterDataPage() {
               id: Date.now(),
               name: payload.name,
               nis_nip: payload.nis,
+              gender: payload.gender,
+              nisn: payload.nisn,
               class_id: payload.class_id,
               schoolClass: classList.find((c) => c.id === payload.class_id),
             };
@@ -534,6 +544,8 @@ export default function MasterDataPage() {
             name: formData.name,
             nis: formData.nis,
             class_id: Number(formData.class_id),
+            gender: formData.gender ? formData.gender : null,
+            nisn: formData.nisn ? formData.nisn.trim() : null,
           };
           try {
             await studentApi.updateStudent(id, payload);
@@ -551,6 +563,8 @@ export default function MasterDataPage() {
                     ...st,
                     ...payload,
                     nis_nip: payload.nis,
+                    gender: payload.gender,
+                    nisn: payload.nisn,
                     schoolClass: classList.find((c) => c.id === payload.class_id),
                   }
                 : st
@@ -1018,6 +1032,27 @@ export default function MasterDataPage() {
             ),
           },
           {
+            key: 'nisn',
+            label: 'NISN',
+            renderCell: (r) => (
+              <span className="font-mono text-xs text-neutral-600">
+                {r.nisn || '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'gender',
+            label: 'Gender',
+            renderCell: (r) =>
+              r.gender ? (
+                <Badge variant={r.gender === 'L' ? 'info' : 'default'}>
+                  {r.gender === 'L' ? 'L (Laki-laki)' : 'P (Perempuan)'}
+                </Badge>
+              ) : (
+                <span className="text-xs text-neutral-400">-</span>
+              ),
+          },
+          {
             key: 'class',
             label: 'Kelas',
             renderCell: (r) => (
@@ -1312,6 +1347,28 @@ export default function MasterDataPage() {
                   label: `${c.name} (Tingkat ${c.level})`,
                 }))}
                 required
+              />
+
+              <Select
+                label="Jenis Kelamin"
+                value={formData.gender || ''}
+                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                options={[
+                  { value: '', label: 'Pilih Jenis Kelamin (Opsional)' },
+                  { value: 'L', label: 'Laki-laki (L)' },
+                  { value: 'P', label: 'Perempuan (P)' },
+                ]}
+                error={formErrors.gender?.[0]}
+              />
+
+              <Input
+                label="Nomor Induk Siswa Nasional (NISN)"
+                placeholder="10 digit numerik (maks 20 karakter)"
+                value={formData.nisn || ''}
+                onChange={(e) => setFormData({ ...formData, nisn: e.target.value })}
+                maxLength={20}
+                error={formErrors.nisn?.[0]}
+                helperText="Opsional, nomor resmi NISN siswa"
               />
 
               {modalType === 'create' && (

@@ -2,67 +2,20 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input } from '../../components/shared';
 import { useAuth } from '../../hooks/useAuth';
-import { ShieldCheck, User, Lock, Sparkles } from 'lucide-react';
+import { ShieldCheck, User, Lock } from 'lucide-react';
 import './Login.css';
-
-const DEMO_PRESETS = [
-  {
-    key: 'waka',
-    label: 'Waka Kurikulum',
-    desc: 'Pengelolaan kurikulum, jadwal, dan master data',
-    username: '12345678',
-    password: 'password',
-  },
-  {
-    key: 'teacher',
-    label: 'Guru Pengampu / Wali Kelas',
-    desc: 'Jadwal mengajar KBM, jurnal harian, dan presensi kelas',
-    username: '197803122005011002',
-    password: 'password123',
-  },
-  {
-    key: 'kesiswaan',
-    label: 'Guru Kesiswaan (Piket)',
-    desc: 'Ambil alih kelas guru izin, penampil tugas titipan & piket',
-    username: '198211102008011005',
-    password: 'password123',
-  },
-  {
-    key: 'student',
-    label: 'Siswa',
-    desc: 'Presensi harian, kuis AI interaktif, dan pengajuan izin',
-    username: '2024001',
-    password: 'password123',
-  },
-  {
-    key: 'parent',
-    label: 'Orang Tua / Wali',
-    desc: 'Monitoring presensi, izin, dan hasil evaluasi anak',
-    username: 'W-2024001',
-    password: 'password123',
-  },
-];
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, loginWithDemo, getHomeRoute } = useAuth();
+  const { login, getHomeRoute } = useAuth();
 
-  const [selectedDemo, setSelectedDemo] = useState('waka');
-  const [username, setUsername] = useState('12345678');
-  const [password, setPassword] = useState('password');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
 
   const deviceName = `${navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Web'} Browser (${navigator.platform || 'Desktop'})`;
-
-  const handleSelectPreset = (preset) => {
-    setSelectedDemo(preset.key);
-    setUsername(preset.username);
-    setPassword(preset.password);
-    setError('');
-    setFieldErrors({});
-  };
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -99,14 +52,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickDemoLogin = (e) => {
-    e.preventDefault();
-    loginWithDemo(selectedDemo);
-    setTimeout(() => {
-      navigate(getHomeRoute(), { replace: true });
-    }, 50);
-  };
-
   return (
     <div className="login-page">
       <div className="login-card">
@@ -117,32 +62,6 @@ export default function LoginPage() {
           <p className="login-subtitle">
             Sistem Informasi KBM, Presensi, dan Pengelolaan Jadwal Terpadu.
           </p>
-        </div>
-
-        {/* Demo Role Selector */}
-        <div className="login-role-section">
-          <label className="login-role-label">Pilih Peran Akun (Preset Demo):</label>
-          <div className="login-role-list">
-            {DEMO_PRESETS.map((preset) => {
-              const isActive = selectedDemo === preset.key;
-              return (
-                <button
-                  key={preset.key}
-                  type="button"
-                  className={`login-role-item ${isActive ? 'login-role-item--active' : ''}`}
-                  onClick={() => handleSelectPreset(preset)}
-                >
-                  <div className="login-role-item__radio">
-                    {isActive && <div className="login-role-item__radio-dot" />}
-                  </div>
-                  <div className="login-role-item__content">
-                    <span className="login-role-item__name">{preset.label}</span>
-                    <span className="login-role-item__desc">{preset.desc}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Error Banner */}
@@ -158,6 +77,7 @@ export default function LoginPage() {
             label="ID Pengguna (NIS / NIP / Username)"
             placeholder="Masukkan NIS, NIP, atau username"
             value={username}
+            autoComplete="username"
             onChange={(e) => {
               setUsername(e.target.value);
               if (error) setError('');
@@ -173,6 +93,7 @@ export default function LoginPage() {
             label="Kata Sandi Akun"
             placeholder="Masukkan kata sandi akun"
             value={password}
+            autoComplete="current-password"
             onChange={(e) => {
               setPassword(e.target.value);
               if (error) setError('');
@@ -192,18 +113,7 @@ export default function LoginPage() {
               loading={isLoading}
               icon={ShieldCheck}
             >
-              Masuk dengan Kredensial
-            </Button>
-
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              fullWidth
-              onClick={handleQuickDemoLogin}
-              icon={Sparkles}
-            >
-              Masuk Cepat Mode Demo
+              Masuk
             </Button>
           </div>
         </form>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
+import { leaveApi } from '../../services/leaveApi';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -40,24 +41,33 @@ export default function TeacherSchedulePage() {
 
   // Modal & Pengajuan Izin Mengajar Guru
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-  const [leaveReason, setLeaveReason] = useState('dinas_luar');
+  const [leaveReasonCategory, setLeaveReasonCategory] = useState('dinas_luar');
+  const [leaveReasonDetail, setLeaveReasonDetail] = useState('');
   const [taskInstructions, setTaskInstructions] = useState(
     'Kerjakan modul latihan halaman 34 soal nomor 1-10 di buku catatan. Kumpulkan hasilnya ke ketua kelas untuk diserahkan ke meja piket.'
   );
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [taskAttachmentFile, setTaskAttachmentFile] = useState(null);
+  const [todayLeave, setTodayLeave] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isLeaveActive, setIsLeaveActive] = useState(() => {
     return localStorage.getItem('teacher_leave_active') === 'true';
   });
   const [leaveToast, setLeaveToast] = useState(false);
 
-  // Ambil data jadwal mengajar guru saat komponen mount
+  // Ambil data jadwal mengajar guru & perizinan saat komponen mount
   useEffect(() => {
     let isMounted = true;
 
     async function fetchData() {
       try {
-        const [schedRes, missingRes] = await Promise.all([
+        const todayStr = new Date().toISOString().split('T')[0];
+        const [schedRes, missingRes, leaveRes] = await Promise.all([
           journalApi.getTeacherSchedules({ per_page: 100 }),
           journalApi.getMissingJournals(),
+          leaveApi.getTeacherLeaveRequests({ date: todayStr }).catch(() => null),
         ]);
 
         if (!isMounted) return;
@@ -67,6 +77,16 @@ export default function TeacherSchedulePage() {
         }
         if (missingRes.success && Array.isArray(missingRes.data)) {
           setMissingJournals(missingRes.data);
+        }
+
+        // Sinkronisasi status izin hari ini dari backend jika ada
+        const leaveItems = Array.isArray(leaveRes?.data) ? leaveRes.data : [];
+        const activeLeave = leaveItems.find(
+          (l) => l.status === 'pending' || l.status === 'approved'
+        );
+        if (activeLeave) {
+          setTodayLeave(activeLeave);
+          setIsLeaveActive(true);
         }
       } catch {
         // Fallback otomatis tertangani di service layer
@@ -84,52 +104,62 @@ export default function TeacherSchedulePage() {
     };
   }, []);
 
-  // Handle Pengajuan Izin Guru
-  const handleSendLeave = (e) => {
+  // Handle Pengajuan Izin Guru via Backend API
+  const handleSendLeave = async (e) => {
     e.preventDefault();
-    setIsLeaveActive(true);
-    localStorage.setItem('teacher_leave_active', 'true');
-    localStorage.setItem('teacher_leave_reason', leaveReason);
-    localStorage.setItem('teacher_leave_tasks', taskInstructions);
+    setFormError('');
+    setFieldErrors({});
 
-    // Delegasikan jadwal hari ini ke Kesiswaan / Piket
-    const todaySchedules = schedules.filter(
-      (s) => s.day_of_week === DAY_TO_NUMBER[selectedDay]
+    const categoryLabel =
+      leaveReasonCategory === 'sakit'
+        ? 'Sakit'
+        : leaveReasonCategory === 'dinas_luar'
+          ? 'Izin Dinas Luar'
+          : 'Izin Keperluan Pribadi';
+
+    const fullReason = leaveReasonDetail.trim()
+      ? `${categoryLabel}: ${leaveReasonDetail.trim()}`
+      : categoryLabel;
+
+    // Filter jadwal hari yang dipilih untuk didelegasikan
+    const todayDayNumber = DAY_TO_NUMBER[selectedDay] || 1;
+    const targetSchedules = schedules.filter(
+      (s) => s.day_of_week === todayDayNumber
     );
+    const scheduleIds = targetSchedules.map((s) => s.id);
+    const todayDate = new Date().toISOString().split('T')[0];
 
-    const currentDelegations = JSON.parse(
-      localStorage.getItem('delegated_classes') || '[]'
-    );
+    setIsSubmitting(true);
+    try {
+      const res = await leaveApi.submitTeacherLeaveRequest({
+        date: todayDate,
+        reason: fullReason,
+        schedule_ids: scheduleIds,
+        attachment: attachmentFile,
+        task_instruction: taskInstructions,
+        task_attachment: taskAttachmentFile,
+      });
 
-    const newDelegationItems = todaySchedules.map((s) => ({
-      id: Date.now() + s.id,
-      schedule_id: s.id,
-      teacher_id: user?.id || s.teacher_id,
-      teacherName: user?.name || s.teacher?.name || 'Guru Pengampu',
-      subjectName: s.subject?.name || 'Mata Pelajaran',
-      className: s.schoolClass?.name || 'Kelas',
-      period_number: s.period_number,
-      duration_periods: s.duration_periods,
-      reason:
-        leaveReason === 'sakit'
-          ? 'Sakit'
-          : leaveReason === 'dinas_luar'
-            ? 'Izin Dinas Luar'
-            : 'Izin Keperluan Pribadi',
-      reasonCategory: leaveReason,
-      taskInstructions: taskInstructions,
-      date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-    }));
+      if (res?.success) {
+        setIsLeaveActive(true);
+        setTodayLeave(res.data);
+        // Simpan instruksi tugas ke localStorage sebagai fallback TeacherJournalPage
+        localStorage.setItem('teacher_leave_tasks', taskInstructions);
 
-    localStorage.setItem(
-      'delegated_classes',
-      JSON.stringify([...currentDelegations, ...newDelegationItems])
-    );
-
-    setIsLeaveModalOpen(false);
-    setLeaveToast(true);
-    setTimeout(() => setLeaveToast(false), 5000);
+        setIsLeaveModalOpen(false);
+        setLeaveToast(true);
+        setTimeout(() => setLeaveToast(false), 5000);
+      }
+    } catch (err) {
+      const errorMsg =
+        err.message ||
+        err.raw?.response?.data?.message ||
+        'Gagal mengajukan izin mengajar.';
+      setFormError(errorMsg);
+      setFieldErrors(err.errors || err.raw?.response?.data?.errors || {});
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancelLeave = () => {
@@ -199,7 +229,11 @@ export default function TeacherSchedulePage() {
             variant="secondary"
             size="sm"
             icon={FileText}
-            onClick={() => setIsLeaveModalOpen(true)}
+            onClick={() => {
+              setFormError('');
+              setFieldErrors({});
+              setIsLeaveModalOpen(true);
+            }}
           >
             Ajukan Izin Hari Ini
           </Button>
@@ -227,7 +261,10 @@ export default function TeacherSchedulePage() {
           <div className="flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-600 shrink-0" />
             <span>
-              <strong>Status Izin Aktif:</strong> Seluruh jam mengajar Anda hari ini didelegasikan ke{' '}
+              <strong>
+                Status Izin {todayLeave?.status === 'approved' ? 'Disetujui' : todayLeave?.status === 'pending' ? 'Pending (Menunggu Verifikasi)' : 'Aktif'}:
+              </strong>{' '}
+              Seluruh jam mengajar Anda hari ini didelegasikan ke{' '}
               <strong>Tim Kesiswaan (Piket)</strong> beserta instruksi tugas titipan.
             </span>
           </div>
@@ -509,33 +546,89 @@ export default function TeacherSchedulePage() {
       {/* Modal Pengajuan Izin Mengajar Guru */}
       <Modal
         isOpen={isLeaveModalOpen}
-        onClose={() => setIsLeaveModalOpen(false)}
+        onClose={() => {
+          setIsLeaveModalOpen(false);
+          setFormError('');
+          setFieldErrors({});
+        }}
         title="Pengajuan Izin Mengajar & Delegasi Piket"
         size="md"
       >
         <form onSubmit={handleSendLeave} className="flex flex-col gap-4">
+          {formError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
+              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{formError}</div>
+            </div>
+          )}
+
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 leading-relaxed">
             Pengajuan izin akan mendelegasikan jadwal kelas Anda hari ini ke{' '}
             <strong>Tim Kesiswaan (Piket)</strong>. Pastikan instruksi tugas ditulis dengan jelas untuk dibacakan kepada siswa di kelas.
           </div>
 
           <Select
-            label="Alasan Berhalangan Hadir"
+            label="Kategori Alasan Berhalangan Hadir"
             options={[
               { value: 'dinas_luar', label: 'Izin Dinas Luar / Tugas Sekolah' },
               { value: 'sakit', label: 'Sakit (Dengan Keterangan)' },
               { value: 'izin_keperluan', label: 'Izin Keperluan Pribadi Mendesak' },
             ]}
-            value={leaveReason}
-            onChange={(e) => setLeaveReason(e.target.value)}
+            value={leaveReasonCategory}
+            onChange={(e) => setLeaveReasonCategory(e.target.value)}
           />
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              Detail Alasan Izin <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={leaveReasonDetail}
+              onChange={(e) => {
+                setLeaveReasonDetail(e.target.value);
+                if (formError) setFormError('');
+              }}
+              placeholder="Contoh: Rapat dinas MGMP Disdikpora / Sakit flu demam"
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-gray-900 bg-white"
+            />
+            {fieldErrors.reason && (
+              <span className="text-[11px] text-red-600 mt-1 block">
+                {fieldErrors.reason[0]}
+              </span>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              Lampiran Surat Keterangan / Izin (Opsional)
+            </label>
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setAttachmentFile(file);
+              }}
+              className="w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 hover:file:bg-gray-200 cursor-pointer"
+            />
+            <span className="text-[11px] text-gray-500 mt-1 block">
+              Format: JPG, PNG, atau PDF (maks. 5 MB).
+            </span>
+            {fieldErrors.attachment && (
+              <span className="text-[11px] text-red-600 mt-1 block">
+                {fieldErrors.attachment[0]}
+              </span>
+            )}
+          </div>
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               Instruksi Tugas Titipan untuk Siswa <span className="text-red-500">*</span>
             </label>
             <textarea
-              rows={4}
+              rows={3}
               required
               value={taskInstructions}
               onChange={(e) => setTaskInstructions(e.target.value)}
@@ -545,18 +638,51 @@ export default function TeacherSchedulePage() {
             <span className="text-[11px] text-gray-500 mt-1 block">
               Instruksi ini akan otomatis muncul pada layar presensi Guru Piket Kesiswaan.
             </span>
+            {fieldErrors.task_instruction && (
+              <span className="text-[11px] text-red-600 mt-1 block">
+                {fieldErrors.task_instruction[0]}
+              </span>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              Lampiran File Soal / Modul Siswa (Opsional)
+            </label>
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setTaskAttachmentFile(file);
+              }}
+              className="w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 hover:file:bg-gray-200 cursor-pointer"
+            />
+            <span className="text-[11px] text-gray-500 mt-1 block">
+              Format: JPG, PNG, atau PDF (maks. 5 MB).
+            </span>
+            {fieldErrors.task_attachment && (
+              <span className="text-[11px] text-red-600 mt-1 block">
+                {fieldErrors.task_attachment[0]}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
             <Button
               variant="secondary"
               type="button"
-              onClick={() => setIsLeaveModalOpen(false)}
+              disabled={isSubmitting}
+              onClick={() => {
+                setIsLeaveModalOpen(false);
+                setFormError('');
+                setFieldErrors({});
+              }}
             >
               Batal
             </Button>
-            <Button variant="primary" type="submit">
-              Ajukan &amp; Delegasikan ke Kesiswaan
+            <Button variant="primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Mengirim...' : 'Ajukan & Delegasikan ke Kesiswaan'}
             </Button>
           </div>
         </form>

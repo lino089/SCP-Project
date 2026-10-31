@@ -259,4 +259,147 @@ class StudentManagementTest extends TestCase
         $this->deleteJson('/api/students/' . $student->id)->assertStatus(403);
         $this->postJson('/api/students/' . $student->id . '/hold-back')->assertStatus(403);
     }
+
+    public function test_waka_can_create_student_with_gender_and_nisn(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/students', [
+            'name' => 'Ahmad Fauzan',
+            'nis' => '1010',
+            'class_id' => $this->classX->id,
+            'gender' => 'l',
+            'nisn' => '0081234567',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'student' => [
+                        'name' => 'Ahmad Fauzan',
+                        'nis_nip' => '1010',
+                        'gender' => 'L',
+                        'nisn' => '0081234567',
+                    ],
+                ],
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'nis_nip' => '1010',
+            'gender' => 'L',
+            'nisn' => '0081234567',
+        ]);
+    }
+
+    public function test_waka_cannot_create_student_with_duplicate_nisn(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        User::create([
+            'name' => 'Siswa Pertama',
+            'nis_nip' => '1011',
+            'role' => 'student',
+            'class_id' => $this->classX->id,
+            'password' => Hash::make('password123'),
+            'gender' => 'L',
+            'nisn' => '0089999999',
+        ]);
+
+        $response = $this->postJson('/api/students', [
+            'name' => 'Siswa Kedua',
+            'nis' => '1012',
+            'class_id' => $this->classX->id,
+            'gender' => 'P',
+            'nisn' => '0089999999',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['nisn']);
+    }
+
+    public function test_waka_can_create_student_without_gender_and_nisn_backward_compatible(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/students', [
+            'name' => 'Siswa Polos',
+            'nis' => '1013',
+            'class_id' => $this->classX->id,
+        ]);
+
+        $response->assertStatus(201);
+
+        $this->assertDatabaseHas('users', [
+            'nis_nip' => '1013',
+            'gender' => null,
+            'nisn' => null,
+        ]);
+    }
+
+    public function test_waka_can_update_student_gender_and_nisn(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $student = User::create([
+            'name' => 'Siti Aisyah',
+            'nis_nip' => '1014',
+            'role' => 'student',
+            'class_id' => $this->classX->id,
+            'password' => Hash::make('password123'),
+            'gender' => 'P',
+            'nisn' => '0071111111',
+        ]);
+
+        $response = $this->putJson('/api/students/' . $student->id, [
+            'name' => 'Siti Aisyah Putri',
+            'nis' => '1014',
+            'class_id' => $this->classXI->id,
+            'gender' => 'P',
+            'nisn' => '0072222222',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'id' => $student->id,
+                    'gender' => 'P',
+                    'nisn' => '0072222222',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $student->id,
+            'gender' => 'P',
+            'nisn' => '0072222222',
+        ]);
+    }
+
+    public function test_waka_updating_student_without_gender_and_nisn_retains_existing_values(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $student = User::create([
+            'name' => 'Budi Santoso',
+            'nis_nip' => '1015',
+            'role' => 'student',
+            'class_id' => $this->classX->id,
+            'password' => Hash::make('password123'),
+            'gender' => 'L',
+            'nisn' => '0073333333',
+        ]);
+
+        $response = $this->putJson('/api/students/' . $student->id, [
+            'name' => 'Budi Santoso Update',
+            'nis' => '1015',
+            'class_id' => $this->classXI->id,
+        ]);
+
+        $response->assertStatus(200);
+
+        $fresh = $student->fresh();
+        $this->assertSame('L', $fresh->gender);
+        $this->assertSame('0073333333', $fresh->nisn);
+    }
 }

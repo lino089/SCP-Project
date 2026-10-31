@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Classes;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\PersonalAccessToken;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -109,6 +111,132 @@ class AuthTest extends TestCase
                     'nis_nip' => [
                         'NIS/NIP atau password salah',
                     ],
+                ],
+            ]);
+    }
+
+    public function test_me_endpoint_returns_user_profile_with_assignments(): void
+    {
+        $teacher = User::create([
+            'name' => 'Guru Pengampu',
+            'email' => 'guru@example.com',
+            'nis_nip' => '198001012005011001',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        Sanctum::actingAs($teacher);
+
+        $response = $this->getJson('/api/me');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Data profil berhasil diambil',
+                'data' => [
+                    'id' => $teacher->id,
+                    'name' => 'Guru Pengampu',
+                    'role' => 'teacher',
+                ],
+            ])
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'data' => [
+                    'id',
+                    'name',
+                    'role',
+                    'assignments',
+                ],
+            ]);
+    }
+
+    public function test_me_endpoint_eager_loads_linked_student_and_school_class_for_parent(): void
+    {
+        $class = Classes::create([
+            'name' => 'X-RPL-1',
+            'level' => 10,
+        ]);
+
+        $student = User::create([
+            'name' => 'Ananda Rizky',
+            'email' => 'ananda@example.com',
+            'nis_nip' => '2024001',
+            'role' => 'student',
+            'class_id' => $class->id,
+            'gender' => 'L',
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        $parent = User::create([
+            'name' => 'Bapak Joko Santoso',
+            'email' => 'joko@example.com',
+            'nis_nip' => 'P-2024001',
+            'role' => 'parent',
+            'linked_student_id' => $student->id,
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        Sanctum::actingAs($parent);
+
+        $response = $this->getJson('/api/me');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Data profil berhasil diambil',
+                'data' => [
+                    'id' => $parent->id,
+                    'role' => 'parent',
+                    'linked_student_id' => $student->id,
+                    'linked_student' => [
+                        'id' => $student->id,
+                        'name' => 'Ananda Rizky',
+                        'nis_nip' => '2024001',
+                        'class_id' => $class->id,
+                        'gender' => 'L',
+                        'school_class' => [
+                            'id' => $class->id,
+                            'name' => 'X-RPL-1',
+                            'level' => 10,
+                        ],
+                    ],
+                ],
+            ]);
+
+        // Pastikan password dan remember_token tidak bocor pada linked_student
+        $this->assertArrayNotHasKey('password', $response->json('data.linked_student'));
+        $this->assertArrayNotHasKey('remember_token', $response->json('data.linked_student'));
+    }
+
+    public function test_me_endpoint_returns_null_linked_student_when_parent_has_no_linked_student(): void
+    {
+        $parent = User::create([
+            'name' => 'Wali Belum Ditautkan',
+            'email' => 'unlinked@example.com',
+            'nis_nip' => 'P-UNLINKED',
+            'role' => 'parent',
+            'linked_student_id' => null,
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        Sanctum::actingAs($parent);
+
+        $response = $this->getJson('/api/me');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Data profil berhasil diambil',
+                'data' => [
+                    'id' => $parent->id,
+                    'role' => 'parent',
+                    'linked_student_id' => null,
+                    'linked_student' => null,
                 ],
             ]);
     }

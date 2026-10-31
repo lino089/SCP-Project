@@ -21,13 +21,18 @@ export default function ParentMonitoringPage() {
 
   // Child Profile Information
   const child = useMemo(() => {
+    const student = user?.linked_student || user?.linkedStudent;
+    const schoolClass = student?.school_class || student?.schoolClass;
+    const isParent = user?.role === 'parent';
+    const isLinked = isParent ? Boolean(user?.linked_student_id && student) : true;
+
     return {
-      studentName: user?.linkedStudent?.name || user?.child_name || 'Aisyah Putri Ramadhani',
-      nis: user?.linkedStudent?.nis_nip || user?.child_nis || '2024001',
-      className: user?.linkedStudent?.schoolClass?.name || user?.child_class || 'X-RPL-1',
-      guardianName: user?.name || 'Bambang Sulistyo',
+      studentName: student?.name || (isLinked ? '-' : 'Siswa Belum Ditautkan'),
+      nis: student?.nis_nip || '-',
+      className: schoolClass?.name || (isLinked ? '-' : 'Kelas Belum Ditentukan'),
+      guardianName: user?.name || 'Wali Siswa',
       academicYear: '2025/2026 Ganjil',
-      isLinked: Boolean(user?.linked_student_id || user?.linkedStudent || user?.role !== 'parent'),
+      isLinked,
     };
   }, [user]);
 

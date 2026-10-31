@@ -11,80 +11,65 @@ import {
 import { Button, Select, Table, Badge, Modal, PasswordModal } from '../../components/shared';
 import { scheduleImportApi } from '../../services/scheduleImportApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
+import { NUMBER_TO_DAY } from '../../utils/timetableHelper';
 import './ReviewImport.css';
 
-// Realistic sample rows extracted from FET PDF
-const FALLBACK_IMPORT_ROWS = [
-  {
-    id: 1,
-    day: 'Senin',
-    period_number: 1,
-    duration_periods: 2,
-    className: 'X-RPL-1',
-    teacherFetId: 'AFAUZI',
-    teacherName: 'Drs. Ahmad Fauzi, M.Pd.',
-    subjectName: 'Matematika',
-    roomName: 'R-101',
-    status: 'Matched',
-  },
-  {
-    id: 2,
-    day: 'Senin',
-    period_number: 3,
-    duration_periods: 2,
-    className: 'X-RPL-1',
-    teacherFetId: 'SNURHALIZA',
-    teacherName: 'Siti Nurhaliza, S.Pd.',
-    subjectName: 'Bahasa Indonesia',
-    roomName: 'R-101',
-    status: 'Matched',
-  },
-  {
-    id: 3,
-    day: 'Senin',
-    period_number: 5,
-    duration_periods: 2,
-    className: 'X-RPL-1',
-    teacherFetId: 'IHAKIM',
-    teacherName: 'Irfan Hakim, S.Kom.',
-    subjectName: 'Pemrograman Web',
-    roomName: 'LAB 16',
-    status: 'Unmatched', // 'LAB 16' needs mapping to 'Lab Komputer 1'
-  },
-  {
-    id: 4,
-    day: 'Senin',
-    period_number: 1,
-    duration_periods: 2,
-    className: 'XI-RPL-1',
-    teacherFetId: 'BSANTOSO',
-    teacherName: 'Budi Santoso, S.T., M.T.',
-    subjectName: 'Basis Data',
-    roomName: 'LAB 16',
-    status: 'Conflict', // Room conflict with X-RPL-1 on same slot
-  },
-  {
-    id: 5,
-    day: 'Selasa',
-    period_number: 1,
-    duration_periods: 2,
-    className: 'X-RPL-1',
-    teacherFetId: 'KADI',
-    teacherName: 'Kurniawan Adi, S.Pd.',
-    subjectName: 'Penjasorkes',
-    roomName: 'Lapangan Olahraga',
-    status: 'Matched',
-  },
-];
+/**
+ * Normalizes raw ScheduleImportRow response into consistent structure for UI review
+ */
+function mapImportRow(r) {
+  const raw = r.raw_data || {};
+  const matchStatus = (r.match_status || 'unmatched').toLowerCase();
+
+  const isDuplicateOrExcluded =
+    matchStatus === 'duplicate' ||
+    Boolean(r.resolved_by_waka && matchStatus === 'duplicate') ||
+    Boolean(r.is_excluded);
+
+  let normalizedStatus;
+  if (matchStatus === 'matched' || r.status === 'Matched') {
+    normalizedStatus = 'Matched';
+  } else if (matchStatus === 'conflict' || r.status === 'Conflict' || Boolean(r.room_source_conflict)) {
+    normalizedStatus = 'Conflict';
+  } else if (isDuplicateOrExcluded) {
+    normalizedStatus = 'Excluded';
+  } else {
+    normalizedStatus = 'Unmatched';
+  }
+
+  return {
+    id: r.id,
+    day: NUMBER_TO_DAY[r.day_of_week] || r.day || r.day_of_week_text || 'Senin',
+    day_of_week: r.day_of_week,
+    period_number: r.period_number || raw.period_number || 1,
+    duration_periods: r.duration_periods || raw.duration_periods || 1,
+    className: r.matched_class?.name || raw.kelas_mentah || r.className || 'Kelas Belum Terpetakan',
+    teacherFetId: r.matched_teacher?.fet_staff_id || raw.fet_staff_id || r.teacherFetId || '-',
+    teacherName: r.matched_teacher?.name || raw.guru_mentah || r.teacherName || 'Guru Belum Terpetakan',
+    subjectName: r.matched_subject?.name || raw.mapel_mentah || r.subjectName || 'Mata Pelajaran Belum Terpetakan',
+    roomName: r.matched_room?.name || raw.ruang_final || r.roomName || 'Ruang Belum Terpetakan',
+    status: normalizedStatus,
+    match_status: matchStatus,
+    is_excluded: isDuplicateOrExcluded,
+    is_manual: Boolean(r.resolved_by_waka || r.is_manual),
+    room_source_conflict: Boolean(r.room_source_conflict),
+    raw_data: raw,
+    matched_class_id: r.matched_class_id || r.matched_class?.id || null,
+    matched_teacher_id: r.matched_teacher_id || r.matched_teacher?.id || null,
+    matched_subject_id: r.matched_subject_id || r.matched_subject?.id || null,
+    matched_room_id: r.matched_room_id || r.matched_room?.id || null,
+  };
+}
 
 export default function ReviewImportPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   // Data states
-  const [rows, setRows] = useState(FALLBACK_IMPORT_ROWS);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [ignoredRowIds, setIgnoredRowIds] = useState(new Set());
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unmatched' | 'conflict' | 'matched'
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unmatched' | 'conflict' | 'matched' | 'ignored'
 
   // Master datasets for resolution dropdowns
   const [classList, setClassList] = useState([]);
@@ -136,46 +121,59 @@ export default function ReviewImportPage() {
     loadMaster();
   }, []);
 
+  // Redirect if invalid ID
+  useEffect(() => {
+    if (!id || id === 'latest' || isNaN(Number(id))) {
+      alert('Silakan pilih atau unggah berkas jadwal terlebih dahulu.');
+      navigate('/web/upload-import', { replace: true });
+    }
+  }, [id, navigate]);
+
   // Poll or fetch import details
   useEffect(() => {
+    if (!id || id === 'latest' || isNaN(Number(id))) return;
+
     let isMounted = true;
     let timerId = null;
 
-    async function pollData() {
-      if (!id || id === 'latest' || isNaN(Number(id))) return;
-
+    async function pollData(isFirst = false) {
       try {
+        if (isFirst) setLoading(true);
         const res = await scheduleImportApi.getImportDetail(id);
         if (isMounted && res?.data) {
           const status = res.data.status || 'preview_ready';
 
           if (res.data.rows && Array.isArray(res.data.rows)) {
-            const mapped = res.data.rows.map((r) => ({
-              id: r.id,
-              day: r.day || r.day_of_week_text || 'Senin',
-              period_number: r.period_number || r.slot || 1,
-              duration_periods: r.duration_periods || r.duration || 1,
-              className: r.raw_class_name || r.className || 'Kelas',
-              teacherFetId: r.raw_teacher_code || r.teacherFetId || '-',
-              teacherName: r.matched_teacher?.name || r.teacherName || r.raw_teacher_name || 'Guru',
-              subjectName: r.matched_subject?.name || r.subjectName || r.raw_subject_name || 'Mapel',
-              roomName: r.matched_room?.name || r.roomName || r.raw_room_name || 'Ruang',
-              status: r.status || (r.is_matched ? 'Matched' : 'Unmatched'),
-              is_excluded: Boolean(r.is_excluded),
-            }));
+            const mapped = res.data.rows.map(mapImportRow);
             setRows(mapped);
+
+            const excludedIds = new Set(
+              res.data.rows
+                .filter(
+                  (r) =>
+                    r.match_status === 'duplicate' ||
+                    Boolean(r.is_excluded) ||
+                    Boolean(r.resolved_by_waka && r.match_status === 'duplicate')
+                )
+                .map((r) => r.id)
+            );
+            setIgnoredRowIds(excludedIds);
           }
 
           if (isMounted && (status === 'parsing' || status === 'uploaded')) {
-            timerId = setTimeout(pollData, 3000);
+            timerId = setTimeout(() => pollData(false), 3000);
           }
         }
-      } catch {
-        // Keep fallback rows
+      } catch (err) {
+        console.error('Gagal mengambil data preview import:', err);
+      } finally {
+        if (isMounted && isFirst) {
+          setLoading(false);
+        }
       }
     }
 
-    pollData();
+    pollData(true);
 
     return () => {
       isMounted = false;
@@ -188,21 +186,25 @@ export default function ReviewImportPage() {
     let matched = 0;
     let unmatched = 0;
     let conflict = 0;
+    let ignored = 0;
 
     rows.forEach((item) => {
-      if (ignoredRowIds.has(item.id) || item.is_excluded) return;
+      const isIgnored = ignoredRowIds.has(item.id) || item.is_excluded;
+      if (isIgnored) {
+        ignored += 1;
+        return;
+      }
 
       if (item.status === 'Matched') {
         matched += 1;
-      } else if (item.status === 'Unmatched') {
-        unmatched += 1;
       } else if (item.status === 'Conflict') {
         conflict += 1;
+      } else {
+        unmatched += 1;
       }
     });
 
-    const total = rows.length - ignoredRowIds.size;
-    return { total, matched, unmatched, conflict };
+    return { total: rows.length, matched, unmatched, conflict, ignored };
   }, [rows, ignoredRowIds]);
 
   // Toggle ignore / exclude row
@@ -217,11 +219,27 @@ export default function ReviewImportPage() {
     }
     setIgnoredRowIds(nextIgnored);
 
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? {
+              ...r,
+              is_excluded: willIgnore,
+              status: willIgnore ? 'Excluded' : r.status,
+            }
+          : r
+      )
+    );
+
     if (id && !isNaN(Number(id))) {
       try {
-        await scheduleImportApi.resolveImportRow(id, rowId, { exclude: willIgnore });
-      } catch {
-        // Fallback local state preserved
+        const res = await scheduleImportApi.resolveImportRow(id, rowId, { exclude: willIgnore });
+        if (res?.data) {
+          const updated = mapImportRow(res.data);
+          setRows((prev) => prev.map((r) => (r.id === rowId ? updated : r)));
+        }
+      } catch (err) {
+        console.error('Gagal mengubah status abaikan baris:', err);
       }
     }
   };
@@ -239,10 +257,10 @@ export default function ReviewImportPage() {
     );
 
     setResolvedForm({
-      class_id: matchingClass?.id || classList[0]?.id || '',
-      teacher_id: matchingTeacher?.id || teacherList[0]?.id || '',
-      room_id: matchingRoom?.id || roomList[0]?.id || '',
-      subject_id: matchingSubject?.id || subjectList[0]?.id || '',
+      class_id: row.matched_class_id || matchingClass?.id || classList[0]?.id || '',
+      teacher_id: row.matched_teacher_id || matchingTeacher?.id || teacherList[0]?.id || '',
+      room_id: row.matched_room_id || matchingRoom?.id || roomList[0]?.id || '',
+      subject_id: row.matched_subject_id || matchingSubject?.id || subjectList[0]?.id || '',
     });
   };
 
@@ -257,33 +275,39 @@ export default function ReviewImportPage() {
 
     if (id && !isNaN(Number(id))) {
       try {
-        await scheduleImportApi.resolveImportRow(id, editingRow.id, {
+        const res = await scheduleImportApi.resolveImportRow(id, editingRow.id, {
           matched_class_id: selectedClass?.id,
           matched_teacher_id: selectedTeacher?.id,
           matched_room_id: selectedRoom?.id,
           matched_subject_id: selectedSubject?.id,
           exclude: false,
         });
-      } catch {
-        // Fallback local update
+        if (res?.data) {
+          const updated = mapImportRow(res.data);
+          setRows((prev) => prev.map((r) => (r.id === editingRow.id ? updated : r)));
+        }
+      } catch (err) {
+        console.error('Gagal menyimpan resolusi baris:', err);
       }
+    } else {
+      // Fallback local update
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === editingRow.id
+            ? {
+                ...r,
+                className: selectedClass?.name || r.className,
+                teacherName: selectedTeacher?.name || r.teacherName,
+                teacherFetId: selectedTeacher?.fet_staff_id || r.teacherFetId,
+                roomName: selectedRoom?.name || r.roomName,
+                subjectName: selectedSubject?.name || r.subjectName,
+                status: 'Matched',
+                is_excluded: false,
+              }
+            : r
+        )
+      );
     }
-
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === editingRow.id
-          ? {
-              ...r,
-              className: selectedClass?.name || r.className,
-              teacherName: selectedTeacher?.name || r.teacherName,
-              teacherFetId: selectedTeacher?.fet_staff_id || r.teacherFetId,
-              roomName: selectedRoom?.name || r.roomName,
-              subjectName: selectedSubject?.name || r.subjectName,
-              status: 'Matched',
-            }
-          : r
-      )
-    );
 
     // Remove from ignored if it was ignored
     if (ignoredRowIds.has(editingRow.id)) {
@@ -341,12 +365,15 @@ export default function ReviewImportPage() {
   // Filtered rows for table
   const displayedRows = useMemo(() => {
     return rows.filter((r) => {
+      const isIgnored = ignoredRowIds.has(r.id) || r.is_excluded;
+      if (activeTab === 'ignored') return isIgnored;
+      if (isIgnored && activeTab !== 'all') return false;
       if (activeTab === 'unmatched') return r.status === 'Unmatched';
       if (activeTab === 'conflict') return r.status === 'Conflict';
       if (activeTab === 'matched') return r.status === 'Matched';
       return true;
     });
-  }, [rows, activeTab]);
+  }, [rows, activeTab, ignoredRowIds]);
 
   const columns = [
     {
@@ -395,9 +422,16 @@ export default function ReviewImportPage() {
       key: 'room',
       label: 'Ruangan',
       renderCell: (r) => (
-        <span className="font-mono text-xs text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-          {r.roomName}
-        </span>
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="font-mono text-xs text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+            {r.roomName}
+          </span>
+          {r.room_source_conflict && (
+            <span className="text-[10px] text-amber-600 font-medium leading-none">
+              *Konflik alokasi ruang PDF
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -594,6 +628,17 @@ export default function ReviewImportPage() {
             >
               Matched ({stats.matched})
             </button>
+            <button
+              type="button"
+              className={`px-3 py-1 rounded text-xs transition-all cursor-pointer ${
+                activeTab === 'ignored'
+                  ? 'bg-white text-gray-700 shadow-xs font-semibold'
+                  : 'text-gray-600 hover:text-gray-900 font-normal'
+              }`}
+              onClick={() => setActiveTab('ignored')}
+            >
+              Diabaikan ({stats.ignored})
+            </button>
           </div>
         </div>
 
@@ -601,6 +646,7 @@ export default function ReviewImportPage() {
         <Table
           columns={columns}
           data={displayedRows}
+          isLoading={loading}
           emptyMessage="Tidak ada baris jadwal yang sesuai dengan filter yang dipilih."
         />
       </div>
@@ -660,16 +706,19 @@ export default function ReviewImportPage() {
                   Durasi: <strong>{editingRow.duration_periods} JP</strong>
                 </div>
                 <div>
-                  Teks Kelas: <code>{editingRow.className}</code>
+                  Teks Kelas: <code>{editingRow.raw_data?.kelas_mentah || editingRow.className}</code>
                 </div>
                 <div>
-                  Teks FET ID Guru: <code>{editingRow.teacherFetId}</code>
+                  Teks FET ID Guru: <code>{editingRow.raw_data?.fet_staff_id || editingRow.teacherFetId}</code>
                 </div>
                 <div>
-                  Teks Mapel: <code>{editingRow.subjectName}</code>
+                  Teks Guru: <code>{editingRow.raw_data?.guru_mentah || editingRow.teacherName}</code>
                 </div>
                 <div>
-                  Teks Ruang: <code>{editingRow.roomName}</code>
+                  Teks Mapel: <code>{editingRow.raw_data?.mapel_mentah || editingRow.subjectName}</code>
+                </div>
+                <div>
+                  Teks Ruang: <code>{editingRow.raw_data?.ruang_final || editingRow.roomName}</code>
                 </div>
               </div>
             </div>
