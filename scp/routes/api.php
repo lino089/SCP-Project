@@ -14,6 +14,7 @@ use App\Http\Controllers\API\SchoolClassController;
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\TeacherController;
+use App\Http\Controllers\API\TeacherLeaveRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/ping', function () {
@@ -53,6 +54,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/leave-requests', [LeaveRequestController::class, 'index']);
     Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
     Route::patch('/leave-requests/{id}', [LeaveRequestController::class, 'update']);
+
+    // 9.6b Perizinan Guru (Teacher Leave Requests - Tahap 3)
+    Route::middleware('role:vice_principal,teacher')->group(function () {
+        Route::get('/teacher-leave-requests', [TeacherLeaveRequestController::class, 'index']);
+        Route::get('/teacher-leave-requests/{id}', [TeacherLeaveRequestController::class, 'show']);
+        Route::patch('/teacher-leave-requests/{id}/approve', [TeacherLeaveRequestController::class, 'approve']);
+        Route::patch('/teacher-leave-requests/{id}/reject', [TeacherLeaveRequestController::class, 'reject']);
+    });
+
+    Route::middleware('role:teacher')->group(function () {
+        Route::post('/teacher-leave-requests', [TeacherLeaveRequestController::class, 'store']);
+    });
 
     // 9.8 Sistem Kuis Berbantuan AI (General Accessible / Scoped in Controller)
     Route::get('/quizzes', [QuizController::class, 'index']);

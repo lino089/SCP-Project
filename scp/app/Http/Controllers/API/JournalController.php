@@ -44,16 +44,27 @@ class JournalController extends Controller
 
         // Scoping akses:
         // Waka Kurikulum & Guru Kesiswaan dapat melihat seluruh jurnal sekolah
+        // Wali Kelas dapat melihat jurnal kelas binaannya, jurnal yang diinval, atau jadwal mengajarnya sendiri
         // Guru biasa hanya dapat melihat jurnal di mana dia adalah guru utama atau guru pengganti
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
         $isWaka = ($user->role === 'vice_principal');
 
         if (!$isWaka && !$isKesiswaan) {
-            $query->where(function ($q) use ($user) {
-                $q->whereHas('schedule', function ($sq) use ($user) {
-                    $sq->where('teacher_id', $user->id);
-                })->orWhere('substitute_teacher_id', $user->id);
-            });
+            if ($user->isWaliKelas()) {
+                $waliClassIds = $user->homeroomClassIds();
+                $query->where(function ($q) use ($user, $waliClassIds) {
+                    $q->whereHas('schedule', function ($sq) use ($user, $waliClassIds) {
+                        $sq->whereIn('class_id', $waliClassIds)
+                            ->orWhere('teacher_id', $user->id);
+                    })->orWhere('substitute_teacher_id', $user->id);
+                });
+            } else {
+                $query->where(function ($q) use ($user) {
+                    $q->whereHas('schedule', function ($sq) use ($user) {
+                        $sq->where('teacher_id', $user->id);
+                    })->orWhere('substitute_teacher_id', $user->id);
+                });
+            }
         }
 
         // Filtering
@@ -119,10 +130,11 @@ class JournalController extends Controller
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
         $isOriginalTeacher = ($journal->schedule->teacher_id === $user->id);
         $isSubstitute = ($journal->substitute_teacher_id === $user->id);
+        $isWaliKelasOfClass = ($user->role === 'teacher' && $user->isWaliKelas($journal->schedule->class_id));
         $isStudentInClass = ($user->role === 'student' && $user->class_id === $journal->schedule->class_id);
         $isParentOfClass = ($user->role === 'parent' && $user->linkedStudent?->class_id === $journal->schedule->class_id);
 
-        if (!$isWaka && !$isKesiswaan && !$isOriginalTeacher && !$isSubstitute && !$isStudentInClass && !$isParentOfClass) {
+        if (!$isWaka && !$isKesiswaan && !$isOriginalTeacher && !$isSubstitute && !$isWaliKelasOfClass && !$isStudentInClass && !$isParentOfClass) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat detail jurnal ini.',
@@ -155,14 +167,15 @@ class JournalController extends Controller
         $isOriginalTeacher = ($schedule->teacher_id === $user->id);
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
         $isWaka = ($user->role === 'vice_principal');
+        $isWaliKelasOfClass = ($user->role === 'teacher' && $user->isWaliKelas($schedule->class_id));
 
-        // Penegakan Otorisasi Baru:
-        // Hanya Guru Pemilik Jadwal ATAU Guru Kesiswaan ATAU Waka yang memiliki akses
-        // Wali Kelas dan Guru lain dilarang keras (HTTP 403)
-        if (!$isOriginalTeacher && !$isKesiswaan && !$isWaka) {
+        // Penegakan Otorisasi:
+        // Hanya Guru Pemilik Jadwal ATAU Guru Kesiswaan ATAU Waka ATAU Wali Kelas terkait yang memiliki akses
+        // Guru lain di luar peran tersebut dilarang (HTTP 403)
+        if (!$isOriginalTeacher && !$isKesiswaan && !$isWaka && !$isWaliKelasOfClass) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya guru pengajar jadwal atau Guru Kesiswaan yang berhak membuka atau menggantikan jadwal ini.',
+                'message' => 'Akses ditolak. Hanya guru pengajar jadwal, Guru Kesiswaan, atau Wali Kelas terkait yang berhak membuka atau menggantikan jadwal ini.',
             ], 403);
         }
 
@@ -199,8 +212,8 @@ class JournalController extends Controller
             ], 403);
         }
 
-        // Jika bukan original teacher, maka wajib Kesiswaan yang menjadi substitute_teacher_id
-        $substituteTeacherId = (!$isOriginalTeacher && $isKesiswaan) ? $user->id : null;
+        // Jika bukan original teacher, maka Kesiswaan atau Wali Kelas menjadi substitute_teacher_id
+        $substituteTeacherId = (!$isOriginalTeacher && ($isKesiswaan || $isWaliKelasOfClass)) ? $user->id : null;
 
         $journal = Journal::firstOrCreate(
             ['schedule_id' => $schedule->id, 'date' => $today],
@@ -210,8 +223,8 @@ class JournalController extends Controller
             ]
         );
 
-        // Jika jurnal sudah ada dan dibuka oleh Kesiswaan sebagai pengganti, catat substitute_teacher_id jika belum terisi
-        if (!$isOriginalTeacher && $isKesiswaan && is_null($journal->substitute_teacher_id)) {
+        // Jika jurnal sudah ada dan dibuka oleh Kesiswaan atau Wali Kelas sebagai pengganti, catat substitute_teacher_id jika belum terisi
+        if (!$isOriginalTeacher && ($isKesiswaan || $isWaliKelasOfClass) && is_null($journal->substitute_teacher_id)) {
             $journal->update(['substitute_teacher_id' => $user->id]);
         }
 
@@ -293,10 +306,12 @@ class JournalController extends Controller
         $user = $request->user();
 
         $isOriginalTeacher = ($journal->schedule->teacher_id === $user->id);
-        $isAuthorizedSubstitute = ($journal->substitute_teacher_id === $user->id && $user->isKesiswaan());
+        $isAuthorizedSubstitute = ($journal->substitute_teacher_id === $user->id) && (
+            $user->isKesiswaan() || $user->isWaliKelas($journal->schedule->class_id)
+        );
 
-        // Otorisasi Ketat: Hanya Guru Pemilik Jadwal ATAU Guru Pengganti Kesiswaan
-        // Wali Kelas dan guru lain ditolak (HTTP 403)
+        // Otorisasi Ketat: Hanya Guru Pemilik Jadwal ATAU Guru Pengganti (Kesiswaan / Wali Kelas)
+        // Guru lain ditolak (HTTP 403)
         if (!$isOriginalTeacher && !$isAuthorizedSubstitute) {
             return response()->json([
                 'success' => false,

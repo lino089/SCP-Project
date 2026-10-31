@@ -174,4 +174,31 @@ class User extends Authenticatable
     {
         return $this->hasMany(OtpCode::class, 'user_id');
     }
+
+    /**
+     * Relasi ke riwayat perizinan mengajar yang diajukan oleh guru
+     */
+    public function teacherLeaveRequests(): HasMany
+    {
+        return $this->hasMany(TeacherLeaveRequest::class, 'teacher_id');
+    }
+
+    /**
+     * Mengembalikan daftar class_id yang dibina sebagai wali kelas aktif
+     *
+     * @return array<int>
+     */
+    public function homeroomClassIds(): array
+    {
+        if ($this->role !== 'teacher') {
+            return [];
+        }
+
+        return $this->assignments()
+            ->where('type', 'wali_kelas')
+            ->pluck('class_id')
+            ->filter()
+            ->values()
+            ->toArray();
+    }
 }

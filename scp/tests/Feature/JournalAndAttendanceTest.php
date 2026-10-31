@@ -253,21 +253,34 @@ class JournalAndAttendanceTest extends TestCase
         ]);
     }
 
-    public function test_wali_kelas_is_forbidden_from_opening_or_substituting_journal(): void
+    public function test_wali_kelas_is_forbidden_from_opening_or_substituting_journal_of_other_class(): void
     {
+        $classOther = Classes::create(['name' => 'XI-TKJ-1', 'level' => 11]);
+        $scheduleOther = Schedule::create([
+            'teacher_id' => $this->teacherA->id,
+            'class_id' => $classOther->id,
+            'room_id' => $this->room->id,
+            'subject_id' => $this->subject->id,
+            'day_of_week' => Carbon::now('Asia/Jakarta')->dayOfWeekIso,
+            'period_number' => 3,
+            'duration_periods' => 2,
+            'cycle_type' => 1,
+            'source' => 'manual',
+        ]);
+
         Sanctum::actingAs($this->teacherWaliKelas);
 
         $response = $this->postJson('/api/journals', [
-            'schedule_id' => $this->schedule->id,
+            'schedule_id' => $scheduleOther->id,
         ]);
 
         $response->assertStatus(403)
             ->assertJson([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya guru pengajar jadwal atau Guru Kesiswaan yang berhak membuka atau menggantikan jadwal ini.',
+                'message' => 'Akses ditolak. Hanya guru pengajar jadwal, Guru Kesiswaan, atau Wali Kelas terkait yang berhak membuka atau menggantikan jadwal ini.',
             ]);
 
-        $this->assertEquals(0, Journal::count());
+        $this->assertEquals(0, Journal::where('schedule_id', $scheduleOther->id)->count());
     }
 
     public function test_regular_teacher_without_kesiswaan_is_forbidden_from_substituting(): void
@@ -281,7 +294,7 @@ class JournalAndAttendanceTest extends TestCase
         $response->assertStatus(403)
             ->assertJson([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya guru pengajar jadwal atau Guru Kesiswaan yang berhak membuka atau menggantikan jadwal ini.',
+                'message' => 'Akses ditolak. Hanya guru pengajar jadwal, Guru Kesiswaan, atau Wali Kelas terkait yang berhak membuka atau menggantikan jadwal ini.',
             ]);
 
         $this->assertEquals(0, Journal::count());

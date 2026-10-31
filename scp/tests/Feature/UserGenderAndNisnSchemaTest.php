@@ -166,14 +166,18 @@ class UserGenderAndNisnSchemaTest extends TestCase
         $this->assertTrue(Schema::hasColumn('users', 'gender'));
         $this->assertTrue(Schema::hasColumn('users', 'nisn'));
 
-        // Rollback 1 step (migration add_gender_and_nisn_to_users_table)
-        Artisan::call('migrate:rollback', ['--step' => 1]);
+        // Rollback migration add_gender_and_nisn_to_users_table secara spesifik
+        Artisan::call('migrate:rollback', [
+            '--path' => 'database/migrations/2026_10_30_000001_add_gender_and_nisn_to_users_table.php',
+        ]);
 
         $this->assertFalse(Schema::hasColumn('users', 'gender'), 'Gender column should be dropped after rollback.');
         $this->assertFalse(Schema::hasColumn('users', 'nisn'), 'NISN column should be dropped after rollback.');
 
         // Reapply migration
-        Artisan::call('migrate');
+        Artisan::call('migrate', [
+            '--path' => 'database/migrations/2026_10_30_000001_add_gender_and_nisn_to_users_table.php',
+        ]);
 
         $this->assertTrue(Schema::hasColumn('users', 'gender'), 'Gender column should exist after re-applying migration.');
         $this->assertTrue(Schema::hasColumn('users', 'nisn'), 'NISN column should exist after re-applying migration.');

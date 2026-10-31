@@ -137,21 +137,35 @@ class ScheduleController extends Controller
                 'subject:id,name',
             ]);
 
-        // Scoping: Guru hanya melihat jadwal miliknya sendiri
+        // Scoping: Guru hanya melihat jadwal miliknya sendiri, kecuali Wali Kelas meminta jadwal kelas binaannya
         if ($user->role === 'teacher') {
-            $query->where('teacher_id', $user->id);
+            $homeroomIds = $user->homeroomClassIds();
+            $isRequestingOwnHomeroom = $request->filled('class_id') && in_array($request->integer('class_id'), $homeroomIds);
+
+            if ($isRequestingOwnHomeroom) {
+                // Wali Kelas meminta jadwal kelas binaannya: buka akses seluruh jadwal pada kelas tersebut
+                $query->where('class_id', $request->integer('class_id'));
+            } else {
+                // Guru biasa, ATAU Wali Kelas tanpa filter class_id, ATAU meminta kelas lain di luar binaannya:
+                // Wajib dikunci hanya jadwal mengajar pribadinya
+                $query->where('teacher_id', $user->id);
+
+                if ($request->filled('class_id')) {
+                    $query->where('class_id', $request->integer('class_id'));
+                }
+            }
         } elseif ($user->role === 'vice_principal') {
             if ($request->filled('teacher_id')) {
                 $query->where('teacher_id', $request->input('teacher_id'));
+            }
+
+            if ($request->filled('class_id')) {
+                $query->where('class_id', $request->input('class_id'));
             }
         }
 
         if ($request->filled('day')) {
             $query->where('day_of_week', $request->input('day'));
-        }
-
-        if ($request->filled('class_id')) {
-            $query->where('class_id', $request->input('class_id'));
         }
 
         $schedules = $query->orderBy('day_of_week')->orderBy('period_number')->paginate($perPage);
