@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -352,5 +353,56 @@ class ProfileController extends Controller
 
             return null;
         }
+    }
+
+    /**
+     * Memperbarui kata sandi akun pengguna yang sedang login.
+     * PATCH /api/me/password
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => ['required', 'string'],
+            'new_password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'different:current_password',
+            ],
+            'new_password_confirmation' => ['required', 'string'],
+        ], [
+            'current_password.required' => 'Kata sandi saat ini wajib diisi.',
+            'new_password.required' => 'Kata sandi baru wajib diisi.',
+            'new_password.min' => 'Kata sandi baru minimal 8 karakter.',
+            'new_password.confirmed' => 'Konfirmasi kata sandi baru tidak cocok.',
+            'new_password.different' => 'Kata sandi baru tidak boleh sama dengan kata sandi saat ini.',
+            'new_password_confirmation.required' => 'Konfirmasi kata sandi baru wajib diisi.',
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kata sandi saat ini yang Anda masukkan tidak sesuai.',
+                'errors' => [
+                    'current_password' => ['Kata sandi saat ini yang Anda masukkan salah.'],
+                ],
+            ], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password),
+            'must_change_password' => false,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kata sandi akun Anda berhasil diperbarui.',
+            'data' => [
+                'must_change_password' => false,
+            ],
+        ], 200);
     }
 }

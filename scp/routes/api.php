@@ -40,6 +40,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/me/phone', [ProfileController::class, 'requestPhoneOtp']);
     Route::post('/me/phone/verify', [ProfileController::class, 'verifyPhoneOtp']);
     Route::post('/me/google-link', [ProfileController::class, 'linkGoogle']);
+    Route::patch('/me/password', [ProfileController::class, 'changePassword']);
 
     // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3 & 9.6)
     Route::get('/classes', [SchoolClassController::class, 'index']);
