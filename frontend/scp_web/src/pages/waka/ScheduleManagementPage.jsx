@@ -27,94 +27,6 @@ import {
 import { checkMasterDataPrerequisites } from '../../utils/prerequisiteHelper';
 import './ScheduleManagement.css';
 
-// Fallback schedules in case backend is offline
-const FALLBACK_SCHEDULES = [
-  {
-    id: 1,
-    cycle: 1,
-    cycle_type: 1,
-    day: 'Senin',
-    day_of_week: 1,
-    slot: 1,
-    period_number: 1,
-    duration: 2,
-    duration_periods: 2,
-    teacher_id: 1,
-    class_id: 1,
-    room_id: 1,
-    subject_id: 1,
-    teacherName: 'Drs. Ahmad Fauzi, M.Pd.',
-    className: 'X-RPL-1',
-    level: 10,
-    roomName: 'R-101',
-    roomType: 'kelas',
-    subjectName: 'Matematika',
-  },
-  {
-    id: 2,
-    cycle: 1,
-    cycle_type: 1,
-    day: 'Senin',
-    day_of_week: 1,
-    slot: 3,
-    period_number: 3,
-    duration: 2,
-    duration_periods: 2,
-    teacher_id: 2,
-    class_id: 1,
-    room_id: 1,
-    subject_id: 2,
-    teacherName: 'Siti Nurhaliza, S.Pd.',
-    className: 'X-RPL-1',
-    level: 10,
-    roomName: 'R-101',
-    roomType: 'kelas',
-    subjectName: 'Bahasa Indonesia',
-  },
-  {
-    id: 3,
-    cycle: 1,
-    cycle_type: 1,
-    day: 'Senin',
-    day_of_week: 1,
-    slot: 1,
-    period_number: 1,
-    duration: 2,
-    duration_periods: 2,
-    teacher_id: 3,
-    class_id: 2,
-    room_id: 2,
-    subject_id: 3,
-    teacherName: 'Budi Santoso, S.T., M.T.',
-    className: 'X-TKJ-1',
-    level: 10,
-    roomName: 'Lab Komputer 1',
-    roomType: 'lab',
-    subjectName: 'Dasar Pemrograman',
-  },
-  {
-    id: 4,
-    cycle: 1,
-    cycle_type: 1,
-    day: 'Selasa',
-    day_of_week: 2,
-    slot: 1,
-    period_number: 1,
-    duration: 2,
-    duration_periods: 2,
-    teacher_id: 1,
-    class_id: 1,
-    room_id: 1,
-    subject_id: 1,
-    teacherName: 'Drs. Ahmad Fauzi, M.Pd.',
-    className: 'X-RPL-1',
-    level: 10,
-    roomName: 'R-101',
-    roomType: 'kelas',
-    subjectName: 'Matematika',
-  },
-];
-
 export default function ScheduleManagementPage() {
   const navigate = useNavigate();
 
@@ -128,7 +40,7 @@ export default function ScheduleManagementPage() {
   const [teacherList, setTeacherList] = useState([]);
 
   // Schedules state
-  const [scheduleList, setScheduleList] = useState(FALLBACK_SCHEDULES);
+  const [scheduleList, setScheduleList] = useState([]);
 
   // Filter States
   const [selectedCycle, setSelectedCycle] = useState(1);
@@ -225,38 +137,44 @@ export default function ScheduleManagementPage() {
         // 3. Schedules
         try {
           const schedRes = await scheduleApi.getSchedules({ cycle: selectedCycle });
-          if (isMounted && schedRes?.data) {
-            const raw = Array.isArray(schedRes.data) ? schedRes.data : schedRes.data.data || [];
-            if (raw.length > 0) {
-              const mapped = raw.map((s) => ({
-                id: s.id,
-                cycle: Number(s.cycle_type || s.cycle || 1),
-                cycle_type: Number(s.cycle_type || s.cycle || 1),
-                day: typeof s.day_of_week === 'number' ? NUMBER_TO_DAY[s.day_of_week] || 'Senin' : s.day || 'Senin',
-                day_of_week: typeof s.day_of_week === 'number' ? s.day_of_week : DAY_TO_NUMBER[s.day] || 1,
-                slot: Number(s.period_number || s.slot || 1),
-                period_number: Number(s.period_number || s.slot || 1),
-                duration: Number(s.duration_periods || s.duration || 1),
-                duration_periods: Number(s.duration_periods || s.duration || 1),
-                teacher_id: s.teacher_id || s.teacher?.id,
-                class_id: s.class_id || s.school_class?.id,
-                room_id: s.room_id || s.room?.id,
-                subject_id: s.subject_id || s.subject?.id,
-                teacherName: s.teacher?.name || s.teacherName || 'Guru',
-                className: s.school_class?.name || s.className || 'Kelas',
-                level: s.school_class?.level || s.level || 10,
-                roomName: s.room?.name || s.roomName || 'Ruang',
-                roomType: s.room?.type || s.roomType || 'kelas',
-                subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
-              }));
-              setScheduleList(mapped);
-            }
+          if (isMounted) {
+            const raw = schedRes?.data
+              ? Array.isArray(schedRes.data)
+                ? schedRes.data
+                : schedRes.data.data || []
+              : [];
+            const mapped = raw.map((s) => ({
+              id: s.id,
+              cycle: Number(s.cycle_type || s.cycle || 1),
+              cycle_type: Number(s.cycle_type || s.cycle || 1),
+              day: typeof s.day_of_week === 'number' ? NUMBER_TO_DAY[s.day_of_week] || 'Senin' : s.day || 'Senin',
+              day_of_week: typeof s.day_of_week === 'number' ? s.day_of_week : DAY_TO_NUMBER[s.day] || 1,
+              slot: Number(s.period_number || s.slot || 1),
+              period_number: Number(s.period_number || s.slot || 1),
+              duration: Number(s.duration_periods || s.duration || 1),
+              duration_periods: Number(s.duration_periods || s.duration || 1),
+              teacher_id: s.teacher_id || s.teacher?.id,
+              class_id: s.class_id || s.school_class?.id,
+              room_id: s.room_id || s.room?.id,
+              subject_id: s.subject_id || s.subject?.id,
+              teacherName: s.teacher?.name || s.teacherName || 'Guru',
+              className: s.school_class?.name || s.className || 'Kelas',
+              level: s.school_class?.level || s.level || 10,
+              roomName: s.room?.name || s.roomName || 'Ruang',
+              roomType: s.room?.type || s.roomType || 'kelas',
+              subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
+            }));
+            setScheduleList(mapped);
           }
         } catch {
-          // Fallback schedules
+          if (isMounted) {
+            setScheduleList([]);
+          }
         }
       } catch {
-        // Fallback
+        if (isMounted) {
+          setScheduleList([]);
+        }
       }
     }
 

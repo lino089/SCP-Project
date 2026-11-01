@@ -15,7 +15,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import journalApi from '../../services/journalApi';
-import masterDataApi from '../../services/masterDataApi';
+import { classApi } from '../../services/masterDataApi';
 import {
   Badge,
   Button,
@@ -65,7 +65,7 @@ export default function MonitoringRecapPage() {
         const [attRes, jourRes, clsRes] = await Promise.all([
           leaveApi.getAttendances({ per_page: 100 }),
           journalApi.getJournals({ per_page: 100 }),
-          masterDataApi.getClasses({ per_page: 50 }).catch(() => ({ data: [] })),
+          classApi.getClasses({ per_page: 50 }).catch(() => ({ data: [] })),
         ]);
 
         if (!isMounted) return;

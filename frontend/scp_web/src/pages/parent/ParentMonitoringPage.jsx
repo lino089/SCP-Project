@@ -80,7 +80,7 @@ export default function ParentMonitoringPage() {
   // Compute attendance summary dynamically
   const summary = useMemo(() => {
     if (attendances.length === 0) {
-      return { hadir: 42, sakit: 3, izin: 2, alpa: 1 };
+      return { hadir: 0, sakit: 0, izin: 0, alpa: 0 };
     }
     return attendances.reduce(
       (acc, item) => {
@@ -117,9 +117,9 @@ export default function ParentMonitoringPage() {
   }, [summary, child.className]);
 
   const tabs = [
-    { id: 'attendance', label: 'Rekapitulasi Kehadiran', count: attendances.length || 48 },
-    { id: 'permissions', label: 'Riwayat Izin & Dispensasi', count: leaveRequests.length || 1 },
-    { id: 'quizzes', label: 'Capaian Nilai Kuis AI', count: quizzes.length || 4 },
+    { id: 'attendance', label: 'Rekapitulasi Kehadiran', count: attendances.length },
+    { id: 'permissions', label: 'Riwayat Izin & Dispensasi', count: leaveRequests.length },
+    { id: 'quizzes', label: 'Capaian Nilai Kuis AI', count: quizzes.length },
   ];
 
   // Table Columns: Attendance

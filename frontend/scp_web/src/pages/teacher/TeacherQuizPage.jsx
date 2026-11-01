@@ -227,6 +227,27 @@ export default function TeacherQuizPage() {
     }
   };
 
+  // Polling ringan untuk generator soal AI jika diproses asinkron di queue backend
+  const pollForQuizQuestions = async (quizId, maxAttempts = 5, delayMs = 1500) => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const qRes = await quizApi.getQuizQuestions(quizId);
+        const questionsList = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
+        if (Array.isArray(questionsList) && questionsList.length > 0) {
+          return questionsList;
+        }
+      } catch {
+        // Abaikan error sementara saat antrean sedang menulis ke database
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    const finalRes = await quizApi.getQuizQuestions(quizId);
+    const finalList = finalRes?.data?.questions || finalRes?.data || finalRes?.questions || [];
+    return Array.isArray(finalList) ? finalList : [];
+  };
+
   // 2. Generator Metode 1: Prompt AI
   const handleGeneratePromptSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -257,11 +278,9 @@ export default function TeacherQuizPage() {
       const res = await quizApi.generatePrompt(currentQuiz.id, payload);
 
       if (res?.status === 202 || res?.success || res?.data) {
-        setGenProgressMsg('Menyusun butir soal ke dalam skema kuis...');
-        // Ambil hasil butir soal
-        const qRes = await quizApi.getQuizQuestions(currentQuiz.id);
-        const questionsList = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
-        setQuizQuestions(Array.isArray(questionsList) ? questionsList : []);
+        setGenProgressMsg('Menyusun butir soal dari AI ke dalam skema kuis...');
+        const questionsList = await pollForQuizQuestions(currentQuiz.id);
+        setQuizQuestions(questionsList);
         setIsGenModalOpen(false);
         setIsPreviewModalOpen(true);
         showToast('Soal kuis berhasil dihasilkan oleh AI! Silakan review sebelum dipublikasikan.', 'success');
@@ -283,6 +302,7 @@ export default function TeacherQuizPage() {
     }
 
     setIsExtracting(true);
+    setGenProgressMsg('Mengunggah dokumen dan memicu ekstraksi AI...');
     try {
       const formData = new FormData();
       formData.append('document', uploadedDoc);
@@ -290,17 +310,18 @@ export default function TeacherQuizPage() {
 
       const res = await quizApi.extractDocument(currentQuiz.id, formData);
       if (res?.status === 202 || res?.success || res?.data) {
-        const qRes = await quizApi.getQuizQuestions(currentQuiz.id);
-        const questionsList = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
-        setQuizQuestions(Array.isArray(questionsList) ? questionsList : []);
+        setGenProgressMsg('Mengekstrak butir soal materi via AI...');
+        const questionsList = await pollForQuizQuestions(currentQuiz.id);
+        setQuizQuestions(questionsList);
         setIsGenModalOpen(false);
         setIsPreviewModalOpen(true);
-        showToast('Dokumen berhasil diekstrak oleh AI! Periksa soal yang memerlukan peninjauan.', 'success');
+        showToast('Dokumen berhasil diekstrak oleh AI! Periksa butir soal yang memerlukan peninjauan.', 'success');
       }
     } catch (err) {
       showToast(err.message || err.response?.data?.message || 'Gagal mengekstrak dokumen materi.', 'error');
     } finally {
       setIsExtracting(false);
+      setGenProgressMsg('');
     }
   };
 

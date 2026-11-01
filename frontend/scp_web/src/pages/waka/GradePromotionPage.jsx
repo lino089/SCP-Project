@@ -20,33 +20,9 @@ import { SkeletonRow, EmptyState } from '../../components/feedback';
 import { classApi, studentApi } from '../../services/masterDataApi';
 import './GradePromotion.css';
 
-// Initial fallback datasets for offline / demo UKK review
-const FALLBACK_CLASSES = [
-  { id: 1, name: 'X-RPL-1', level: 10, next_class_id: 5 },
-  { id: 2, name: 'X-TKJ-1', level: 10, next_class_id: 6 },
-  { id: 3, name: 'X-DKV-1', level: 10, next_class_id: 7 },
-  { id: 4, name: 'X-AKL-1', level: 10, next_class_id: 8 },
-  { id: 5, name: 'XI-RPL-1', level: 11, next_class_id: 9 },
-  { id: 6, name: 'XI-TKJ-1', level: 11, next_class_id: 10 },
-  { id: 7, name: 'XI-DKV-1', level: 11, next_class_id: 11 },
-  { id: 8, name: 'XI-AKL-1', level: 11, next_class_id: 12 },
-  { id: 9, name: 'XII-RPL-1', level: 12, next_class_id: null },
-  { id: 10, name: 'XII-TKJ-1', level: 12, next_class_id: null },
-  { id: 11, name: 'XII-DKV-1', level: 12, next_class_id: null },
-  { id: 12, name: 'XII-AKL-1', level: 12, next_class_id: null },
-];
-
-const FALLBACK_STUDENTS = [
-  { id: 1, nis_nip: '2024001', name: 'Aisyah Putri Ramadhani', class_id: 1, is_held_back: false },
-  { id: 2, nis_nip: '2024002', name: 'Bayu Aditya Pratama', class_id: 1, is_held_back: false },
-  { id: 3, nis_nip: '2024003', name: 'Citra Dewi Lestari', class_id: 2, is_held_back: true },
-  { id: 4, nis_nip: '2024004', name: 'Dimas Arya Nugraha', class_id: 5, is_held_back: false },
-  { id: 5, nis_nip: '2022001', name: 'Eko Prasetya Putra', class_id: 9, is_held_back: false },
-];
-
 export default function GradePromotionPage() {
-  const [classList, setClassList] = useState(FALLBACK_CLASSES);
-  const [studentList, setStudentList] = useState(FALLBACK_STUDENTS);
+  const [classList, setClassList] = useState([]);
+  const [studentList, setStudentList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Section 1: Edit Mapping Modal State
@@ -74,8 +50,9 @@ export default function GradePromotionPage() {
       ]);
       if (cRes?.data) setClassList(cRes.data);
       if (sRes?.data) setStudentList(sRes.data);
-    } catch (err) {
-      console.warn('Backend API unavailable, using fallback dataset:', err?.message);
+    } catch {
+      setClassList([]);
+      setStudentList([]);
     } finally {
       setIsLoading(false);
     }
@@ -92,8 +69,11 @@ export default function GradePromotionPage() {
         ]);
         if (isMounted && cRes?.data) setClassList(cRes.data);
         if (isMounted && sRes?.data) setStudentList(sRes.data);
-      } catch (err) {
-        console.warn('Backend API unavailable, using fallback dataset:', err?.message);
+      } catch {
+        if (isMounted) {
+          setClassList([]);
+          setStudentList([]);
+        }
       }
     }
     init();
@@ -148,11 +128,8 @@ export default function GradePromotionPage() {
       setStudentList((prev) =>
         prev.map((s) => (s.id === studentId ? { ...s, is_held_back: newStatus } : s))
       );
-    } catch {
-      // Fallback
-      setStudentList((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, is_held_back: newStatus } : s))
-      );
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Gagal mengubah status tinggal kelas siswa.');
     }
   };
 
@@ -161,27 +138,21 @@ export default function GradePromotionPage() {
     setIsExecuting(true);
     try {
       const res = await classApi.promoteClasses();
-      const resultData = res?.data || {
-        total_students: studentList.length,
-        promoted: studentList.filter((s) => !s.is_held_back && s.class_id !== 9).length,
-        held_back: studentList.filter((s) => s.is_held_back).length,
-        graduated: studentList.filter((s) => !s.is_held_back && s.class_id === 9).length,
-      };
+      const resultData = res?.data;
+      if (!resultData) {
+        throw new Error('Respons server tidak memuat data hasil kenaikan kelas.');
+      }
 
       setPromotionResult(resultData);
       setIsConfirmModalOpen(false);
       // Reload updated student list
       await handleRefresh();
-    } catch {
-      // Offline simulation
-      const resultData = {
-        total_students: studentList.length,
-        promoted: studentList.filter((s) => !s.is_held_back).length,
-        held_back: studentList.filter((s) => s.is_held_back).length,
-        graduated: 1,
-      };
-      setPromotionResult(resultData);
-      setIsConfirmModalOpen(false);
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Gagal mengeksekusi kenaikan kelas massal. Silakan periksa koneksi server.';
+      alert(errorMsg);
     } finally {
       setIsExecuting(false);
     }

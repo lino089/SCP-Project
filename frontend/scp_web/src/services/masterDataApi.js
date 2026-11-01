@@ -35,6 +35,11 @@ export const teacherApi = {
   deleteTeacher: (id) => api.delete(`/teachers/${id}`),
   assignRole: (teacherId, data) => api.post(`/teachers/${teacherId}/assignments`, data),
   revokeRole: (teacherId, assignmentId) => api.delete(`/teachers/${teacherId}/assignments/${assignmentId}`),
+  downloadTemplate: () => api.get('/teachers/import-template', { responseType: 'blob' }),
+  importTeachers: (formData) =>
+    api.post('/teachers/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 export const studentApi = {
@@ -43,6 +48,11 @@ export const studentApi = {
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
   deleteStudent: (id) => api.delete(`/students/${id}`),
   holdBack: (id) => api.post(`/students/${id}/hold-back`),
+  downloadTemplate: () => api.get('/students/import-template', { responseType: 'blob' }),
+  importStudents: (formData) =>
+    api.post('/students/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 export default {

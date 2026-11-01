@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authApi } from '../services/api';
-import { DEMO_PROFILES } from './authConstants';
 import { AuthContext } from './authContextInstance';
 
 export function AuthProvider({ children }) {
@@ -22,6 +21,18 @@ export function AuthProvider({ children }) {
     async function initAuth() {
       const savedToken = localStorage.getItem('scp_token');
       if (savedToken) {
+        // Auto-cleanup legacy demo tokens from previous test sessions
+        if (savedToken.startsWith('demo_')) {
+          localStorage.removeItem('scp_token');
+          localStorage.removeItem('scp_user');
+          if (isMounted) {
+            setToken(null);
+            setUser(null);
+            setIsLoading(false);
+          }
+          return;
+        }
+
         try {
           const res = await authApi.getMe();
           if (isMounted && res?.data) {
@@ -84,21 +95,10 @@ export function AuthProvider({ children }) {
     return res;
   }, []);
 
-  // Quick Demo Login for offline mode or UKK testing
-  const loginWithDemo = useCallback((demoKey) => {
-    const profile = DEMO_PROFILES[demoKey] || DEMO_PROFILES.waka;
-    const fakeToken = `demo_sanctum_token_${demoKey}_${Date.now()}`;
-    localStorage.setItem('scp_token', fakeToken);
-    localStorage.setItem('scp_user', JSON.stringify(profile));
-    setToken(fakeToken);
-    setUser(profile);
-    return profile;
-  }, []);
-
   // Logout method
   const logout = useCallback(async () => {
     try {
-      if (token && !token.startsWith('demo_')) {
+      if (token) {
         await authApi.logout();
       }
     } catch {
@@ -122,20 +122,10 @@ export function AuthProvider({ children }) {
 
   // Change password method
   const changePassword = useCallback(async (passwords) => {
-    try {
-      if (token && !token.startsWith('demo_')) {
-        await authApi.changePassword(passwords);
-      }
-    } catch (err) {
-      // If endpoint doesn't exist yet (404), allow fallback for must_change_password in Phase 1
-      if (err.status !== 404) {
-        throw err;
-      }
-    }
-
+    const res = await authApi.changePassword(passwords);
     updateUserProfile({ must_change_password: false });
-    return true;
-  }, [token, updateUserProfile]);
+    return res;
+  }, [updateUserProfile]);
 
   // Role & Permission Checks
   const hasRole = useCallback((roleOrRoles) => {
@@ -184,7 +174,6 @@ export function AuthProvider({ children }) {
     isLoading,
     mustChangePassword: Boolean(user?.must_change_password),
     login,
-    loginWithDemo,
     logout,
     updateUserProfile,
     changePassword,
@@ -197,7 +186,6 @@ export function AuthProvider({ children }) {
     token,
     isLoading,
     login,
-    loginWithDemo,
     logout,
     updateUserProfile,
     changePassword,

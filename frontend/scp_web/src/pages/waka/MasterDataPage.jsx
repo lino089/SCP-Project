@@ -6,6 +6,11 @@ import {
   UserCheck,
   RefreshCw,
   Info,
+  Download,
+  Upload,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
 } from 'lucide-react';
 import {
   Button,
@@ -17,6 +22,7 @@ import {
   Tabs,
   SearchInput,
   ConfirmDialog,
+  FileUpload,
 } from '../../components/shared';
 import { SkeletonRow, EmptyState, ErrorState } from '../../components/feedback';
 import {
@@ -31,110 +37,35 @@ import TeacherAssignmentModal from './components/TeacherAssignmentModal';
 import DeleteConflictDialog from './components/DeleteConflictDialog';
 import './MasterData.css';
 
-// Initial fallback mock data if backend connection is unavailable (Offline UKK mode)
-const FALLBACK_CLASSES = [
-  { id: 1, name: 'X-RPL-1', level: 10, next_class_id: 5 },
-  { id: 2, name: 'X-TKJ-1', level: 10, next_class_id: 6 },
-  { id: 3, name: 'X-DKV-1', level: 10, next_class_id: 7 },
-  { id: 4, name: 'X-AKL-1', level: 10, next_class_id: 8 },
-  { id: 5, name: 'XI-RPL-1', level: 11, next_class_id: 9 },
-  { id: 6, name: 'XI-TKJ-1', level: 11, next_class_id: 10 },
-  { id: 7, name: 'XI-DKV-1', level: 11, next_class_id: 11 },
-  { id: 8, name: 'XI-AKL-1', level: 11, next_class_id: 12 },
-  { id: 9, name: 'XII-RPL-1', level: 12, next_class_id: null },
-  { id: 10, name: 'XII-TKJ-1', level: 12, next_class_id: null },
-  { id: 11, name: 'XII-DKV-1', level: 12, next_class_id: null },
-  { id: 12, name: 'XII-AKL-1', level: 12, next_class_id: null },
-];
-
-const FALLBACK_ROOMS = [
-  { id: 1, name: 'R-101', capacity: 36 },
-  { id: 2, name: 'R-102', capacity: 36 },
-  { id: 3, name: 'R-103', capacity: 36 },
-  { id: 4, name: 'Lab Komputer 1', capacity: 36 },
-  { id: 5, name: 'Lab Komputer 2', capacity: 36 },
-  { id: 6, name: 'Bengkel Praktik', capacity: 32 },
-];
-
-const FALLBACK_SUBJECTS = [
-  { id: 1, name: 'Pemrograman Web & Perangkat Bergerak' },
-  { id: 2, name: 'Basis Data' },
-  { id: 3, name: 'Pemodelan Perangkat Lunak' },
-  { id: 4, name: 'Administrasi Infrastruktur Jaringan' },
-  { id: 5, name: 'Matematika' },
-  { id: 6, name: 'Bahasa Indonesia' },
-  { id: 7, name: 'Bahasa Inggris' },
-];
-
-const FALLBACK_TEACHERS = [
-  {
-    id: 1,
-    name: 'Drs. Ahmad Fauzi, M.Pd.',
-    nis_nip: '198501152010011001',
-    fet_staff_id: 'AFAUZI',
-    email: 'ahmad.fauzi@sekolah.sch.id',
-    assignments: [{ id: 101, type: 'wali_kelas', class_id: 1, school_class: { name: 'X-RPL-1' } }],
-  },
-  {
-    id: 2,
-    name: 'Siti Nurhaliza, S.Pd.',
-    nis_nip: '198703222011012002',
-    fet_staff_id: 'SNURHALIZA',
-    email: 'siti.nurhaliza@sekolah.sch.id',
-    assignments: [],
-  },
-  {
-    id: 3,
-    name: 'Budi Santoso, S.T., M.T.',
-    nis_nip: '199005102012011003',
-    fet_staff_id: 'BSANTOSO',
-    email: 'budi.santoso@sekolah.sch.id',
-    assignments: [{ id: 102, type: 'kesiswaan' }],
-  },
-];
-
-const FALLBACK_STUDENTS = [
-  {
-    id: 1,
-    name: 'Aisyah Putri Ramadhani',
-    nis_nip: '2024001',
-    class_id: 1,
-    schoolClass: { name: 'X-RPL-1', level: 10 },
-  },
-  {
-    id: 2,
-    name: 'Bayu Aditya Pratama',
-    nis_nip: '2024002',
-    class_id: 1,
-    schoolClass: { name: 'X-RPL-1', level: 10 },
-  },
-  {
-    id: 3,
-    name: 'Citra Dewi Lestari',
-    nis_nip: '2024003',
-    class_id: 2,
-    schoolClass: { name: 'X-TKJ-1', level: 10 },
-  },
-  {
-    id: 4,
-    name: 'Dimas Arya Nugraha',
-    nis_nip: '2024004',
-    class_id: 5,
-    schoolClass: { name: 'XI-RPL-1', level: 11 },
-  },
-];
-
 export default function MasterDataPage() {
   const [activeTab, setActiveTab] = useState('kelas');
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState('ALL');
 
   // Master datasets
-  const [classList, setClassList] = useState(FALLBACK_CLASSES);
-  const [roomList, setRoomList] = useState(FALLBACK_ROOMS);
-  const [subjectList, setSubjectList] = useState(FALLBACK_SUBJECTS);
-  const [teacherList, setTeacherList] = useState(FALLBACK_TEACHERS);
-  const [studentList, setStudentList] = useState(FALLBACK_STUDENTS);
+  const [classList, setClassList] = useState([]);
+  const [roomList, setRoomList] = useState([]);
+  const [subjectList, setSubjectList] = useState([]);
+  const [teacherList, setTeacherList] = useState([]);
+  const [studentList, setStudentList] = useState([]);
+
+  // Teacher Import & Template states
+  const [isTeacherImportModalOpen, setIsTeacherImportModalOpen] = useState(false);
+  const [teacherImportFile, setTeacherImportFile] = useState(null);
+  const [teacherImportLoading, setTeacherImportLoading] = useState(false);
+  const [teacherImportSuccess, setTeacherImportSuccess] = useState(null);
+  const [teacherImportErrors, setTeacherImportErrors] = useState(null);
+  const [teacherImportGeneralError, setTeacherImportGeneralError] = useState(null);
+  const [teacherDownloadingTemplate, setTeacherDownloadingTemplate] = useState(false);
+
+  // Student Import & Template states
+  const [isStudentImportModalOpen, setIsStudentImportModalOpen] = useState(false);
+  const [studentImportFile, setStudentImportFile] = useState(null);
+  const [studentImportLoading, setStudentImportLoading] = useState(false);
+  const [studentImportSuccess, setStudentImportSuccess] = useState(null);
+  const [studentImportErrors, setStudentImportErrors] = useState(null);
+  const [studentImportGeneralError, setStudentImportGeneralError] = useState(null);
+  const [studentDownloadingTemplate, setStudentDownloadingTemplate] = useState(false);
 
   // Loading & error state per tab
   const [isLoading, setIsLoading] = useState(false);
@@ -187,8 +118,12 @@ export default function MasterDataPage() {
         if (sRes?.data) setStudentList(sRes.data);
         if (cRes?.data) setClassList(cRes.data);
       }
-    } catch (err) {
-      console.warn('Backend API unavailable, using local cache/fallback:', err?.message);
+    } catch {
+      if (activeTab === 'kelas') setClassList([]);
+      else if (activeTab === 'ruang') setRoomList([]);
+      else if (activeTab === 'mapel') setSubjectList([]);
+      else if (activeTab === 'guru') { setTeacherList([]); setClassList([]); }
+      else if (activeTab === 'siswa') { setStudentList([]); setClassList([]); }
     } finally {
       setIsLoading(false);
     }
@@ -223,8 +158,14 @@ export default function MasterDataPage() {
           if (isMounted && sRes?.data) setStudentList(sRes.data);
           if (isMounted && cRes?.data) setClassList(cRes.data);
         }
-      } catch (err) {
-        console.warn('Backend API unavailable, using local cache/fallback:', err?.message);
+      } catch {
+        if (isMounted) {
+          if (activeTab === 'kelas') setClassList([]);
+          else if (activeTab === 'ruang') setRoomList([]);
+          else if (activeTab === 'mapel') setSubjectList([]);
+          else if (activeTab === 'guru') { setTeacherList([]); setClassList([]); }
+          else if (activeTab === 'siswa') { setStudentList([]); setClassList([]); }
+        }
       }
     }
     init();
@@ -232,6 +173,112 @@ export default function MasterDataPage() {
       isMounted = false;
     };
   }, [activeTab]);
+
+  // Template Download Handlers
+  const handleDownloadTeacherTemplate = async () => {
+    setTeacherDownloadingTemplate(true);
+    try {
+      const blob = await teacherApi.downloadTemplate();
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'guru_import_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Gagal mengunduh template Excel guru: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setTeacherDownloadingTemplate(false);
+    }
+  };
+
+  const handleDownloadStudentTemplate = async () => {
+    setStudentDownloadingTemplate(true);
+    try {
+      const blob = await studentApi.downloadTemplate();
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'siswa_import_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Gagal mengunduh template Excel siswa: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setStudentDownloadingTemplate(false);
+    }
+  };
+
+  // Submit Import Handlers
+  const handleSubmitTeacherImport = async () => {
+    if (!teacherImportFile) return;
+    setTeacherImportLoading(true);
+    setTeacherImportErrors(null);
+    setTeacherImportGeneralError(null);
+    setTeacherImportSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', teacherImportFile);
+
+    try {
+      const res = await teacherApi.importTeachers(formData);
+      setTeacherImportSuccess(res.data || { imported_count: 0 });
+      // Refresh teacherList
+      const tRes = await teacherApi.getTeachers({ per_page: 100 }).catch(() => null);
+      if (tRes?.data) setTeacherList(tRes.data);
+    } catch (err) {
+      if (Array.isArray(err.errors)) {
+        setTeacherImportErrors(err.errors);
+      } else if (err.raw?.response?.data?.errors && Array.isArray(err.raw.response.data.errors)) {
+        setTeacherImportErrors(err.raw.response.data.errors);
+      } else if (err.raw?.response?.data?.errors?.file) {
+        setTeacherImportGeneralError(err.raw.response.data.errors.file[0]);
+      } else {
+        setTeacherImportGeneralError(err.message || 'Gagal mengimpor data guru.');
+      }
+    } finally {
+      setTeacherImportLoading(false);
+    }
+  };
+
+  const handleSubmitStudentImport = async () => {
+    if (!studentImportFile) return;
+    setStudentImportLoading(true);
+    setStudentImportErrors(null);
+    setStudentImportGeneralError(null);
+    setStudentImportSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', studentImportFile);
+
+    try {
+      const res = await studentApi.importStudents(formData);
+      setStudentImportSuccess(res.data || {});
+      // Refresh both studentList and classList (since classes may be auto-created!)
+      const [sRes, cRes] = await Promise.all([
+        studentApi.getStudents({ per_page: 100 }).catch(() => null),
+        classApi.getClasses({ per_page: 100 }).catch(() => null),
+      ]);
+      if (sRes?.data) setStudentList(sRes.data);
+      if (cRes?.data) setClassList(cRes.data);
+    } catch (err) {
+      if (Array.isArray(err.errors)) {
+        setStudentImportErrors(err.errors);
+      } else if (err.raw?.response?.data?.errors && Array.isArray(err.raw.response.data.errors)) {
+        setStudentImportErrors(err.raw.response.data.errors);
+      } else if (err.raw?.response?.data?.errors?.file) {
+        setStudentImportGeneralError(err.raw.response.data.errors.file[0]);
+      } else {
+        setStudentImportGeneralError(err.message || 'Gagal mengimpor data siswa.');
+      }
+    } finally {
+      setStudentImportLoading(false);
+    }
+  };
 
   // Tab definitions
   const tabs = useMemo(
@@ -282,7 +329,7 @@ export default function MasterDataPage() {
           nis: '',
           gender: '',
           nisn: '',
-          class_id: classList[0]?.id ? String(classList[0].id) : '1',
+          class_id: classList[0]?.id ? String(classList[0].id) : '',
         });
         break;
       default:
@@ -419,12 +466,27 @@ export default function MasterDataPage() {
             });
           }
         } else if (activeTab === 'siswa') {
+          const errors = {};
+          if (!formData.name?.trim()) errors.name = ['Nama lengkap siswa wajib diisi.'];
+          if (!formData.nis?.trim()) errors.nis = ['Nomor Induk Siswa (NIS) wajib diisi.'];
+          if (!formData.class_id) errors.class_id = ['Rombel kelas wajib dipilih.'];
+          if (!formData.gender) errors.gender = ['Jenis kelamin wajib dipilih (L atau P).'];
+          if (!formData.nisn || !/^\d{10}$/.test(formData.nisn.trim())) {
+            errors.nisn = ['NISN wajib diisi tepat 10 digit angka.'];
+          }
+
+          if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            setIsSubmitting(false);
+            return;
+          }
+
           const payload = {
-            name: formData.name,
-            nis: formData.nis,
+            name: formData.name.trim(),
+            nis: formData.nis.trim(),
             class_id: Number(formData.class_id),
-            gender: formData.gender ? formData.gender : null,
-            nisn: formData.nisn ? formData.nisn.trim() : null,
+            gender: formData.gender,
+            nisn: formData.nisn.trim(),
           };
           try {
             const res = await studentApi.createStudent(payload);
@@ -540,12 +602,27 @@ export default function MasterDataPage() {
             prev.map((t) => (t.id === id ? { ...t, ...payload, nis_nip: payload.nip } : t))
           );
         } else if (activeTab === 'siswa') {
+          const errors = {};
+          if (!formData.name?.trim()) errors.name = ['Nama lengkap siswa wajib diisi.'];
+          if (!formData.nis?.trim()) errors.nis = ['Nomor Induk Siswa (NIS) wajib diisi.'];
+          if (!formData.class_id) errors.class_id = ['Rombel kelas wajib dipilih.'];
+          if (!formData.gender) errors.gender = ['Jenis kelamin wajib dipilih (L atau P).'];
+          if (!formData.nisn || !/^\d{10}$/.test(formData.nisn.trim())) {
+            errors.nisn = ['NISN wajib diisi tepat 10 digit angka.'];
+          }
+
+          if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            setIsSubmitting(false);
+            return;
+          }
+
           const payload = {
-            name: formData.name,
-            nis: formData.nis,
+            name: formData.name.trim(),
+            nis: formData.nis.trim(),
             class_id: Number(formData.class_id),
-            gender: formData.gender ? formData.gender : null,
-            nisn: formData.nisn ? formData.nisn.trim() : null,
+            gender: formData.gender,
+            nisn: formData.nisn.trim(),
           };
           try {
             await studentApi.updateStudent(id, payload);
@@ -1091,6 +1168,62 @@ export default function MasterDataPage() {
             Refresh
           </Button>
 
+          {activeTab === 'guru' && (
+            <>
+              <Button
+                variant="outline"
+                icon={Download}
+                onClick={handleDownloadTeacherTemplate}
+                loading={teacherDownloadingTemplate}
+                title="Unduh format spreadsheet impor guru (.xlsx)"
+              >
+                Unduh Template
+              </Button>
+              <Button
+                variant="secondary"
+                icon={Upload}
+                onClick={() => {
+                  setTeacherImportFile(null);
+                  setTeacherImportErrors(null);
+                  setTeacherImportGeneralError(null);
+                  setTeacherImportSuccess(null);
+                  setIsTeacherImportModalOpen(true);
+                }}
+                title="Impor data guru massal (.xlsx)"
+              >
+                Impor Guru (.xlsx)
+              </Button>
+            </>
+          )}
+
+          {activeTab === 'siswa' && (
+            <>
+              <Button
+                variant="outline"
+                icon={Download}
+                onClick={handleDownloadStudentTemplate}
+                loading={studentDownloadingTemplate}
+                title="Unduh format spreadsheet impor siswa (.xlsx)"
+              >
+                Unduh Template
+              </Button>
+              <Button
+                variant="secondary"
+                icon={Upload}
+                onClick={() => {
+                  setStudentImportFile(null);
+                  setStudentImportErrors(null);
+                  setStudentImportGeneralError(null);
+                  setStudentImportSuccess(null);
+                  setIsStudentImportModalOpen(true);
+                }}
+                title="Impor data siswa massal (.xlsx)"
+              >
+                Impor Siswa (.xlsx)
+              </Button>
+            </>
+          )}
+
           <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
             Tambah {tabs.find((t) => t.id === activeTab)?.label}
           </Button>
@@ -1342,10 +1475,14 @@ export default function MasterDataPage() {
                 label="Rombel Kelas"
                 value={formData.class_id || ''}
                 onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
-                options={classList.map((c) => ({
-                  value: String(c.id),
-                  label: `${c.name} (Tingkat ${c.level})`,
-                }))}
+                options={[
+                  { value: '', label: '-- Pilih Rombel Kelas --' },
+                  ...classList.map((c) => ({
+                    value: String(c.id),
+                    label: `${c.name} (Tingkat ${c.level})`,
+                  })),
+                ]}
+                error={formErrors.class_id?.[0]}
                 required
               />
 
@@ -1354,21 +1491,26 @@ export default function MasterDataPage() {
                 value={formData.gender || ''}
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                 options={[
-                  { value: '', label: 'Pilih Jenis Kelamin (Opsional)' },
+                  { value: '', label: '-- Pilih Jenis Kelamin (Wajib) --' },
                   { value: 'L', label: 'Laki-laki (L)' },
                   { value: 'P', label: 'Perempuan (P)' },
                 ]}
                 error={formErrors.gender?.[0]}
+                required
               />
 
               <Input
                 label="Nomor Induk Siswa Nasional (NISN)"
-                placeholder="10 digit numerik (maks 20 karakter)"
+                placeholder="10 digit angka resmi Kemendikbud"
                 value={formData.nisn || ''}
-                onChange={(e) => setFormData({ ...formData, nisn: e.target.value })}
-                maxLength={20}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setFormData({ ...formData, nisn: cleaned });
+                }}
+                maxLength={10}
                 error={formErrors.nisn?.[0]}
-                helperText="Opsional, nomor resmi NISN siswa"
+                helperText="Wajib, tepat 10 digit angka resmi NISN siswa"
+                required
               />
 
               {modalType === 'create' && (
@@ -1422,6 +1564,296 @@ export default function MasterDataPage() {
         onAssign={handleAssignRole}
         onRevoke={handleRevokeRole}
       />
+
+      {/* Teacher Import Modal */}
+      <Modal
+        isOpen={isTeacherImportModalOpen}
+        onClose={() => {
+          if (!teacherImportLoading) setIsTeacherImportModalOpen(false);
+        }}
+        title="Impor Data Guru Massal (.xlsx)"
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            {teacherImportSuccess ? (
+              <Button
+                variant="primary"
+                onClick={() => setIsTeacherImportModalOpen(false)}
+              >
+                Selesai
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsTeacherImportModalOpen(false)}
+                  disabled={teacherImportLoading}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={Upload}
+                  onClick={handleSubmitTeacherImport}
+                  loading={teacherImportLoading}
+                  disabled={!teacherImportFile || teacherImportLoading}
+                >
+                  Unggah &amp; Impor
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1.5">
+            <div className="font-semibold flex items-center gap-1.5 text-blue-800">
+              <Info size={15} />
+              <span>Ketentuan Format Berkas Excel Guru:</span>
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-blue-800">
+              <li>Header wajib: <strong>nip</strong> (wajib format teks), <strong>name</strong>, <strong>fet_staff_id</strong> (kode staf pada FET).</li>
+              <li>Header opsional: <strong>email</strong>, <strong>phone_number</strong>.</li>
+              <li>Akun login guru akan dibuat otomatis dengan username &amp; kata sandi default NIP (wajib ganti kata sandi pada login pertama).</li>
+            </ul>
+          </div>
+
+          {!teacherImportSuccess && (
+            <FileUpload
+              label="Pilih Berkas Spreadsheet (.xlsx)"
+              accept=".xlsx"
+              maxSizeMB={5}
+              file={teacherImportFile}
+              onChange={(f) => {
+                setTeacherImportFile(f);
+                setTeacherImportErrors(null);
+                setTeacherImportGeneralError(null);
+              }}
+              disabled={teacherImportLoading}
+              hint="Format berkas .xlsx (Excel), Maksimal 5 MB"
+            />
+          )}
+
+          {/* Success Result Box */}
+          {teacherImportSuccess && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+                <CheckCircle2 size={18} className="text-emerald-600" />
+                <span>Data Guru Berhasil Diimpor!</span>
+              </div>
+              <p className="text-xs text-emerald-700">
+                Sebanyak <strong>{teacherImportSuccess.imported_count}</strong> data guru telah berhasil diregistrasikan ke sistem beserta akun login dan ID staf FET.
+              </p>
+            </div>
+          )}
+
+          {/* General Error Banner */}
+          {teacherImportGeneralError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700">
+              <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+              <span>{teacherImportGeneralError}</span>
+            </div>
+          )}
+
+          {/* Atomic Row Errors Table */}
+          {teacherImportErrors && teacherImportErrors.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-red-800">
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle size={15} className="text-red-600" />
+                  Kesalahan Validasi Berkas ({teacherImportErrors.length} baris)
+                </span>
+                <span className="text-[11px] font-normal text-gray-500">
+                  Transaksi dibatalkan. Mohon perbaiki dan unggah kembali.
+                </span>
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-red-200 rounded-md text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-red-50 text-red-900 font-semibold sticky top-0 border-b border-red-200">
+                    <tr>
+                      <th className="py-2 px-3 w-20">Baris</th>
+                      <th className="py-2 px-3 w-32">Kolom</th>
+                      <th className="py-2 px-3">Keterangan Masalah</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-red-100 bg-white">
+                    {teacherImportErrors.map((err, idx) => (
+                      <tr key={idx} className="hover:bg-red-50/50">
+                        <td className="py-2 px-3 font-mono font-medium text-red-900">
+                          Baris {err.row}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-gray-700">
+                          {err.attribute}
+                        </td>
+                        <td className="py-2 px-3 text-red-700">
+                          {err.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Student Import Modal */}
+      <Modal
+        isOpen={isStudentImportModalOpen}
+        onClose={() => {
+          if (!studentImportLoading) setIsStudentImportModalOpen(false);
+        }}
+        title="Impor Data Siswa Massal (.xlsx)"
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            {studentImportSuccess ? (
+              <Button
+                variant="primary"
+                onClick={() => setIsStudentImportModalOpen(false)}
+              >
+                Selesai
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsStudentImportModalOpen(false)}
+                  disabled={studentImportLoading}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={Upload}
+                  onClick={handleSubmitStudentImport}
+                  loading={studentImportLoading}
+                  disabled={!studentImportFile || studentImportLoading}
+                >
+                  Unggah &amp; Impor
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1.5">
+            <div className="font-semibold flex items-center gap-1.5 text-blue-800">
+              <Info size={15} />
+              <span>Fitur Otomatisasi Zero-Manual (SCP v4.5):</span>
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-blue-800">
+              <li>Header wajib: <strong>nis</strong>, <strong>name</strong>, <strong>class_name</strong>, <strong>gender</strong> (L atau P).</li>
+              <li>Header opsional: <strong>nisn</strong> (10 digit numerik), <strong>parent_name</strong>, <strong>parent_phone</strong>.</li>
+              <li><strong>Auto-Create Kelas</strong>: Rombel baru pada kolom <code>class_name</code> akan didaftarkan otomatis dengan deteksi tingkat (10, 11, 12).</li>
+              <li><strong>Auto-Provisioning</strong>: Akun siswa &amp; akun orang tua (format <code>P-NIS</code>) dibuat secara otomatis.</li>
+            </ul>
+          </div>
+
+          {!studentImportSuccess && (
+            <FileUpload
+              label="Pilih Berkas Spreadsheet (.xlsx)"
+              accept=".xlsx"
+              maxSizeMB={5}
+              file={studentImportFile}
+              onChange={(f) => {
+                setStudentImportFile(f);
+                setStudentImportErrors(null);
+                setStudentImportGeneralError(null);
+              }}
+              disabled={studentImportLoading}
+              hint="Format berkas .xlsx (Excel), Maksimal 5 MB"
+            />
+          )}
+
+          {/* Success Result Box */}
+          {studentImportSuccess && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
+              <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+                <CheckCircle2 size={18} className="text-emerald-600" />
+                <span>Siswa berhasil diimpor dan kelas baru telah otomatis didaftarkan.</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
+                  <div className="text-[11px] text-gray-500">Siswa Diimpor</div>
+                  <div className="text-base font-bold text-emerald-700">
+                    {studentImportSuccess.students_imported ?? 0}
+                  </div>
+                </div>
+                <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
+                  <div className="text-[11px] text-gray-500">Kelas Baru Dibuat</div>
+                  <div className="text-base font-bold text-blue-700">
+                    {studentImportSuccess.classes_created ?? 0}
+                  </div>
+                </div>
+                <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
+                  <div className="text-[11px] text-gray-500">Kelas Telah Ada</div>
+                  <div className="text-base font-bold text-gray-700">
+                    {studentImportSuccess.classes_existing ?? 0}
+                  </div>
+                </div>
+                <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
+                  <div className="text-[11px] text-gray-500">Akun Ortu Dibuat</div>
+                  <div className="text-base font-bold text-purple-700">
+                    {studentImportSuccess.parents_imported ?? 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* General Error Banner */}
+          {studentImportGeneralError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700">
+              <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+              <span>{studentImportGeneralError}</span>
+            </div>
+          )}
+
+          {/* Atomic Row Errors Table */}
+          {studentImportErrors && studentImportErrors.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-red-800">
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle size={15} className="text-red-600" />
+                  Kesalahan Validasi Berkas ({studentImportErrors.length} baris)
+                </span>
+                <span className="text-[11px] font-normal text-gray-500">
+                  Transaksi dibatalkan. Mohon perbaiki dan unggah kembali.
+                </span>
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-red-200 rounded-md text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-red-50 text-red-900 font-semibold sticky top-0 border-b border-red-200">
+                    <tr>
+                      <th className="py-2 px-3 w-20">Baris</th>
+                      <th className="py-2 px-3 w-32">Kolom</th>
+                      <th className="py-2 px-3">Keterangan Masalah</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-red-100 bg-white">
+                    {studentImportErrors.map((err, idx) => (
+                      <tr key={idx} className="hover:bg-red-50/50">
+                        <td className="py-2 px-3 font-mono font-medium text-red-900">
+                          Baris {err.row}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-gray-700">
+                          {err.attribute}
+                        </td>
+                        <td className="py-2 px-3 text-red-700">
+                          {err.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

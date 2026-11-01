@@ -37,13 +37,16 @@ export default function UploadImportPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [batchId, setBatchId] = useState(null);
 
-  const timersRef = useRef([]);
+  const pollingRef = useRef(null);
+  const pollingCountRef = useRef(0);
 
-  // Cleanup timeouts on unmount
+  // Clear polling interval on unmount
   useEffect(() => {
-    const timers = timersRef.current;
     return () => {
-      timers.forEach(clearTimeout);
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
     };
   }, []);
 
@@ -110,12 +113,19 @@ export default function UploadImportPage() {
   const isFormValid = Boolean(classScheduleFile && roomScheduleFile && selectedCycle);
   const isProcessing = processStatus === 'uploading' || processStatus === 'parsing';
 
+  const clearPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
   // Handle start import process
   const handleStartImport = async () => {
     if (!isFormValid || isProcessing || !prerequisiteStatus?.isReady) return;
 
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = [];
+    clearPolling();
+    pollingCountRef.current = 0;
     setErrorMessage('');
 
     setProcessStatus('uploading');
@@ -129,56 +139,78 @@ export default function UploadImportPage() {
 
     try {
       const res = await scheduleImportApi.uploadSchedulePdf(formData);
-      const importedId = res.data?.id || Date.now();
+      const importedId = res.data?.id;
+      if (!importedId) {
+        throw new Error('Respons backend tidak mengembalikan ID batch import.');
+      }
       setBatchId(importedId);
 
-      setProgressValue(60);
+      setProgressValue(50);
       setProcessStatus('parsing');
       setStatusMessage('Berkas diterima (HTTP 202 Accepted). Memproses ekstraksi koordinat FET...');
 
-      const t1 = setTimeout(() => {
-        setProgressValue(90);
-        setStatusMessage('Mencocokkan entri kelas, guru, dan alokasi fisik ruangan...');
-      }, 1200);
+      // Polling setiap 1.5 detik ke GET /api/schedule-imports/{id}
+      pollingRef.current = setInterval(async () => {
+        pollingCountRef.current += 1;
 
-      const t2 = setTimeout(() => {
-        setProcessStatus('preview_ready');
-        setProgressValue(100);
-        setStatusMessage('Ekstraksi selesai! Data siap ditinjau dan divalidasi.');
-      }, 2400);
+        // Batas waktu polling 60 detik (40 iterasi x 1.5 detik)
+        if (pollingCountRef.current > 40) {
+          clearPolling();
+          setProcessStatus('error');
+          setErrorMessage(
+            'Proses ekstraksi memakan waktu lebih lama dari biasanya (melebihi batas waktu 60 detik). Anda dapat memeriksa halaman tinjauan secara manual atau mencoba kembali.'
+          );
+          return;
+        }
 
-      timersRef.current = [t1, t2];
+        try {
+          const checkRes = await scheduleImportApi.getScheduleImport(importedId);
+          const currentStatus = checkRes?.data?.status;
+
+          if (currentStatus === 'preview_ready') {
+            clearPolling();
+            setProgressValue(100);
+            setProcessStatus('preview_ready');
+            setStatusMessage('Ekstraksi selesai! Data siap ditinjau dan divalidasi.');
+          } else if (currentStatus === 'failed') {
+            clearPolling();
+            setProcessStatus('error');
+            setErrorMessage(
+              checkRes?.message ||
+                'Proses ekstraksi berkas PDF gagal. Pastikan format tabel sesuai dengan ekspor FET.'
+            );
+          } else {
+            // Masih dalam antrean / parsing
+            setProgressValue((prev) => Math.min(prev + 5, 92));
+            setStatusMessage('Mencocokkan entri kelas, guru, dan alokasi fisik ruangan...');
+          }
+        } catch {
+          // Abaikan kegagalan sementara koneksi jaringan saat polling
+        }
+      }, 1500);
     } catch (apiErr) {
-      if (apiErr.status === 422) {
-        setProcessStatus('error');
+      clearPolling();
+      setProcessStatus('error');
+      if (apiErr.status === 422 || apiErr.response?.status === 422) {
         setErrorMessage(
-          apiErr.message ||
+          apiErr.response?.data?.message ||
+            apiErr.message ||
             'Prasyarat Master Data belum terpenuhi. Pastikan minimal terdapat 1 guru dengan FET Staff ID.'
         );
-        return;
+      } else {
+        setErrorMessage(
+          apiErr.response?.data?.message ||
+            apiErr.message ||
+            'Gagal mengunggah berkas PDF ke server. Silakan periksa koneksi backend.'
+        );
       }
-
-      // Offline / Demo fallback
-      const fallbackId = Date.now();
-      setBatchId(fallbackId);
-      setProgressValue(70);
-      setProcessStatus('parsing');
-      setStatusMessage('Memproses ekstraksi tabel PDF jadwal FET...');
-
-      const t1 = setTimeout(() => {
-        setProcessStatus('preview_ready');
-        setProgressValue(100);
-        setStatusMessage('Ekstraksi selesai (Mode Simulasi)! Data siap diverifikasi.');
-      }, 2000);
-
-      timersRef.current = [t1];
     }
   };
 
   // Reset import form
   const handleReset = () => {
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = [];
+    clearPolling();
+    pollingCountRef.current = 0;
     setClassScheduleFile(null);
     setRoomScheduleFile(null);
     setProcessStatus('idle');

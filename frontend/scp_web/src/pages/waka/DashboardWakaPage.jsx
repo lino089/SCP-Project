@@ -5,40 +5,6 @@ import { Button, Table, Badge, PasswordModal } from '../../components/shared';
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
 import './DashboardWaka.css';
 
-const FALLBACK_HISTORY = [
-  {
-    id: 1,
-    from_cycle: 2,
-    to_cycle: 1,
-    changed_at: '2026-09-08 06:45:00',
-    changed_by: 'Waka Kurikulum',
-  },
-  {
-    id: 2,
-    from_cycle: 1,
-    to_cycle: 2,
-    changed_at: '2026-09-01 07:00:00',
-    changed_by: 'Waka Kurikulum',
-  },
-];
-
-const FALLBACK_MISSING_JOURNALS = [
-  {
-    id: 101,
-    className: 'X-RPL-1',
-    teacherName: 'Drs. Ahmad Fauzi, M.Pd.',
-    subjectName: 'Matematika',
-    period: 'Jam Ke-1 s.d. Ke-2',
-  },
-  {
-    id: 102,
-    className: 'XI-RPL-1',
-    teacherName: 'Budi Santoso, S.T., M.T.',
-    subjectName: 'Basis Data',
-    period: 'Jam Ke-3 s.d. Ke-4',
-  },
-];
-
 export default function DashboardWakaPage() {
   const navigate = useNavigate();
 
@@ -47,10 +13,10 @@ export default function DashboardWakaPage() {
   const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
 
   // Cycle History list
-  const [historyList, setHistoryList] = useState(FALLBACK_HISTORY);
+  const [historyList, setHistoryList] = useState([]);
 
   // Missing journals
-  const [missingJournals, setMissingJournals] = useState(FALLBACK_MISSING_JOURNALS);
+  const [missingJournals, setMissingJournals] = useState([]);
 
   // Loading & Feedback states
   const [feedbackMessage, setFeedbackMessage] = useState(null);
@@ -89,22 +55,26 @@ export default function DashboardWakaPage() {
 
       try {
         const historyRes = await academicSettingApi.getCycleHistory();
-        if (isMounted && historyRes?.data) {
-          const list = Array.isArray(historyRes.data)
-            ? historyRes.data
-            : historyRes.data.data || [];
-          if (list.length > 0) setHistoryList(list);
+        if (isMounted) {
+          const list = historyRes?.data
+            ? Array.isArray(historyRes.data)
+              ? historyRes.data
+              : historyRes.data.data || []
+            : [];
+          setHistoryList(list);
         }
       } catch {
-        // Fallback history
+        if (isMounted) setHistoryList([]);
       }
 
       try {
         const missingRes = await scheduleApi.getMissingJournals();
-        if (isMounted && missingRes?.data) {
-          const raw = Array.isArray(missingRes.data)
-            ? missingRes.data
-            : missingRes.data.data || [];
+        if (isMounted) {
+          const raw = missingRes?.data
+            ? Array.isArray(missingRes.data)
+              ? missingRes.data
+              : missingRes.data.data || []
+            : [];
           const formatted = raw.map((item) => ({
             id: item.id,
             className: item.school_class?.name || item.className || 'Kelas',
@@ -115,7 +85,7 @@ export default function DashboardWakaPage() {
           setMissingJournals(formatted);
         }
       } catch {
-        // Fallback
+        if (isMounted) setMissingJournals([]);
       }
     }
 

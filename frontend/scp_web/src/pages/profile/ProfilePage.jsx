@@ -6,7 +6,6 @@ import {
   LogOut,
   CheckCircle,
   KeyRound,
-  Check,
   Globe,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -16,7 +15,7 @@ import './Profile.css';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout, loginWithDemo, updateUserProfile, hasRole, isKesiswaan, getHomeRoute } = useAuth();
+  const { user, logout, updateUserProfile, changePassword, hasRole, isKesiswaan, getHomeRoute } = useAuth();
 
   // Email verification state
   const [email, setEmail] = useState(user?.email || '');
@@ -49,8 +48,8 @@ export default function ProfilePage() {
   const [fieldErrors, setFieldErrors] = useState({});
 
   const handleSendEmailOtp = async () => {
-    if (!email) {
-      setEmailError('Alamat email wajib diisi.');
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setEmailError('Alamat email wajib diisi dengan format yang benar.');
       return;
     }
     setEmailLoading(true);
@@ -62,39 +61,36 @@ export default function ProfilePage() {
       setEmailOtpSent(true);
       setEmailMsg('Kode OTP 6-digit berhasil dikirim ke email Anda.');
     } catch (err) {
-      // Fallback demo support
-      setEmailOtpSent(true);
-      setEmailMsg(err.message || 'Kode verifikasi telah dikirim.');
+      setEmailError(err.message || 'Gagal mengirim kode OTP ke email. Coba beberapa saat lagi.');
     } finally {
       setEmailLoading(false);
     }
   };
 
   const handleVerifyEmailOtp = async () => {
-    if (emailOtp.length < 4) {
-      setEmailError('Masukkan kode OTP dengan benar.');
+    if (emailOtp.trim().length !== 6) {
+      setEmailError('Masukkan 6 digit kode OTP verifikasi email dengan benar.');
       return;
     }
     setEmailLoading(true);
     setEmailError('');
 
     try {
-      await authApi.verifyEmailOtp({ email, code: emailOtp });
+      await authApi.verifyEmailOtp({ email, code: emailOtp.trim() });
       setEmailVerified(true);
       setEmailOtpSent(false);
+      setEmailMsg('Email berhasil diverifikasi.');
       updateUserProfile({ email, email_verified_at: new Date().toISOString() });
-    } catch {
-      setEmailVerified(true);
-      setEmailOtpSent(false);
-      updateUserProfile({ email, email_verified_at: new Date().toISOString() });
+    } catch (err) {
+      setEmailError(err.message || 'Kode verifikasi email tidak valid atau telah kedaluwarsa.');
     } finally {
       setEmailLoading(false);
     }
   };
 
   const handleSendWaOtp = async () => {
-    if (!waNumber) {
-      setWaError('Nomor WhatsApp wajib diisi.');
+    if (!waNumber || waNumber.trim().length < 9) {
+      setWaError('Nomor WhatsApp wajib diisi minimal 9 digit.');
       return;
     }
     setWaLoading(true);
@@ -106,30 +102,28 @@ export default function ProfilePage() {
       setWaOtpSent(true);
       setWaMsg('Kode OTP telah dikirim ke nomor WhatsApp Anda.');
     } catch (err) {
-      setWaOtpSent(true);
-      setWaMsg(err.message || 'Kode verifikasi OTP telah dikirim.');
+      setWaError(err.message || 'Gagal mengirim kode OTP WhatsApp. Periksa kembali nomor Anda.');
     } finally {
       setWaLoading(false);
     }
   };
 
   const handleVerifyWaOtp = async () => {
-    if (waOtp.length < 4) {
-      setWaError('Masukkan kode OTP dengan benar.');
+    if (waOtp.trim().length !== 6) {
+      setWaError('Masukkan 6 digit kode OTP verifikasi WhatsApp dengan benar.');
       return;
     }
     setWaLoading(true);
     setWaError('');
 
     try {
-      await authApi.verifyPhoneOtp({ phone_number: waNumber, code: waOtp });
+      await authApi.verifyPhoneOtp({ phone_number: waNumber, code: waOtp.trim() });
       setWaVerified(true);
       setWaOtpSent(false);
+      setWaMsg('Nomor WhatsApp berhasil diverifikasi.');
       updateUserProfile({ phone_number: waNumber });
-    } catch {
-      setWaVerified(true);
-      setWaOtpSent(false);
-      updateUserProfile({ phone_number: waNumber });
+    } catch (err) {
+      setWaError(err.message || 'Kode verifikasi WhatsApp tidak valid atau telah kedaluwarsa.');
     } finally {
       setWaLoading(false);
     }
@@ -155,7 +149,7 @@ export default function ProfilePage() {
     setPasswordLoading(true);
 
     try {
-      await authApi.changePassword({
+      await changePassword({
         current_password: oldPassword,
         new_password: newPassword,
         new_password_confirmation: confirmPassword,
@@ -169,14 +163,9 @@ export default function ProfilePage() {
       if (err.errors) {
         setFieldErrors(err.errors);
       }
-      if (err.status === 404) {
-        setPasswordSuccess(true);
-        setOldPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-      } else {
-        setPasswordError(err.message || 'Gagal mengubah kata sandi. Periksa kembali kata sandi saat ini.');
-      }
+      setPasswordError(
+        err.message || 'Gagal mengubah kata sandi. Periksa kembali kata sandi saat ini.'
+      );
     } finally {
       setPasswordLoading(false);
     }
@@ -249,53 +238,6 @@ export default function ProfilePage() {
                 <span>Tahun Ajaran</span>
                 <span className="font-medium text-gray-900">2026/2027 Ganjil</span>
               </div>
-            </div>
-          </div>
-
-          {/* Quick Switch Role Card for UKK Testing */}
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="text-xs font-semibold text-gray-900 mb-1">
-              Uji Cepat Ganti Peran (UKK)
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Beralih ke peran lain secara instan untuk verifikasi antarmuka:
-            </p>
-            <div className="space-y-1.5">
-              {[
-                { id: 'waka', label: 'Waka Kurikulum', roleName: 'Waka Kurikulum' },
-                { id: 'teacher', label: 'Guru Reguler', roleName: 'Drs. Ahmad Fauzi' },
-                { id: 'kesiswaan', label: 'Guru Kesiswaan', roleName: 'Budi Santoso, M.Kom.' },
-                { id: 'student', label: 'Siswa', roleName: 'Aisyah Putri' },
-                { id: 'parent', label: 'Orang Tua', roleName: 'Bambang Sulistyo' },
-              ].map((item) => {
-                const isActive =
-                  (item.id === 'waka' && hasRole('waka')) ||
-                  (item.id === 'student' && hasRole('student')) ||
-                  (item.id === 'parent' && hasRole('parent')) ||
-                  (item.id === 'teacher' && hasRole('teacher'));
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      loginWithDemo(item.id);
-                      setTimeout(() => navigate(getHomeRoute()), 50);
-                    }}
-                    className={`w-full px-3 py-2 text-left rounded-md flex items-center justify-between text-xs transition-colors ${
-                      isActive
-                        ? 'bg-gray-100 text-gray-900 font-semibold border border-gray-200'
-                        : 'text-gray-600 hover:bg-gray-50 border border-transparent'
-                    }`}
-                  >
-                    <div>
-                      <div className="font-medium">{item.label}</div>
-                      <div className="text-[11px] text-gray-400 font-normal">{item.roleName}</div>
-                    </div>
-                    {isActive && <Check size={14} className="text-gray-900" />}
-                  </button>
-                );
-              })}
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -10,10 +10,15 @@ import {
   PlayCircle,
   Clock,
   BookOpen,
+  GraduationCap,
+  Users,
+  Download,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
+import { scheduleApi } from '../../services/scheduleApi';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -25,22 +30,39 @@ import {
   Modal,
   Tabs,
   Select,
+  Table,
 } from '../../components/shared';
 import './TeacherSchedule.css';
 
 export default function TeacherSchedulePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isWaliKelas } = useAuth();
+
+  // Konteks Penugasan: Jadwal Mengajar Pribadi vs Jadwal Kelas Binaan Wali Kelas
+  const homeroomAssignment = useMemo(() => {
+    return user?.assignments?.find((a) => a.type === 'wali_kelas');
+  }, [user]);
+
+  const homeroomClassId = homeroomAssignment?.class_id;
+  const homeroomClassName =
+    homeroomAssignment?.school_class?.name ||
+    homeroomAssignment?.class_name ||
+    (homeroomClassId ? `Kelas #${homeroomClassId}` : 'Kelas Binaan');
+
+  const [scheduleContext, setScheduleContext] = useState('my_schedule'); // 'my_schedule' | 'homeroom'
 
   // State tampilan & seleksi
   const [viewMode, setViewMode] = useState('daily'); // 'daily' | 'weekly'
   const [selectedDay, setSelectedDay] = useState('Senin');
   const [schedules, setSchedules] = useState([]);
+  const [homeroomSchedules, setHomeroomSchedules] = useState([]);
   const [missingJournals, setMissingJournals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Modal & Pengajuan Izin Mengajar Guru
+  // Perizinan Guru dari Backend
+  const [teacherLeaves, setTeacherLeaves] = useState([]);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [leaveReasonCategory, setLeaveReasonCategory] = useState('dinas_luar');
   const [leaveReasonDetail, setLeaveReasonDetail] = useState('');
   const [taskInstructions, setTaskInstructions] = useState(
@@ -48,26 +70,40 @@ export default function TeacherSchedulePage() {
   );
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [taskAttachmentFile, setTaskAttachmentFile] = useState(null);
-  const [todayLeave, setTodayLeave] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
-  const [isLeaveActive, setIsLeaveActive] = useState(() => {
-    return localStorage.getItem('teacher_leave_active') === 'true';
-  });
   const [leaveToast, setLeaveToast] = useState(false);
+
+  // Ambil daftar perizinan mengajar guru dari backend
+  const fetchTeacherLeaves = useCallback(async () => {
+    try {
+      const res = await leaveApi.getTeacherLeaveRequests({ per_page: 50 });
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setTeacherLeaves(list);
+    } catch {
+      // Fallback ditangani di service layer
+    }
+  }, []);
+
+  // Izin mengajar aktif hari ini dari backend
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayActiveLeave = useMemo(() => {
+    return teacherLeaves.find(
+      (l) => l.date === todayStr && (l.status === 'pending' || l.status === 'approved')
+    );
+  }, [teacherLeaves, todayStr]);
 
   // Ambil data jadwal mengajar guru & perizinan saat komponen mount
   useEffect(() => {
     let isMounted = true;
 
     async function fetchData() {
+      setIsLoading(true);
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const [schedRes, missingRes, leaveRes] = await Promise.all([
+        const [schedRes, missingRes] = await Promise.all([
           journalApi.getTeacherSchedules({ per_page: 100 }),
-          journalApi.getMissingJournals(),
-          leaveApi.getTeacherLeaveRequests({ date: todayStr }).catch(() => null),
+          journalApi.getMissingJournals().catch(() => ({ success: false, data: [] })),
         ]);
 
         if (!isMounted) return;
@@ -77,16 +113,6 @@ export default function TeacherSchedulePage() {
         }
         if (missingRes.success && Array.isArray(missingRes.data)) {
           setMissingJournals(missingRes.data);
-        }
-
-        // Sinkronisasi status izin hari ini dari backend jika ada
-        const leaveItems = Array.isArray(leaveRes?.data) ? leaveRes.data : [];
-        const activeLeave = leaveItems.find(
-          (l) => l.status === 'pending' || l.status === 'approved'
-        );
-        if (activeLeave) {
-          setTodayLeave(activeLeave);
-          setIsLeaveActive(true);
         }
       } catch {
         // Fallback otomatis tertangani di service layer
@@ -98,11 +124,45 @@ export default function TeacherSchedulePage() {
     }
 
     fetchData();
+    fetchTeacherLeaves();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [fetchTeacherLeaves]);
+
+  // Pemuatan data jadwal kelas binaan jika tab kelas binaan aktif
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchHomeroomData() {
+      if (scheduleContext !== 'homeroom' || !homeroomClassId) return;
+      setIsLoading(true);
+      try {
+        const res = await scheduleApi.getSchedules({ class_id: homeroomClassId, per_page: 100 });
+        if (!isMounted) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setHomeroomSchedules(list);
+      } catch {
+        // Fallback
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchHomeroomData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [scheduleContext, homeroomClassId]);
+
+  // Jadwal aktif yang sedang dirender berdasarkan konteks seleksi
+  const activeSchedules = useMemo(() => {
+    return scheduleContext === 'homeroom' ? homeroomSchedules : schedules;
+  }, [scheduleContext, homeroomSchedules, schedules]);
 
   // Handle Pengajuan Izin Guru via Backend API
   const handleSendLeave = async (e) => {
@@ -127,12 +187,11 @@ export default function TeacherSchedulePage() {
       (s) => s.day_of_week === todayDayNumber
     );
     const scheduleIds = targetSchedules.map((s) => s.id);
-    const todayDate = new Date().toISOString().split('T')[0];
 
     setIsSubmitting(true);
     try {
       const res = await leaveApi.submitTeacherLeaveRequest({
-        date: todayDate,
+        date: todayStr,
         reason: fullReason,
         schedule_ids: scheduleIds,
         attachment: attachmentFile,
@@ -141,32 +200,23 @@ export default function TeacherSchedulePage() {
       });
 
       if (res?.success) {
-        setIsLeaveActive(true);
-        setTodayLeave(res.data);
-        // Simpan instruksi tugas ke localStorage sebagai fallback TeacherJournalPage
-        localStorage.setItem('teacher_leave_tasks', taskInstructions);
-
         setIsLeaveModalOpen(false);
         setLeaveToast(true);
         setTimeout(() => setLeaveToast(false), 5000);
+        // Refresh riwayat perizinan dari backend
+        await fetchTeacherLeaves();
       }
     } catch (err) {
       const errorMsg =
         err.message ||
         err.raw?.response?.data?.message ||
+        err.response?.data?.message ||
         'Gagal mengajukan izin mengajar.';
       setFormError(errorMsg);
-      setFieldErrors(err.errors || err.raw?.response?.data?.errors || {});
+      setFieldErrors(err.errors || err.raw?.response?.data?.errors || err.response?.data?.errors || {});
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleCancelLeave = () => {
-    setIsLeaveActive(false);
-    localStorage.removeItem('teacher_leave_active');
-    localStorage.removeItem('teacher_leave_reason');
-    localStorage.removeItem('teacher_leave_tasks');
   };
 
   // Navigasi ke halaman form Jurnal & Presensi
@@ -181,14 +231,14 @@ export default function TeacherSchedulePage() {
 
   // Filter jadwal per hari yang dipilih
   const currentDayNumber = DAY_TO_NUMBER[selectedDay] || 1;
-  const dailySchedules = schedules.filter(
+  const dailySchedules = activeSchedules.filter(
     (s) => s.day_of_week === currentDayNumber
   );
 
   // Susun tabs hari dengan counter jumlah kelas
   const dayTabs = DAYS_LIST.map((dayName) => {
     const num = DAY_TO_NUMBER[dayName];
-    const count = schedules.filter((s) => s.day_of_week === num).length;
+    const count = activeSchedules.filter((s) => s.day_of_week === num).length;
     return {
       id: dayName,
       label: dayName,
@@ -198,8 +248,12 @@ export default function TeacherSchedulePage() {
 
   // Render Status Badge pada kartu jadwal
   const renderStatusBadge = (item) => {
-    if (isLeaveActive) {
-      return <Badge variant="warning">Izin (Kesiswaan)</Badge>;
+    // Jika guru pribadi memiliki izin mengajar aktif hari ini pada jadwal mengajarnya
+    if (scheduleContext === 'my_schedule' && todayActiveLeave) {
+      if (todayActiveLeave.status === 'approved') {
+        return <Badge variant="warning">Izin Disetujui</Badge>;
+      }
+      return <Badge variant="info">Izin Menunggu Verifikasi</Badge>;
     }
     if (item.journal_status === 'completed') {
       return <Badge variant="success">Jurnal Selesai</Badge>;
@@ -213,6 +267,86 @@ export default function TeacherSchedulePage() {
     return <Badge variant="neutral">Jurnal Belum Diisi</Badge>;
   };
 
+  // Kolom Riwayat Izin Mengajar
+  const historyColumns = [
+    {
+      key: 'no',
+      label: 'No',
+      align: 'center',
+      width: '50px',
+      renderCell: (_row, idx) => (
+        <span className="font-mono text-xs text-gray-400">
+          {String(idx + 1).padStart(2, '0')}
+        </span>
+      ),
+    },
+    {
+      key: 'date',
+      label: 'Tanggal Izin',
+      renderCell: (row) => (
+        <span className="font-mono text-xs font-semibold text-gray-900">{row.date}</span>
+      ),
+    },
+    {
+      key: 'reason',
+      label: 'Alasan / Keterangan',
+      renderCell: (row) => (
+        <div className="max-w-xs text-xs text-gray-800 font-sans" title={row.reason}>
+          {row.reason}
+        </div>
+      ),
+    },
+    {
+      key: 'task',
+      label: 'Instruksi Tugas Titipan',
+      renderCell: (row) => (
+        <div className="text-xs text-gray-700 max-w-xs truncate" title={row.task_instruction}>
+          {row.task_instruction || '-'}
+        </div>
+      ),
+    },
+    {
+      key: 'documents',
+      label: 'Lampiran',
+      renderCell: (row) => (
+        <div className="flex items-center gap-1.5">
+          {row.attachment_path && (
+            <a
+              href={`/storage/${row.attachment_path}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
+            >
+              <Download size={11} /> Surat
+            </a>
+          )}
+          {row.task_attachment_path && (
+            <a
+              href={`/storage/${row.task_attachment_path}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 ml-1"
+            >
+              <Download size={11} /> Modul
+            </a>
+          )}
+          {!row.attachment_path && !row.task_attachment_path && (
+            <span className="text-[11px] text-gray-400 italic">-</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      renderCell: (row) => {
+        if (row.status === 'approved') return <Badge variant="success">Disetujui</Badge>;
+        if (row.status === 'rejected') return <Badge variant="error">Ditolak</Badge>;
+        return <Badge variant="warning">Menunggu</Badge>;
+      },
+    },
+  ];
+
   return (
     <div className="teacher-schedule">
       {/* Header Halaman */}
@@ -220,13 +354,22 @@ export default function TeacherSchedulePage() {
         <div className="teacher-schedule__title-group">
           <h1>Kalender Jadwal Mengajar</h1>
           <p className="teacher-schedule__subtitle">
-            Pantau alokasi jam mengajar harian &amp; mingguan, rombel kelas, serta kepatuhan pengisian jurnal kelas.
+            Pantau alokasi jam mengajar harian &amp; mingguan, rombel kelas, serta kepatuhan pengisian jurnal KBM.
           </p>
         </div>
 
         <div className="teacher-schedule__header-actions">
           <Button
             variant="secondary"
+            size="sm"
+            icon={Clock}
+            onClick={() => setIsHistoryModalOpen(true)}
+          >
+            Riwayat Izin Saya
+          </Button>
+
+          <Button
+            variant="primary"
             size="sm"
             icon={FileText}
             onClick={() => {
@@ -237,49 +380,88 @@ export default function TeacherSchedulePage() {
           >
             Ajukan Izin Hari Ini
           </Button>
+
           <Badge variant="default">Siklus Putaran 1</Badge>
           <Badge variant="neutral">
-            Guru: {user?.name || 'Drs. Ahmad Fauzi, M.Pd.'}
+            Guru: {user?.name || 'Bapak/Ibu Guru'}
           </Badge>
         </div>
       </div>
+
+      {/* Selektor Multirole Wali Kelas */}
+      {isWaliKelas() && homeroomClassId && (
+        <div className="mb-4 bg-gray-100 p-1 rounded-lg inline-flex items-center gap-1">
+          <button
+            type="button"
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+              scheduleContext === 'my_schedule'
+                ? 'bg-white text-gray-900 shadow-xs'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setScheduleContext('my_schedule')}
+          >
+            Jadwal Mengajar Saya
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+              scheduleContext === 'homeroom'
+                ? 'bg-white text-gray-900 shadow-xs'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setScheduleContext('homeroom')}
+          >
+            <GraduationCap size={14} className="text-blue-600" />
+            <span>Jadwal Kelas Binaan ({homeroomClassName})</span>
+          </button>
+        </div>
+      )}
+
+      {/* Banner Informasi Kelas Binaan */}
+      {scheduleContext === 'homeroom' && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2.5 text-xs text-blue-900">
+          <Info size={16} className="text-blue-600 shrink-0" />
+          <span>
+            Menampilkan seluruh alokasi jadwal mata pelajaran pada rombel binaan <strong>{homeroomClassName}</strong>. Anda dapat memantau kehadiran guru mata pelajaran atau membuka sesi KBM darurat jika guru pengampu berhalangan hadir.
+          </span>
+        </div>
+      )}
 
       {/* Alert Sukses Pengajuan Izin */}
       {leaveToast && (
         <div className="teacher-schedule__alert teacher-schedule__alert--success">
           <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
           <span>
-            <strong>Izin berhasil diajukan!</strong> Seluruh kelas Anda hari ini telah didelegasikan ke{' '}
-            <strong>Tim Kesiswaan (Piket)</strong> beserta instruksi tugas titipan.
+            <strong>Izin berhasil diajukan!</strong> Pengajuan izin Anda hari ini telah tercatat di antrean verifikasi Kesiswaan/Piket beserta instruksi tugas titipan.
           </span>
         </div>
       )}
 
-      {/* Banner Status Izin Guru Aktif */}
-      {isLeaveActive && (
+      {/* Banner Status Izin Guru Aktif Hari Ini (Berdasarkan Data Backend) */}
+      {todayActiveLeave && scheduleContext === 'my_schedule' && (
         <div className="teacher-schedule__alert teacher-schedule__alert--leave">
           <div className="flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-600 shrink-0" />
             <span>
               <strong>
-                Status Izin {todayLeave?.status === 'approved' ? 'Disetujui' : todayLeave?.status === 'pending' ? 'Pending (Menunggu Verifikasi)' : 'Aktif'}:
+                Status Izin {todayActiveLeave.status === 'approved' ? 'Disetujui' : 'Menunggu Verifikasi Kesiswaan'}:
               </strong>{' '}
-              Seluruh jam mengajar Anda hari ini didelegasikan ke{' '}
-              <strong>Tim Kesiswaan (Piket)</strong> beserta instruksi tugas titipan.
+              {todayActiveLeave.reason} &bull; Seluruh jam mengajar Anda hari ini didelegasikan ke{' '}
+              <strong>Tim Kesiswaan (Piket)</strong>.
             </span>
           </div>
           <button
             type="button"
             className="teacher-schedule__alert-btn"
-            onClick={handleCancelLeave}
+            onClick={() => setIsHistoryModalOpen(true)}
           >
-            Batalkan Izin
+            Lihat Detail Izin
           </button>
         </div>
       )}
 
       {/* Peringatan Keterlambatan Pengisian Jurnal (> 30 menit) */}
-      {missingJournals.length > 0 && (
+      {missingJournals.length > 0 && scheduleContext === 'my_schedule' && (
         <div className="teacher-schedule__alert teacher-schedule__alert--warning">
           <AlertCircle size={18} className="text-amber-700 shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -316,11 +498,11 @@ export default function TeacherSchedulePage() {
 
           {isLoading ? (
             <div className="border border-gray-200 rounded-lg p-10 text-center text-gray-500 bg-white">
-              Memuat data jadwal mengajar...
+              Memuat data jadwal {scheduleContext === 'homeroom' ? `kelas binaan ${homeroomClassName}` : 'mengajar'}...
             </div>
           ) : dailySchedules.length === 0 ? (
             <div className="border border-gray-200 rounded-lg p-12 text-center text-gray-500 text-[13px] bg-white">
-              Tidak ada alokasi jam mengajar terjadwal pada hari <strong>{selectedDay}</strong>.
+              Tidak ada alokasi jam {scheduleContext === 'homeroom' ? 'mata pelajaran' : 'mengajar'} terjadwal pada hari <strong>{selectedDay}</strong>.
             </div>
           ) : (
             <div>
@@ -338,7 +520,6 @@ export default function TeacherSchedulePage() {
 
               {/* Kelompok Slot Jadwal Harian */}
               {(() => {
-                // Grouping berdasarkan period_number
                 const groups = {};
                 dailySchedules.forEach((item) => {
                   if (!groups[item.period_number]) {
@@ -359,7 +540,6 @@ export default function TeacherSchedulePage() {
                   const firstItem = items[0];
                   const duration = firstItem.duration_periods || 1;
 
-                  // Kalkulasi waktu riil
                   const slotTime = resolveSlotTime(selectedDay, slotNum, duration);
                   const timeStr = slotTime?.timeText || `Jam Ke-${slotNum}`;
 
@@ -431,7 +611,11 @@ export default function TeacherSchedulePage() {
                                   {item.subject?.name || 'Mata Pelajaran'}
                                 </div>
                                 <div className="teacher-schedule__subject-meta">
-                                  <span>{user?.name || item.teacher?.name}</span>
+                                  <span>
+                                    {scheduleContext === 'homeroom'
+                                      ? `Pengampu: ${item.teacher?.name || '-'}`
+                                      : (user?.name || item.teacher?.name)}
+                                  </span>
                                   <span>&bull;</span>
                                   <span>{duration} Jam Pelajaran (JP)</span>
                                 </div>
@@ -448,12 +632,14 @@ export default function TeacherSchedulePage() {
                               <Button
                                 variant="secondary"
                                 size="sm"
-                                icon={item.journal_status === 'completed' ? BookOpen : PlayCircle}
+                                icon={PlayCircle}
                                 onClick={() => handleOpenJournal(item)}
                               >
                                 {item.journal_status === 'completed'
-                                  ? 'Lihat Jurnal'
-                                  : 'Buka Kelas / Isi Jurnal'}
+                                  ? 'Detail Jurnal'
+                                  : scheduleContext === 'homeroom'
+                                    ? 'Sesi KBM / Pengganti'
+                                    : 'Buka Jurnal & Presensi'}
                               </Button>
                             </div>
                           </div>
@@ -470,33 +656,38 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
-      {/* TAMPILAN 2: MATRIKS MINGGUAN (READ-ONLY) */}
+      {/* TAMPILAN 2: MATRIKS MINGGUAN */}
       {viewMode === 'weekly' && (
-        <div className="teacher-schedule__matrix-container">
+        <div className="teacher-schedule__matrix-wrap">
           <table className="teacher-schedule__matrix-table">
             <thead>
               <tr>
-                <th style={{ width: '12%' }}>Slot Jam</th>
-                {DAYS_LIST.map((day) => (
-                  <th key={day} style={{ width: '17.6%' }}>
-                    {day}
-                  </th>
+                <th style={{ width: '70px' }}>Slot Jam</th>
+                <th style={{ width: '110px' }}>Waktu</th>
+                {DAYS_LIST.map((dayName) => (
+                  <th key={dayName}>{dayName}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((slot) => {
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((slot) => {
+                const isBreak1 = slot === 5;
+                const isBreak2 = slot === 7;
+
                 return (
                   <tr key={slot}>
-                    <td className="bg-gray-50/50 font-mono text-xs text-gray-500 font-semibold">
-                      Jam ke-{slot}
+                    <td className="font-mono text-center font-bold text-gray-500">
+                      JP {slot}
                     </td>
+                    <td className="font-mono text-[11px] text-gray-500">
+                      {resolveSlotTime('Senin', slot, 1)?.timeText || '-'}
+                    </td>
+
                     {DAYS_LIST.map((dayName) => {
-                      const dayNum = DAY_TO_NUMBER[dayName];
-                      // Cari apakah ada jadwal di slot ini
-                      const match = schedules.find(
+                      const dayNumber = DAY_TO_NUMBER[dayName];
+                      const match = activeSchedules.find(
                         (s) =>
-                          s.day_of_week === dayNum &&
+                          s.day_of_week === dayNumber &&
                           slot >= s.period_number &&
                           slot < s.period_number + (s.duration_periods || 1)
                       );
@@ -505,7 +696,6 @@ export default function TeacherSchedulePage() {
                         return <td key={dayName} className="text-gray-300">-</td>;
                       }
 
-                      // Render hanya di slot awal durasi blok
                       if (slot === match.period_number) {
                         return (
                           <td
@@ -525,14 +715,15 @@ export default function TeacherSchedulePage() {
                                 </div>
                               </div>
                               <div className="teacher-schedule__matrix-cell-room">
-                                {match.room?.name} &bull; {match.duration_periods} JP
+                                {scheduleContext === 'homeroom'
+                                  ? match.teacher?.name
+                                  : `${match.room?.name} \u2022 ${match.duration_periods} JP`}
                               </div>
                             </div>
                           </td>
                         );
                       }
 
-                      // Slot lanjutan dari rowspan
                       return null;
                     })}
                   </tr>
@@ -543,6 +734,36 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
+      {/* Modal Riwayat Izin Mengajar Guru */}
+      <Modal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        title="Riwayat Pengajuan Izin Mengajar Guru"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Daftar seluruh riwayat izin berhalangan hadir dan delegasi tugas piket yang telah Anda ajukan ke sistem.
+          </p>
+
+          <Table
+            columns={historyColumns}
+            data={teacherLeaves}
+            emptyMessage="Belum ada riwayat pengajuan izin mengajar yang tercatat."
+          />
+
+          <div className="flex justify-end pt-3 border-t border-gray-100">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsHistoryModalOpen(false)}
+            >
+              Tutup
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Modal Pengajuan Izin Mengajar Guru */}
       <Modal
         isOpen={isLeaveModalOpen}
@@ -551,7 +772,7 @@ export default function TeacherSchedulePage() {
           setFormError('');
           setFieldErrors({});
         }}
-        title="Pengajuan Izin Mengajar & Delegasi Piket"
+        title="Pengajuan Izin Mengajar &amp; Delegasi Piket"
         size="md"
       >
         <form onSubmit={handleSendLeave} className="flex flex-col gap-4">
@@ -563,7 +784,7 @@ export default function TeacherSchedulePage() {
           )}
 
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 leading-relaxed">
-            Pengajuan izin akan mendelegasikan jadwal kelas Anda hari ini ke{' '}
+            Pengajuan izin akan mendelegasikan jadwal kelas Anda hari ini ({todayStr}) ke{' '}
             <strong>Tim Kesiswaan (Piket)</strong>. Pastikan instruksi tugas ditulis dengan jelas untuk dibacakan kepada siswa di kelas.
           </div>
 

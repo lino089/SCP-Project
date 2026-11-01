@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, User, LogOut, Check, Sun, HelpCircle, Bell } from 'lucide-react';
+import { Menu, User, LogOut, Sun, HelpCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import './TopBar.css';
 
@@ -32,11 +32,21 @@ const getBreadcrumb = (pathname) => {
 export default function TopBar({ onToggleSidebar }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, loginWithDemo, getHomeRoute, hasRole, isKesiswaan } = useAuth();
+  const { user, logout, getHomeRoute, hasRole, isKesiswaan } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const breadcrumb = getBreadcrumb(location.pathname);
+
+  // Dynamic avatar initials helper
+  const userInitials = useMemo(() => {
+    if (!user?.name) return 'US';
+    const parts = user.name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return user.name.substring(0, 2).toUpperCase();
+  }, [user?.name]);
 
   // Click outside listener for dropdown
   useEffect(() => {
@@ -53,14 +63,6 @@ export default function TopBar({ onToggleSidebar }) {
     setDropdownOpen(false);
     await logout();
     navigate('/login');
-  };
-
-  const handleSelectDemoRole = (roleKey) => {
-    loginWithDemo(roleKey);
-    setDropdownOpen(false);
-    setTimeout(() => {
-      navigate(getHomeRoute());
-    }, 50);
   };
 
   const handleToggleTheme = () => {
@@ -163,7 +165,7 @@ export default function TopBar({ onToggleSidebar }) {
             aria-expanded={dropdownOpen}
             aria-label="Menu profil pengguna"
           >
-            <div className="web-topbar__avatar">WK</div>
+            <div className="web-topbar__avatar">{userInitials}</div>
           </button>
 
           {dropdownOpen && (
@@ -186,39 +188,6 @@ export default function TopBar({ onToggleSidebar }) {
                 <User size={14} />
                 <span>Profil &amp; Keamanan</span>
               </button>
-
-              {/* Demo Role Quick Switcher for UKK Evaluator */}
-              <div className="p-2 border-t border-b border-gray-100 my-1 bg-gray-50/70 rounded">
-                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-1">
-                  Uji Cepat Peran (UKK)
-                </div>
-                {[
-                  { id: 'waka', label: 'Waka Kurikulum' },
-                  { id: 'teacher', label: 'Guru' },
-                  { id: 'kesiswaan', label: 'Guru Kesiswaan' },
-                  { id: 'student', label: 'Siswa' },
-                  { id: 'parent', label: 'Orang Tua' },
-                ].map((item) => {
-                  const isActive =
-                    (item.id === 'waka' && hasRole('waka')) ||
-                    (item.id === 'student' && hasRole('student')) ||
-                    (item.id === 'parent' && hasRole('parent')) ||
-                    (item.id === 'kesiswaan' && isKesiswaan()) ||
-                    (item.id === 'teacher' && hasRole('teacher') && !isKesiswaan());
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="w-full flex items-center justify-between px-2 py-1 text-xs text-gray-700 hover:bg-white rounded transition-colors text-left"
-                      onClick={() => handleSelectDemoRole(item.id)}
-                    >
-                      <span>{item.label}</span>
-                      {isActive && <Check size={12} className="text-gray-900 font-bold" />}
-                    </button>
-                  );
-                })}
-              </div>
 
               <button
                 type="button"

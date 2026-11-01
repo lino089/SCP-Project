@@ -25,7 +25,7 @@ import './TeacherJournal.css';
 export default function TeacherJournalPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isKesiswaan } = useAuth();
+  const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
 
   // Ambil data jadwal dari route state atau fallback
   const passedSchedule = location.state?.schedule;
@@ -73,25 +73,27 @@ export default function TeacherJournalPage() {
   }, [schedule, user]);
 
   const isSubstituteMode = useMemo(() => {
-    return isKesiswaan() && !isOriginalTeacher;
-  }, [isKesiswaan, isOriginalTeacher]);
+    const isHomeroom = schedule?.class_id ? isWaliKelas(schedule.class_id) : false;
+    return (isKesiswaan() || isHomeroom) && !isOriginalTeacher;
+  }, [isKesiswaan, isWaliKelas, schedule?.class_id, isOriginalTeacher]);
 
   const isAccessDenied = useMemo(() => {
     if (!schedule || !user) return false;
-    // Jika bukan guru jadwal dan bukan kesiswaan -> Ditolak (403)
-    return !isOriginalTeacher && !isKesiswaan();
-  }, [schedule, user, isOriginalTeacher, isKesiswaan]);
+    const isHomeroom = schedule?.class_id ? isWaliKelas(schedule.class_id) : false;
+    // Diizinkan jika: Guru Pengampu Asli, Tim Kesiswaan, Waka Kurikulum, atau Wali Kelas rombel tersebut
+    return !isOriginalTeacher && !isKesiswaan() && !hasRole('waka') && !isHomeroom;
+  }, [schedule, user, isOriginalTeacher, isKesiswaan, hasRole, isWaliKelas]);
 
-  // Muat tugas titipan jika dalam mode pengganti Kesiswaan
+  // Muat tugas titipan jika dalam mode pengganti Kesiswaan atau Wali Kelas
   const taskTitipan = useMemo(() => {
     if (isSubstituteMode) {
       return (
-        localStorage.getItem('teacher_leave_tasks') ||
-        'Lanjutkan praktikum modul CRUD pada materi database dan serahkan ringkasan tugas ke meja piket.'
+        schedule?.task_instruction ||
+        'Lanjutkan praktikum modul dan serahkan ringkasan tugas latihan mandiri ke ketua kelas / meja piket.'
       );
     }
     return '';
-  }, [isSubstituteMode]);
+  }, [isSubstituteMode, schedule?.task_instruction]);
 
   // Helper kompresi dan set foto dokumentasi
   const handlePhotoSelect = async (file) => {
@@ -424,7 +426,7 @@ export default function TeacherJournalPage() {
                 : 'Mulai & Buka Kelas Sekarang'}
             </Button>
 
-            {isKesiswaan() && (
+            {(isKesiswaan() || hasRole('waka')) && (
               <Button
                 variant="outline"
                 size="md"
