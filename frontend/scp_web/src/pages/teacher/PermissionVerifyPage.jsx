@@ -24,6 +24,7 @@ import {
   Tabs,
   Table,
 } from '../../components/shared';
+import { getStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './PermissionVerify.css';
 
@@ -90,10 +91,18 @@ export default function PermissionVerifyPage() {
   }, [canVerify]);
 
   useEffect(() => {
-    fetchStudentLeaves();
-    if (canVerify) {
-      fetchTeacherLeaves();
-    }
+    let isMounted = true;
+    const loadLeaves = async () => {
+      if (!isMounted) return;
+      await fetchStudentLeaves();
+      if (canVerify && isMounted) {
+        await fetchTeacherLeaves();
+      }
+    };
+    Promise.resolve().then(loadLeaves);
+    return () => {
+      isMounted = false;
+    };
   }, [fetchStudentLeaves, fetchTeacherLeaves, canVerify]);
 
   // ==========================================
@@ -756,7 +765,7 @@ export default function PermissionVerifyPage() {
               </div>
               {previewTeacherDoc?.attachment_path && (
                 <a
-                  href={`/storage/${previewTeacherDoc.attachment_path}`}
+                  href={getStorageUrl(previewTeacherDoc.attachment_path)}
                   target="_blank"
                   rel="noreferrer"
                   className="px-2 py-1 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded text-[11px] font-medium shrink-0 flex items-center gap-1"
@@ -777,7 +786,7 @@ export default function PermissionVerifyPage() {
               </div>
               {previewTeacherDoc?.task_attachment_path && (
                 <a
-                  href={`/storage/${previewTeacherDoc.task_attachment_path}`}
+                  href={getStorageUrl(previewTeacherDoc.task_attachment_path)}
                   target="_blank"
                   rel="noreferrer"
                   className="px-2 py-1 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded text-[11px] font-medium shrink-0 flex items-center gap-1"

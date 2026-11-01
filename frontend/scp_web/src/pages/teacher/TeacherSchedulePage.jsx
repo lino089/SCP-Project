@@ -9,9 +9,7 @@ import {
   Flag,
   PlayCircle,
   Clock,
-  BookOpen,
   GraduationCap,
-  Users,
   Download,
   Info,
 } from 'lucide-react';
@@ -19,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
 import { scheduleApi } from '../../services/scheduleApi';
+import { getStorageUrl } from '../../utils/formatters';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -123,8 +122,13 @@ export default function TeacherSchedulePage() {
       }
     }
 
-    fetchData();
-    fetchTeacherLeaves();
+    const loadAll = async () => {
+      await fetchData();
+      if (isMounted) {
+        await fetchTeacherLeaves();
+      }
+    };
+    Promise.resolve().then(loadAll);
 
     return () => {
       isMounted = false;
@@ -312,7 +316,7 @@ export default function TeacherSchedulePage() {
         <div className="flex items-center gap-1.5">
           {row.attachment_path && (
             <a
-              href={`/storage/${row.attachment_path}`}
+              href={getStorageUrl(row.attachment_path)}
               target="_blank"
               rel="noreferrer"
               className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
@@ -322,7 +326,7 @@ export default function TeacherSchedulePage() {
           )}
           {row.task_attachment_path && (
             <a
-              href={`/storage/${row.task_attachment_path}`}
+              href={getStorageUrl(row.task_attachment_path)}
               target="_blank"
               rel="noreferrer"
               className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 ml-1"
@@ -670,12 +674,8 @@ export default function TeacherSchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((slot) => {
-                const isBreak1 = slot === 5;
-                const isBreak2 = slot === 7;
-
-                return (
-                  <tr key={slot}>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((slot) => (
+                <tr key={slot}>
                     <td className="font-mono text-center font-bold text-gray-500">
                       JP {slot}
                     </td>
@@ -727,8 +727,7 @@ export default function TeacherSchedulePage() {
                       return null;
                     })}
                   </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
         </div>

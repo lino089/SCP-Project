@@ -39,14 +39,15 @@ export default function TopBar({ onToggleSidebar }) {
   const breadcrumb = getBreadcrumb(location.pathname);
 
   // Dynamic avatar initials helper
+  const userName = user?.name;
   const userInitials = useMemo(() => {
-    if (!user?.name) return 'US';
-    const parts = user.name.trim().split(/\s+/);
+    if (!userName) return 'US';
+    const parts = userName.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return user.name.substring(0, 2).toUpperCase();
-  }, [user?.name]);
+    return userName.substring(0, 2).toUpperCase();
+  }, [userName]);
 
   // Click outside listener for dropdown
   useEffect(() => {

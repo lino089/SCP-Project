@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Classes;
-use App\Models\Rooms;
+use App\Models\Room;
 use App\Models\Subject;
 use App\Models\User;
 
@@ -21,7 +21,7 @@ class MasterDataPrerequisiteService
             'classes' => Classes::whereNull('deleted_at')->exists(),
             'teachers' => User::where('role', 'teacher')->whereNull('deleted_at')->exists(),
             'subjects' => Subject::whereNull('deleted_at')->exists(),
-            'rooms' => Rooms::whereNull('deleted_at')->exists(),
+            'rooms' => Room::whereNull('deleted_at')->exists(),
         ]);
     }
 

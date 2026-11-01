@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Calendar, FileText, Eye, AlertTriangle, UserX } from 'lucide-react';
+import { Calendar, FileText, Eye, AlertTriangle, UserX, Download } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import { quizApi } from '../../services/quizApi';
+import { getStorageUrl } from '../../utils/formatters';
 import Tabs from '../../components/shared/Tabs';
 import Badge from '../../components/shared/Badge';
 import Table from '../../components/shared/Table';
@@ -539,7 +540,18 @@ export default function ParentMonitoringPage() {
                 Kategori: <strong className="capitalize">{previewDoc.category}</strong> &bull; Dokumen Resmi Terverifikasi
               </p>
             </div>
-            <div className="preview-doc-actions">
+            <div className="preview-doc-actions flex items-center justify-end gap-2">
+              {previewDoc.document_path && (
+                <a
+                  href={getStorageUrl(previewDoc.document_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
+                >
+                  <Download size={13} />
+                  <span>Buka / Unduh Berkas</span>
+                </a>
+              )}
               <Button variant="secondary" onClick={() => setPreviewDoc(null)}>
                 Tutup
               </Button>

@@ -10,9 +10,11 @@ import {
   AlertCircle,
   CheckCircle2,
   Send,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
+import { getStorageUrl } from '../../utils/formatters';
 import {
   Button,
   Input,
@@ -144,7 +146,7 @@ export default function StudentPermissionPage() {
         setTimeout(() => setToastMessage(''), 4000);
       }
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Gagal mengirim permohonan perizinan.');
+      setFormError(err.message || err.response?.data?.message || 'Gagal mengirim permohonan perizinan.');
     } finally {
       setIsSubmitting(false);
     }
@@ -220,7 +222,7 @@ export default function StudentPermissionPage() {
         setTimeout(() => setToastMessage(''), 4000);
       }
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Gagal memperbarui permohonan perizinan.');
+      setFormError(err.message || err.response?.data?.message || 'Gagal memperbarui permohonan perizinan.');
     } finally {
       setIsSubmitting(false);
     }
@@ -239,7 +241,7 @@ export default function StudentPermissionPage() {
       setToastMessage('Permohonan izin berhasil dibatalkan.');
       setTimeout(() => setToastMessage(''), 4000);
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal membatalkan permohonan izin.');
+      alert(err.message || err.response?.data?.message || 'Gagal membatalkan permohonan izin.');
     }
   };
 
@@ -686,6 +688,19 @@ export default function StudentPermissionPage() {
           <p className="text-xs text-gray-500 mt-2">
             Dokumen resmi lampiran siswa untuk verifikasi Kesiswaan / Tim Piket Sekolah.
           </p>
+          {previewDoc?.document_path && (
+            <div className="mt-3">
+              <a
+                href={getStorageUrl(previewDoc.document_path)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-medium transition-colors"
+              >
+                <Download size={13} />
+                <span>Buka / Unduh Dokumen</span>
+              </a>
+            </div>
+          )}
           <div className="mt-5">
             <Button
               variant="secondary"

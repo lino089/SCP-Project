@@ -50,7 +50,7 @@ class GradeQuizSubmissionJob implements ShouldQueue
         if (is_array($rawAnswers)) {
             foreach ($rawAnswers as $ans) {
                 if (isset($ans['question_id'])) {
-                    $studentAnswers[$ans['question_id']] = $ans['answer'] ?? $ans['selected_option'] ?? '';
+                    $studentAnswers[$ans['question_id']] = $ans['student_answer'] ?? $ans['answer'] ?? $ans['selected_option'] ?? '';
                 }
             }
         }

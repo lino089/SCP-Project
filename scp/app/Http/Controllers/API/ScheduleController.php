@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Classes;
-use App\Models\Rooms;
+use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\SystemConfiguration;
@@ -31,7 +31,7 @@ class ScheduleController extends Controller
     {
         User::whereKey($data['teacher_id'])->lockForUpdate()->first();
         Classes::whereKey($data['class_id'])->lockForUpdate()->first();
-        Rooms::whereKey($data['room_id'])->lockForUpdate()->first();
+        Room::whereKey($data['room_id'])->lockForUpdate()->first();
     }
 
     /**
@@ -73,6 +73,11 @@ class ScheduleController extends Controller
                 $query->where('teacher_id', $user->id);
             } elseif ($user->role === 'vice_principal' && $request->filled('teacher_id')) {
                 $query->where('teacher_id', $request->input('teacher_id'));
+            } elseif ($user->role === 'student' || $user->role === 'parent') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Akses ditolak.',
+                ], 403);
             }
 
             if ($request->filled('class_id')) {
@@ -161,6 +166,19 @@ class ScheduleController extends Controller
 
             if ($request->filled('class_id')) {
                 $query->where('class_id', $request->input('class_id'));
+            }
+        } elseif ($user->role === 'student') {
+            if ($user->class_id) {
+                $query->where('class_id', $user->class_id);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'parent') {
+            $childClassId = $user->linkedStudent?->class_id;
+            if ($childClassId) {
+                $query->where('class_id', $childClassId);
+            } else {
+                $query->whereRaw('1 = 0');
             }
         }
 

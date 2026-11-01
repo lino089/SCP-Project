@@ -45,7 +45,7 @@ class Schedule extends Model
 
     public function room(): BelongsTo
     {
-        return $this->belongsTo(Rooms::class, 'room_id');
+        return $this->belongsTo(Room::class, 'room_id');
     }
 
     public function importBatch(): BelongsTo

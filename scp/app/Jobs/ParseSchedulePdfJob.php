@@ -11,7 +11,7 @@ use App\Models\ScheduleImport;
 use App\Models\ScheduleImportRow;
 use App\Models\Subject;
 use App\Models\User;
-use App\Models\Rooms;
+use App\Models\Room;
 use App\Models\Classes;
 use App\Models\Schedule;
 use App\Services\ScheduleConflictService;
@@ -94,7 +94,7 @@ class ParseSchedulePdfJob implements ShouldQueue
         $allClasses = Classes::all();
         $allTeachers = User::where('role', 'teacher')->get();
         $allSubjects = Subject::all();
-        $allRooms = Rooms::all();
+        $allRooms = Room::all();
 
         $conflictService = new ScheduleConflictService();
 
@@ -268,7 +268,7 @@ class ParseSchedulePdfJob implements ShouldQueue
         return null;
     }
 
-    protected function findRoom($rooms, ?string $roomCode): ?Rooms
+    protected function findRoom($rooms, ?string $roomCode): ?Room
     {
         if (!$roomCode) return null;
         $code = strtoupper(trim($roomCode));
@@ -340,7 +340,7 @@ class ParseSchedulePdfJob implements ShouldQueue
      */
     public function autoRegisterRooms(array $parseData): void
     {
-        $existingRooms = Rooms::all();
+        $existingRooms = Room::all();
 
         $uniqueRooms = collect($parseData)
             ->map(function ($row) {
@@ -353,7 +353,7 @@ class ParseSchedulePdfJob implements ShouldQueue
         foreach ($uniqueRooms as $roomCode) {
             // Periksa via findRoom untuk mencegah duplikasi (misal "12" vs "Ruang 12")
             if (!$this->findRoom($existingRooms, $roomCode)) {
-                $newRoom = Rooms::create([
+                $newRoom = Room::create([
                     'name' => $roomCode,
                     'capacity' => 36,
                 ]);

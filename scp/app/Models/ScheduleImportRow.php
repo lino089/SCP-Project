@@ -48,7 +48,7 @@ class ScheduleImportRow extends Model
 
     public function matchedRoom(): BelongsTo
     {
-        return $this->belongsTo(Rooms::class, 'matched_room_id');
+        return $this->belongsTo(Room::class, 'matched_room_id');
     }
 
     public function matchedSubject(): BelongsTo

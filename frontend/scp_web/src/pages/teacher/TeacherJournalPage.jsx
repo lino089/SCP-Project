@@ -75,7 +75,7 @@ export default function TeacherJournalPage() {
   const isSubstituteMode = useMemo(() => {
     const isHomeroom = schedule?.class_id ? isWaliKelas(schedule.class_id) : false;
     return (isKesiswaan() || isHomeroom) && !isOriginalTeacher;
-  }, [isKesiswaan, isWaliKelas, schedule?.class_id, isOriginalTeacher]);
+  }, [schedule, isKesiswaan, isWaliKelas, isOriginalTeacher]);
 
   const isAccessDenied = useMemo(() => {
     if (!schedule || !user) return false;
@@ -167,10 +167,12 @@ export default function TeacherJournalPage() {
       setAttendance(initAttendance);
       setClassOpened(true);
     } catch (err) {
-      if (err.response?.status === 403) {
-        setErrorMessage('Akses ditolak (403). Anda tidak memiliki wewenang untuk membuka kelas ini.');
+      const status = err.status || err.response?.status;
+      const msg = err.message || err.response?.data?.message;
+      if (status === 403) {
+        setErrorMessage(msg || 'Akses ditolak (403). Anda tidak memiliki wewenang untuk membuka kelas ini.');
       } else {
-        setErrorMessage('Gagal membuka sesi KBM. Silakan periksa koneksi Anda.');
+        setErrorMessage(msg || 'Gagal membuka sesi KBM. Silakan periksa koneksi Anda.');
       }
     } finally {
       setIsSubmitting(false);
@@ -263,14 +265,16 @@ export default function TeacherJournalPage() {
       await journalApi.completeJournal(journalId || schedule.id, formData);
       setSubmitted(true);
     } catch (err) {
-      if (err.response?.status === 422) {
+      const status = err.status || err.response?.status;
+      const msg = err.message || err.response?.data?.message;
+      if (status === 422) {
         setErrorMessage(
-          err.response.data?.message || 'Data tidak valid. Pastikan topik minimal 10 karakter dan foto terunggah.'
+          msg || 'Data tidak valid. Pastikan topik minimal 10 karakter dan foto terunggah.'
         );
-      } else if (err.response?.status === 403) {
-        setErrorMessage('Akses ditolak (403). Anda tidak memiliki izin menyelesaikan jurnal ini.');
+      } else if (status === 403) {
+        setErrorMessage(msg || 'Akses ditolak (403). Anda tidak memiliki izin menyelesaikan jurnal ini.');
       } else {
-        setErrorMessage('Terjadi kendala saat menyimpan jurnal. Silakan coba kembali.');
+        setErrorMessage(msg || 'Terjadi kendala saat menyimpan jurnal. Silakan coba kembali.');
       }
     } finally {
       setIsSubmitting(false);

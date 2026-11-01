@@ -2,23 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
-
-class Rooms extends Model
+/**
+ * Compatibility wrapper for Room model.
+ * The primary standardized model is App\Models\Room.
+ */
+class Rooms extends Room
 {
-    use SoftDeletes;
-
-    protected $table = 'rooms';
-
-    protected $fillable = [
-        'name',
-        'capacity',
-    ];
-
-    public function schedules(): HasMany
-    {
-        return $this->hasMany(Schedule::class, 'room_id');
-    }
 }

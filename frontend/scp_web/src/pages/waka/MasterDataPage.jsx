@@ -10,7 +10,6 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
-  XCircle,
 } from 'lucide-react';
 import {
   Button,

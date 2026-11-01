@@ -29,11 +29,8 @@ class QuizController extends Controller
             ->withCount(['questions', 'submissions']);
 
         if ($user->role === 'teacher') {
-            $isWaka = $user->assignments()->where('type', 'waka')->exists();
-            if (!$isWaka) {
-                // Guru biasa hanya melihat kuis miliknya
-                $query->where('teacher_id', $user->id);
-            }
+            // Guru biasa hanya melihat kuis miliknya
+            $query->where('teacher_id', $user->id);
         } elseif ($user->role === 'student') {
             // Siswa hanya melihat kuis kelasnya yang published atau published_result
             $query->where('class_id', $user->class_id)
@@ -49,7 +46,7 @@ class QuizController extends Controller
             }
             $query->where('class_id', $linkedStudent->class_id)
                 ->where('status', 'published_result');
-        } elseif ($user->role === 'waka') {
+        } elseif ($user->role === 'vice_principal' || $user->role === 'waka') {
             // Waka melihat semua kuis
         } else {
             return response()->json([
@@ -88,10 +85,10 @@ class QuizController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'teacher' && $user->role !== 'waka') {
+        if ($user->role !== 'teacher' && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya guru yang dapat membuat kuis.',
+                'message' => 'Akses ditolak. Hanya guru atau waka yang dapat membuat kuis.',
             ], 403);
         }
 
@@ -154,8 +151,7 @@ class QuizController extends Controller
                 ], 403);
             }
         } elseif ($user->role === 'teacher') {
-            $isWaka = $user->assignments()->where('type', 'waka')->exists();
-            if ($quiz->teacher_id !== $user->id && !$isWaka) {
+            if ($quiz->teacher_id !== $user->id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Akses ditolak. Anda bukan pemilik kuis ini.',
@@ -178,7 +174,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda bukan pembuat kuis ini.',
@@ -266,7 +262,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda bukan pembuat kuis ini.',
@@ -330,7 +326,7 @@ class QuizController extends Controller
         $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Hanya pemilik kuis atau Waka yang dapat melihat butir soal lengkap.',
@@ -358,7 +354,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak.',
@@ -406,7 +402,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak.',
@@ -446,7 +442,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak.',
@@ -477,7 +473,7 @@ class QuizController extends Controller
         $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda bukan pemilik kuis ini.',
@@ -508,7 +504,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak.',
@@ -592,6 +588,7 @@ class QuizController extends Controller
         $validated = $request->validate([
             'answers' => ['required', 'array', 'min:1'],
             'answers.*.question_id' => ['required', 'integer', 'exists:quiz_questions,id'],
+            'answers.*.student_answer' => ['nullable', 'string'],
             'answers.*.answer' => ['nullable', 'string'],
             'answers.*.selected_option' => ['nullable', 'string'],
         ]);
@@ -632,7 +629,7 @@ class QuizController extends Controller
         $quiz = Quiz::findOrFail($id);
         $user = $request->user();
 
-        if ($quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Hanya pembuat kuis yang dapat melihat seluruh submission.',
@@ -666,7 +663,7 @@ class QuizController extends Controller
         $submission = QuizSubmission::with('quiz')->findOrFail($id);
         $user = $request->user();
 
-        if ($submission->quiz->teacher_id !== $user->id && $user->role !== 'waka') {
+        if ($submission->quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda tidak berhak mengubah nilai submission ini.',

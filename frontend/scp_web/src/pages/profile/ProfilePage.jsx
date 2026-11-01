@@ -15,7 +15,7 @@ import './Profile.css';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout, updateUserProfile, changePassword, hasRole, isKesiswaan, getHomeRoute } = useAuth();
+  const { user, logout, updateUserProfile, changePassword, hasRole, isKesiswaan } = useAuth();
 
   // Email verification state
   const [email, setEmail] = useState(user?.email || '');

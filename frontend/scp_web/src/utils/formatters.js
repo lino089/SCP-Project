@@ -53,3 +53,19 @@ export function formatPercent(num, decimals = 1) {
   if (num === null || num === undefined || isNaN(Number(num))) return '0%';
   return `${Number(num).toFixed(decimals)}%`;
 }
+
+/**
+ * Resolves a storage path or URL to an absolute URL pointing to backend storage.
+ * Handles relative paths, leading slashes, and already-absolute URLs safely.
+ * @param {string} path 
+ * @returns {string}
+ */
+export function getStorageUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+  const backendBase = apiBase.replace(/\/api\/?$/, '');
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const storagePath = cleanPath.startsWith('storage/') ? cleanPath : `storage/${cleanPath}`;
+  return `${backendBase}/${storagePath}`;
+}

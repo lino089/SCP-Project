@@ -26,6 +26,7 @@ import {
   Input,
   StatCard,
 } from '../../components/shared';
+import { getStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './MonitoringRecap.css';
 
@@ -557,7 +558,7 @@ export default function MonitoringRecapPage() {
       >
         <div className="monitoring-recap__photo-preview">
           <img
-            src={`/${previewPhoto?.photo_path || 'assets/hero.png'}`}
+            src={getStorageUrl(previewPhoto?.photo_path) || '/assets/hero.png'}
             alt="Dokumentasi Kelas KBM"
             className="monitoring-recap__photo-img"
             onError={(e) => {

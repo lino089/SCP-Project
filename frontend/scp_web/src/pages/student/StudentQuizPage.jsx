@@ -189,12 +189,17 @@ export default function StudentQuizPage() {
   const executeSubmission = async () => {
     setIsSubmitting(true);
     try {
-      const formattedAnswers = questions.map((q) => ({
-        question_id: q.id,
-        question_text: q.question_text,
-        question_type: q.question_type,
-        student_answer: studentAnswers[q.id] || '',
-      }));
+      const formattedAnswers = questions.map((q) => {
+        const ans = studentAnswers[q.id] || '';
+        return {
+          question_id: q.id,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          student_answer: ans,
+          answer: ans,
+          selected_option: q.question_type === 'multiple_choice' ? ans : null,
+        };
+      });
 
       const res = await quizApi.submitQuiz(activeQuiz.id, { answers: formattedAnswers });
       if (res.status === 202 || res.success) {
