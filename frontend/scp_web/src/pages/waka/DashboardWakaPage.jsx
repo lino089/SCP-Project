@@ -258,9 +258,9 @@ export default function DashboardWakaPage() {
             variant="primary"
             icon={Plus}
             className="w-full sm:w-auto"
-            onClick={() => navigate('/web/upload-import')}
+            onClick={() => navigate('/kurikulum/jadwal/import')}
           >
-            Import Jadwal PDF
+            Import Jadwal
           </Button>
         </div>
       </div>

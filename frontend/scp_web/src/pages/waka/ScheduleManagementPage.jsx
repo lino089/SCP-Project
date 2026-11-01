@@ -462,9 +462,9 @@ export default function ScheduleManagementPage() {
           <Button
             variant="outline"
             icon={ExternalLink}
-            onClick={() => navigate('/web/upload-import')}
+            onClick={() => navigate('/kurikulum/jadwal/import')}
           >
-            Import PDF FET
+            Import Jadwal
           </Button>
           <Button
             variant="primary"

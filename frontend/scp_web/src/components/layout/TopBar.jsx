@@ -5,14 +5,20 @@ import { useAuth } from '../../hooks/useAuth';
 import './TopBar.css';
 
 const getBreadcrumb = (pathname) => {
-  if (pathname.startsWith('/web/review-import')) {
-    return { category: 'Kurikulum & Jadwal', page: 'Review Import' };
+  if (
+    pathname.startsWith('/kurikulum/jadwal/import') ||
+    pathname.startsWith('/web/schedule-import') ||
+    pathname.startsWith('/web/upload-import') ||
+    pathname.startsWith('/web/review-import')
+  ) {
+    return { category: 'Kurikulum & Jadwal', page: 'Import Jadwal' };
   }
   const routes = {
     '/web/dashboard': { category: 'Kurikulum & Jadwal', page: 'Dashboard' },
     '/web/schedules': { category: 'Kurikulum & Jadwal', page: 'Jadwal Pelajaran' },
-    '/web/upload-import': { category: 'Kurikulum & Jadwal', page: 'Import Jadwal PDF' },
-    '/web/review-import': { category: 'Kurikulum & Jadwal', page: 'Review Import' },
+    '/kurikulum/jadwal/import': { category: 'Kurikulum & Jadwal', page: 'Import Jadwal' },
+    '/web/upload-import': { category: 'Kurikulum & Jadwal', page: 'Import Jadwal' },
+    '/web/review-import': { category: 'Kurikulum & Jadwal', page: 'Import Jadwal' },
     '/web/master-data': { category: 'Data & Kesiswaan', page: 'Master Data' },
     '/web/grade-promotion': { category: 'Data & Kesiswaan', page: 'Kenaikan Kelas' },
     '/web/monitoring': { category: 'Data & Kesiswaan', page: 'Monitoring & Rekap' },

@@ -34,32 +34,22 @@
 
 /* Prerequisite Checklist Banner (SCP v4.5 Zero-Manual) */
 .upload-prerequisite-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   box-sizing: border-box;
 }
 
-.upload-prerequisite-card--ready {
-  background-color: #F0FDF4;
-  border: 1px solid #BBF7D0;
-}
-
-.upload-prerequisite-card--warning {
-  background-color: #FFFBEB;
-  border: 1px solid #FDE68A;
-}
-
+.upload-prerequisite-card--ready,
+.upload-prerequisite-card--warning,
 .upload-prerequisite-card--loading {
-  background-color: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
 }
 
 .upload-prerequisite-header {
@@ -70,13 +60,15 @@
 }
 
 .upload-prerequisite-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background-color: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 6px;
-  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .upload-prerequisite-checklist {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .upload-prerequisite-item {
@@ -84,14 +76,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+  padding: 10px 14px;
+  background-color: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
 }
 
 .upload-prerequisite-note {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #F3F4F6;
 }
 
 .upload-flat-card {

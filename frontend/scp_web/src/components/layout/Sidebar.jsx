@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Calendar,
   Layers,
@@ -19,6 +19,7 @@ import './Sidebar.css';
 
 export default function Sidebar({ isOpen = false, onClose }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, hasRole, isKesiswaan, logout } = useAuth();
 
   // Accordion state for Waka Kurikulum menu groups
@@ -82,23 +83,21 @@ export default function Sidebar({ isOpen = false, onClose }) {
                 </NavLink>
 
                 <NavLink
-                  to="/web/upload-import"
+                  to="/kurikulum/jadwal/import"
                   className={({ isActive }) =>
-                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
+                    `web-sidebar__sublink ${
+                      isActive ||
+                      location.pathname.startsWith('/kurikulum/jadwal/import') ||
+                      location.pathname.startsWith('/web/schedule-import') ||
+                      location.pathname.startsWith('/web/upload-import') ||
+                      location.pathname.startsWith('/web/review-import')
+                        ? 'web-sidebar__sublink--active'
+                        : ''
+                    }`
                   }
                   onClick={() => onClose?.()}
                 >
-                  Import Jadwal PDF
-                </NavLink>
-
-                <NavLink
-                  to="/web/review-import"
-                  className={({ isActive }) =>
-                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
-                  }
-                  onClick={() => onClose?.()}
-                >
-                  Review Import
+                  Import Jadwal
                 </NavLink>
               </div>
             )}

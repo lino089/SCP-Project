@@ -12,8 +12,7 @@ const ChangePasswordPage = lazy(() => import('../pages/auth/ChangePasswordPage')
 const ProfilePage = lazy(() => import('../pages/profile/ProfilePage'));
 const DashboardWakaPage = lazy(() => import('../pages/waka/DashboardWakaPage'));
 const ScheduleManagementPage = lazy(() => import('../pages/waka/ScheduleManagementPage'));
-const UploadImportPage = lazy(() => import('../pages/waka/UploadImportPage'));
-const ReviewImportPage = lazy(() => import('../pages/waka/ReviewImportPage'));
+const ScheduleImportPage = lazy(() => import('../pages/waka/ScheduleImportPage'));
 const MasterDataPage = lazy(() => import('../pages/waka/MasterDataPage'));
 const GradePromotionPage = lazy(() => import('../pages/waka/GradePromotionPage'));
 const MonitoringRecapPage = lazy(() => import('../pages/waka/MonitoringRecapPage'));
@@ -48,9 +47,13 @@ export default function AppRouter() {
             <Route element={<RoleRoute allowedRoles={['waka']} />}>
               <Route path="/web/dashboard" element={<DashboardWakaPage />} />
               <Route path="/web/schedules" element={<ScheduleManagementPage />} />
-              <Route path="/web/upload-import" element={<UploadImportPage />} />
-              <Route path="/web/review-import/:id" element={<ReviewImportPage />} />
-              <Route path="/web/review-import" element={<ReviewImportPage />} />
+              <Route path="/kurikulum/jadwal/import" element={<ScheduleImportPage />} />
+              <Route path="/kurikulum/jadwal/import/:id" element={<ScheduleImportPage />} />
+              <Route path="/web/schedule-import" element={<ScheduleImportPage />} />
+              <Route path="/web/schedule-import/:id" element={<ScheduleImportPage />} />
+              <Route path="/web/upload-import" element={<ScheduleImportPage />} />
+              <Route path="/web/review-import/:id" element={<ScheduleImportPage />} />
+              <Route path="/web/review-import" element={<ScheduleImportPage />} />
               <Route path="/web/master-data" element={<MasterDataPage />} />
               <Route path="/web/grade-promotion" element={<GradePromotionPage />} />
             </Route>
