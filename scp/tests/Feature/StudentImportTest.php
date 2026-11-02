@@ -102,6 +102,14 @@ class StudentImportTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertHeader('content-disposition', 'attachment; filename=siswa_import_template.xlsx');
+
+        $filePath = $response->getFile()->getPathname();
+        $reader = \Spatie\SimpleExcel\SimpleExcelReader::create($filePath);
+        $headers = $reader->getHeaders();
+
+        $this->assertEquals(['nis', 'name', 'class_name', 'gender', 'nisn'], $headers);
+        $this->assertNotContains('parent_name', $headers);
+        $this->assertNotContains('parent_phone', $headers);
     }
 
     public function test_waka_can_import_valid_students_and_auto_creates_classes(): void
@@ -115,8 +123,6 @@ class StudentImportTest extends TestCase
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
                 'nisn' => '0081234567',
-                'parent_name' => 'Bambang Pratama',
-                'parent_phone' => '081223344556',
             ],
             [
                 'nis' => '12046',
@@ -124,8 +130,6 @@ class StudentImportTest extends TestCase
                 'class_name' => 'X RPL 1',
                 'gender' => 'P',
                 'nisn' => '0089876543',
-                'parent_name' => 'Siti Aminah',
-                'parent_phone' => '081334455667',
             ],
             [
                 'nis' => '11580',
@@ -133,8 +137,6 @@ class StudentImportTest extends TestCase
                 'class_name' => 'XI TKJ 2',
                 'gender' => 'L',
                 'nisn' => '0071122334',
-                'parent_name' => 'Joko Santoso',
-                'parent_phone' => '085712345678',
             ],
         ]);
 
@@ -181,9 +183,9 @@ class StudentImportTest extends TestCase
         $parent1 = User::where('nis_nip', 'P-12045')->first();
         $this->assertNotNull($parent1);
         $this->assertEquals('parent', $parent1->role);
-        $this->assertEquals('Bambang Pratama', $parent1->name);
+        $this->assertEquals('Wali Murid Ahmad Fauzan Pratama', $parent1->name);
         $this->assertEquals($student1->id, $parent1->linked_student_id);
-        $this->assertEquals('081223344556', $parent1->phone_number);
+        $this->assertNull($parent1->phone_number);
         $this->assertTrue($parent1->must_change_password);
         $this->assertTrue(Hash::check('12045', $parent1->password));
 
@@ -578,27 +580,23 @@ class StudentImportTest extends TestCase
         }
     }
 
-    public function test_import_handles_siblings_with_same_parent_phone_cleanly(): void
+    public function test_import_handles_siblings_and_generates_distinct_parent_accounts(): void
     {
         Sanctum::actingAs($this->waka);
 
-        // Dua siswa bersaudara dengan nomor telepon orang tua sama persis
+        // Dua siswa bersaudara
         $filePath = $this->createTempExcel([
             [
                 'nis' => '9501',
                 'name' => 'Kakak Pratama',
                 'class_name' => 'XII RPL 1',
                 'gender' => 'L',
-                'parent_name' => 'Ayah Pratama',
-                'parent_phone' => '081234567890',
             ],
             [
                 'nis' => '9502',
                 'name' => 'Adik Pratama',
                 'class_name' => 'X RPL 1',
                 'gender' => 'P',
-                'parent_name' => 'Ayah Pratama',
-                'parent_phone' => '081234567890', // Nomor sama
             ],
         ]);
 
@@ -619,11 +617,13 @@ class StudentImportTest extends TestCase
 
         $parentKakak = User::where('nis_nip', 'P-9501')->first();
         $this->assertNotNull($parentKakak);
-        $this->assertEquals('081234567890', $parentKakak->phone_number);
+        $this->assertEquals('Wali Murid Kakak Pratama', $parentKakak->name);
+        $this->assertNull($parentKakak->phone_number);
 
         $parentAdik = User::where('nis_nip', 'P-9502')->first();
         $this->assertNotNull($parentAdik);
-        $this->assertEquals('081234567890', $parentAdik->phone_number);
+        $this->assertEquals('Wali Murid Adik Pratama', $parentAdik->name);
+        $this->assertNull($parentAdik->phone_number);
 
         // Kedua akun orang tua terhubung ke anaknya masing-masing
         $studentKakak = User::where('nis_nip', '9501')->first();

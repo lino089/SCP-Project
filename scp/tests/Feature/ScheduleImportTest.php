@@ -483,4 +483,192 @@ class ScheduleImportTest extends TestCase
                 'message' => 'Import yang sudah dikonfirmasi tidak dapat dibatalkan.',
             ]);
     }
+
+    public function test_reimport_update_replaces_old_schedule_without_false_positive_conflict(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // 1. Create existing active schedule for Putaran 1
+        Schedule::create([
+            'class_id' => $this->class->id,
+            'teacher_id' => $this->teacher->id,
+            'room_id' => $this->room->id,
+            'subject_id' => $this->subject->id,
+            'cycle_type' => 1,
+            'source' => 'imported',
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+        ]);
+
+        // 2. Create import batch for revised Putaran 1
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'preview_ready',
+        ]);
+
+        $row = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'raw_data' => ['mapel_mentah' => 'Matematika'],
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 3,
+            'match_status' => 'unmatched',
+        ]);
+
+        // 3. Resolve row for the same class (update scenario)
+        $response = $this->patchJson("/api/schedule-imports/{$import->id}/rows/{$row->id}", [
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => $this->teacher->id,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertEquals('matched', $response->json('data.match_status'));
+
+        // 4. Confirm import
+        $confirmRes = $this->postJson("/api/schedule-imports/{$import->id}/confirm", [
+            'password' => 'password123',
+        ]);
+
+        $confirmRes->assertStatus(200);
+
+        // Verify only 1 active schedule exists for this class (no duplication, old one replaced)
+        $activeSchedules = Schedule::where('class_id', $this->class->id)
+            ->where('cycle_type', 1)
+            ->get();
+
+        $this->assertCount(1, $activeSchedules);
+        $this->assertEquals(3, $activeSchedules->first()->duration_periods);
+    }
+
+    public function test_reimport_detects_real_conflict_against_other_active_classes(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $otherClass = Classes::create([
+            'name' => 'XI RPL 2',
+            'level' => 11,
+        ]);
+
+        // Teacher is busy teaching otherClass in DB
+        Schedule::create([
+            'class_id' => $otherClass->id,
+            'teacher_id' => $this->teacher->id,
+            'room_id' => $this->room->id,
+            'subject_id' => $this->subject->id,
+            'cycle_type' => 1,
+            'source' => 'imported',
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+        ]);
+
+        // New import batch only updates $this->class (not $otherClass)
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'preview_ready',
+        ]);
+
+        $row = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'raw_data' => ['mapel_mentah' => 'Matematika'],
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+            'match_status' => 'unmatched',
+        ]);
+
+        // Resolving to $this->class with $this->teacher collides with active schedule of $otherClass
+        $response = $this->patchJson("/api/schedule-imports/{$import->id}/rows/{$row->id}", [
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => $this->teacher->id,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+        ]);
+
+        $response->assertStatus(200);
+        // Must be flagged as conflict because $otherClass is NOT in this import batch
+        $this->assertEquals('conflict', $response->json('data.match_status'));
+    }
+
+    public function test_reimport_preserves_unrelated_class_schedules(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $unrelatedClass = Classes::create([
+            'name' => 'XII TKJ 1',
+            'level' => 12,
+        ]);
+
+        $otherTeacher = User::create([
+            'name' => 'Guru Lain',
+            'email' => 'gurulain@example.com',
+            'nis_nip' => '198501012010011003',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+        ]);
+
+        // Unrelated schedule on cycle 1
+        $unrelatedSchedule = Schedule::create([
+            'class_id' => $unrelatedClass->id,
+            'teacher_id' => $otherTeacher->id,
+            'room_id' => $this->room->id,
+            'subject_id' => $this->subject->id,
+            'cycle_type' => 1,
+            'source' => 'imported',
+            'day_of_week' => 2,
+            'period_number' => 5,
+            'duration_periods' => 2,
+        ]);
+
+        // Old schedule for target class on cycle 1
+        $targetOldSchedule = Schedule::create([
+            'class_id' => $this->class->id,
+            'teacher_id' => $this->teacher->id,
+            'room_id' => $this->room->id,
+            'subject_id' => $this->subject->id,
+            'cycle_type' => 1,
+            'source' => 'imported',
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+        ]);
+
+        // Import batch targeting ONLY $this->class
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'preview_ready',
+        ]);
+
+        $row = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => $this->teacher->id,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 3,
+            'match_status' => 'matched',
+            'raw_data' => [],
+        ]);
+
+        $this->postJson("/api/schedule-imports/{$import->id}/confirm", [
+            'password' => 'password123',
+        ])->assertStatus(200);
+
+        // Verify target old schedule was soft-deleted
+        $this->assertSoftDeleted('schedules', ['id' => $targetOldSchedule->id]);
+
+        // Verify unrelated schedule was NOT touched
+        $this->assertDatabaseHas('schedules', [
+            'id' => $unrelatedSchedule->id,
+            'deleted_at' => null,
+        ]);
+    }
 }

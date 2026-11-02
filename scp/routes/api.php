@@ -5,6 +5,7 @@ use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\LeaveRequestController;
+use App\Http\Controllers\API\MasterDataSummaryController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\RoomController;
@@ -41,8 +42,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/me/phone/verify', [ProfileController::class, 'verifyPhoneOtp']);
     Route::post('/me/google-link', [ProfileController::class, 'linkGoogle']);
     Route::patch('/me/password', [ProfileController::class, 'changePassword']);
+    Route::post('/me/verify-password', [AuthController::class, 'verifyPassword']);
 
     // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3 & 9.6)
+    Route::get('/master-data/summary', [MasterDataSummaryController::class, 'index']);
     Route::get('/classes', [SchoolClassController::class, 'index']);
     Route::get('/rooms', [RoomController::class, 'index']);
     Route::get('/subjects', [SubjectController::class, 'index']);

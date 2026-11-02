@@ -17,4 +17,9 @@ class Subject extends Model
     {
         return $this->hasMany(Schedule::class, 'subject_id');
     }
+
+    public function teachers(): HasMany
+    {
+        return $this->hasMany(User::class, 'subject_id');
+    }
 }

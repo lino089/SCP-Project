@@ -72,7 +72,7 @@ class RoomController extends Controller
     /**
      * Memperbarui data master ruangan.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $room = Room::findOrFail($id);
 
@@ -98,7 +98,7 @@ class RoomController extends Controller
     /**
      * Menghapus ruangan (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy($id): JsonResponse
     {
         $room = Room::findOrFail($id);
 

@@ -113,15 +113,13 @@ class TeacherImportTest extends TestCase
                 'nip' => '199001012020011005',
                 'name' => 'Rahmat Hidayat, S.Kom.',
                 'fet_staff_id' => '101',
-                'email' => 'rahmat@sekolah.sch.id',
-                'phone_number' => '081299990001',
+                'mata_pelajaran' => 'Informatika',
             ],
             [
                 'nip' => '199202022021022006',
                 'name' => 'Siti Nurhaliza, M.Pd.',
                 'fet_staff_id' => '102',
-                'email' => 'siti@sekolah.sch.id',
-                'phone_number' => '081299990002',
+                'mata_pelajaran' => 'Bahasa Indonesia',
             ],
         ]);
 
@@ -145,14 +143,18 @@ class TeacherImportTest extends TestCase
         $this->assertEquals('teacher', $teacher1->role);
         $this->assertEquals('Rahmat Hidayat, S.Kom.', $teacher1->name);
         $this->assertEquals('101', $teacher1->fet_staff_id);
-        $this->assertEquals('rahmat@sekolah.sch.id', $teacher1->email);
-        $this->assertEquals('081299990001', $teacher1->phone_number);
+        $this->assertNull($teacher1->email);
+        $this->assertNull($teacher1->phone_number);
+        $this->assertNotNull($teacher1->subject_id);
+        $this->assertEquals('Informatika', $teacher1->subject->name);
         $this->assertTrue($teacher1->must_change_password);
         $this->assertTrue(Hash::check('199001012020011005', $teacher1->password));
 
         $teacher2 = User::where('nis_nip', '199202022021022006')->first();
         $this->assertNotNull($teacher2);
         $this->assertEquals('102', $teacher2->fet_staff_id);
+        $this->assertNotNull($teacher2->subject_id);
+        $this->assertEquals('Bahasa Indonesia', $teacher2->subject->name);
         $this->assertTrue(Hash::check('199202022021022006', $teacher2->password));
 
         if (file_exists($filePath)) {
@@ -202,7 +204,7 @@ class TeacherImportTest extends TestCase
             [
                 'nip' => '199001012020011005',
                 'name' => 'Rahmat Hidayat',
-                'email' => 'rahmat@sekolah.sch.id',
+                'mata_pelajaran' => 'Informatika',
             ],
         ]);
 
@@ -228,7 +230,7 @@ class TeacherImportTest extends TestCase
     {
         Sanctum::actingAs($this->waka);
 
-        $filePath = $this->createTempExcel([], ['nip', 'name', 'fet_staff_id', 'email', 'phone_number']);
+        $filePath = $this->createTempExcel([], ['nip', 'name', 'fet_staff_id', 'mata_pelajaran']);
 
         $file = new UploadedFile($filePath, 'guru_empty_rows.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
@@ -256,11 +258,13 @@ class TeacherImportTest extends TestCase
                 'nip' => '',
                 'name' => 'Guru Tanpa NIP',
                 'fet_staff_id' => '',
+                'mata_pelajaran' => '',
             ],
             [
                 'nip' => '199901012022011001',
                 'name' => '',
                 'fet_staff_id' => 'FET99',
+                'mata_pelajaran' => '',
             ],
         ]);
 
@@ -283,6 +287,7 @@ class TeacherImportTest extends TestCase
         $this->assertContains('nip', $attributes);
         $this->assertContains('name', $attributes);
         $this->assertContains('fet_staff_id', $attributes);
+        $this->assertContains('mata_pelajaran', $attributes);
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -298,11 +303,13 @@ class TeacherImportTest extends TestCase
                 'nip' => '199001012020011005',
                 'name' => 'Guru Satu',
                 'fet_staff_id' => '101',
+                'mata_pelajaran' => 'Matematika',
             ],
             [
                 'nip' => '199001012020011005', // Duplicate NIP in row 3
                 'name' => 'Guru Dua',
                 'fet_staff_id' => '102',
+                'mata_pelajaran' => 'Matematika',
             ],
         ]);
 
@@ -338,11 +345,13 @@ class TeacherImportTest extends TestCase
                 'nip' => '199001012020011005',
                 'name' => 'Guru Satu',
                 'fet_staff_id' => 'SAME_FET_ID',
+                'mata_pelajaran' => 'Fisika',
             ],
             [
                 'nip' => '199002022020022006',
                 'name' => 'Guru Dua',
                 'fet_staff_id' => 'SAME_FET_ID', // Duplicate FET Staff ID in row 3
+                'mata_pelajaran' => 'Fisika',
             ],
         ]);
 
@@ -370,7 +379,7 @@ class TeacherImportTest extends TestCase
         }
     }
 
-    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_email(): void
+    public function test_import_fails_and_rollbacks_when_mata_pelajaran_missing(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -379,17 +388,17 @@ class TeacherImportTest extends TestCase
                 'nip' => '199001012020011005',
                 'name' => 'Guru Satu',
                 'fet_staff_id' => 'FET01',
-                'email' => 'duplicate.email@sekolah.sch.id',
+                'mata_pelajaran' => 'Biologi',
             ],
             [
                 'nip' => '199002022020022006',
                 'name' => 'Guru Dua',
                 'fet_staff_id' => 'FET02',
-                'email' => 'duplicate.email@sekolah.sch.id', // Duplicate email in row 3
+                'mata_pelajaran' => '', // Missing mata_pelajaran in row 3
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'guru_duplicate_email.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'guru_missing_mapel.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/teachers/import', [
             'file' => $file,
@@ -402,7 +411,7 @@ class TeacherImportTest extends TestCase
             ]);
 
         $this->assertEquals(3, $response->json('errors.0.row'));
-        $this->assertEquals('email', $response->json('errors.0.attribute'));
+        $this->assertEquals('mata_pelajaran', $response->json('errors.0.attribute'));
 
         // Rollback: no records inserted
         $this->assertNull(User::where('nis_nip', '199001012020011005')->first());
@@ -423,11 +432,13 @@ class TeacherImportTest extends TestCase
                 'nip' => '199505052020011010', // New valid teacher
                 'name' => 'Guru Baru',
                 'fet_staff_id' => '201',
+                'mata_pelajaran' => 'Sejarah',
             ],
             [
                 'nip' => '198001012010011002', // Collision with existing teacher in DB
                 'name' => 'Budi Collide',
                 'fet_staff_id' => '202',
+                'mata_pelajaran' => 'Sejarah',
             ],
         ]);
 
@@ -464,6 +475,7 @@ class TeacherImportTest extends TestCase
                 'nip' => '199505052020011010',
                 'name' => 'Guru Baru',
                 'fet_staff_id' => 'BS01', // Collides with existing fet_staff_id in DB
+                'mata_pelajaran' => 'Kimia',
             ],
         ]);
 
@@ -490,32 +502,44 @@ class TeacherImportTest extends TestCase
         }
     }
 
-    public function test_import_fails_on_invalid_email_format(): void
+    public function test_import_links_existing_subject_and_auto_creates_new_subject(): void
     {
         Sanctum::actingAs($this->waka);
 
+        // Pre-existing subject
+        $existingSubject = \App\Models\Subject::create(['name' => 'Bahasa Inggris']);
+
         $filePath = $this->createTempExcel([
             [
-                'nip' => '199001012020011005',
-                'name' => 'Guru Email Salah',
-                'fet_staff_id' => 'FET99',
-                'email' => 'invalid-email-format',
+                'nip' => '199101012020011011',
+                'name' => 'Guru Bahasa',
+                'fet_staff_id' => 'ENG01',
+                'mata_pelajaran' => 'Bahasa Inggris', // Existing subject
+            ],
+            [
+                'nip' => '199102022020022012',
+                'name' => 'Guru Robotika',
+                'fet_staff_id' => 'ROB01',
+                'mata_pelajaran' => 'Robotika Terapan', // New subject auto-created
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'guru_invalid_email.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'guru_subjects.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/teachers/import', [
             'file' => $file,
         ]);
 
-        $response->assertStatus(422)
-            ->assertJson([
-                'success' => false,
-                'message' => 'Validasi berkas gagal pada beberapa baris.',
-            ]);
+        $response->assertStatus(201);
 
-        $this->assertEquals('email', $response->json('errors.0.attribute'));
+        $teacher1 = User::where('nis_nip', '199101012020011011')->first();
+        $this->assertNotNull($teacher1);
+        $this->assertEquals($existingSubject->id, $teacher1->subject_id);
+
+        $teacher2 = User::where('nis_nip', '199102022020022012')->first();
+        $this->assertNotNull($teacher2);
+        $this->assertNotNull($teacher2->subject_id);
+        $this->assertEquals('Robotika Terapan', $teacher2->subject->name);
 
         if (file_exists($filePath)) {
             @unlink($filePath);

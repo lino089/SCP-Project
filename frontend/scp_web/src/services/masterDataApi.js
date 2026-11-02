@@ -6,6 +6,10 @@ import api from './api';
  * Guru (beserta penugasan tambahan & FET ID), serta Siswa (beserta akun orang tua).
  */
 
+export const masterDataSummaryApi = {
+  getSummary: () => api.get('/master-data/summary'),
+};
+
 export const classApi = {
   getClasses: (params) => api.get('/classes', { params }),
   createClass: (data) => api.post('/classes', data),
@@ -32,30 +36,53 @@ export const teacherApi = {
   getTeachers: (params) => api.get('/teachers', { params }),
   createTeacher: (data) => api.post('/teachers', data),
   updateTeacher: (id, data) => api.put(`/teachers/${id}`, data),
-  deleteTeacher: (id) => api.delete(`/teachers/${id}`),
+  deleteTeacher: (id, data) => api.delete(`/teachers/${id}`, { data }),
   assignRole: (teacherId, data) => api.post(`/teachers/${teacherId}/assignments`, data),
   revokeRole: (teacherId, assignmentId) => api.delete(`/teachers/${teacherId}/assignments/${assignmentId}`),
-  downloadTemplate: () => api.get('/teachers/import-template', { responseType: 'blob' }),
+  downloadTemplate: () =>
+    api.get('/teachers/import-template', {
+      params: { t: Date.now() },
+      responseType: 'blob',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    }),
   importTeachers: (formData) =>
     api.post('/teachers/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
     }),
 };
 
 export const studentApi = {
-  getStudents: (params) => api.get('/students', { params }),
+  getStudents: (params) => {
+    const cleanParams = params ? { ...params } : {};
+    if (cleanParams.all === true) cleanParams.all = 1;
+    return api.get('/students', { params: cleanParams });
+  },
   createStudent: (data) => api.post('/students', data),
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
-  deleteStudent: (id) => api.delete(`/students/${id}`),
+  deleteStudent: (id, data) => api.delete(`/students/${id}`, { data }),
   holdBack: (id) => api.post(`/students/${id}/hold-back`),
-  downloadTemplate: () => api.get('/students/import-template', { responseType: 'blob' }),
+  downloadTemplate: () =>
+    api.get('/students/import-template', {
+      params: { t: Date.now() },
+      responseType: 'blob',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    }),
   importStudents: (formData) =>
     api.post('/students/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
     }),
 };
 
 export default {
+  summary: masterDataSummaryApi,
   classes: classApi,
   rooms: roomApi,
   subjects: subjectApi,

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -13,7 +13,20 @@ import {
   AlertCircle,
   ExternalLink,
 } from 'lucide-react';
-import { Button, Select, Modal, Badge, PasswordModal } from '../../components/shared';
+import {
+  Button,
+  Select,
+  Modal,
+  Badge,
+  PasswordModal,
+  SearchInput,
+  Pagination,
+} from '../../components/shared';
+import {
+  ScheduleTableSkeleton,
+  EmptyState,
+  ErrorState,
+} from '../../components/feedback';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
 import {
@@ -38,9 +51,13 @@ export default function ScheduleManagementPage() {
   const [roomList, setRoomList] = useState([]);
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
+  const [isMasterDataLoading, setIsMasterDataLoading] = useState(true);
 
-  // Schedules state
+  // Schedules state & Load/Error states
   const [scheduleList, setScheduleList] = useState([]);
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
   // Filter States
   const [selectedCycle, setSelectedCycle] = useState(1);
@@ -48,6 +65,12 @@ export default function ScheduleManagementPage() {
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState('ALL');
   const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL');
+
+  // Search & Pagination States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [classPage, setClassPage] = useState(1);
+  const [classesPerPage, setClassesPerPage] = useState(2);
+  const searchTimerRef = useRef(null);
 
   // Form modal state
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -96,102 +119,231 @@ export default function ScheduleManagementPage() {
     });
   }, [classList, roomList, subjectList, teacherList]);
 
-  // Load all initial data on mount & when cycle changes
+  // Cleanup timers on unmount
   useEffect(() => {
-    let isMounted = true;
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
 
-    async function fetchData() {
+  // Fetch all initial data on mount & when cycle changes
+  const fetchData = useCallback(async () => {
+    setIsPageLoading(true);
+    setFetchError(null);
+
+    try {
+      // 1. Settings
       try {
-        // 1. Settings
-        try {
-          const setRes = await academicSettingApi.getSettings();
-          if (isMounted && setRes?.data) {
-            const cyc = Number(setRes.data.active_cycle || 1);
-            setActiveCycleSetting(cyc);
-            setMondayIsUpacara(Boolean(setRes.data.monday_is_upacara));
-          }
-        } catch {
-          // Use defaults
-        }
-
-        // 2. Master Data
-        const [cRes, rRes, sRes, tRes] = await Promise.allSettled([
-          classApi.getClasses(),
-          roomApi.getRooms(),
-          subjectApi.getSubjects(),
-          teacherApi.getTeachers(),
-        ]);
-
-        if (isMounted) {
-          const classes = cRes.status === 'fulfilled' && cRes.value.data ? (Array.isArray(cRes.value.data) ? cRes.value.data : cRes.value.data.data || []) : [];
-          const rooms = rRes.status === 'fulfilled' && rRes.value.data ? (Array.isArray(rRes.value.data) ? rRes.value.data : rRes.value.data.data || []) : [];
-          const subjects = sRes.status === 'fulfilled' && sRes.value.data ? (Array.isArray(sRes.value.data) ? sRes.value.data : sRes.value.data.data || []) : [];
-          const teachers = tRes.status === 'fulfilled' && tRes.value.data ? (Array.isArray(tRes.value.data) ? tRes.value.data : tRes.value.data.data || []) : [];
-
-          setClassList(classes);
-          setRoomList(rooms);
-          setSubjectList(subjects);
-          setTeacherList(teachers);
-        }
-
-        // 3. Schedules
-        try {
-          const schedRes = await scheduleApi.getSchedules({ cycle: selectedCycle });
-          if (isMounted) {
-            const raw = schedRes?.data
-              ? Array.isArray(schedRes.data)
-                ? schedRes.data
-                : schedRes.data.data || []
-              : [];
-            const mapped = raw.map((s) => ({
-              id: s.id,
-              cycle: Number(s.cycle_type || s.cycle || 1),
-              cycle_type: Number(s.cycle_type || s.cycle || 1),
-              day: typeof s.day_of_week === 'number' ? NUMBER_TO_DAY[s.day_of_week] || 'Senin' : s.day || 'Senin',
-              day_of_week: typeof s.day_of_week === 'number' ? s.day_of_week : DAY_TO_NUMBER[s.day] || 1,
-              slot: Number(s.period_number || s.slot || 1),
-              period_number: Number(s.period_number || s.slot || 1),
-              duration: Number(s.duration_periods || s.duration || 1),
-              duration_periods: Number(s.duration_periods || s.duration || 1),
-              teacher_id: s.teacher_id || s.teacher?.id,
-              class_id: s.class_id || s.school_class?.id,
-              room_id: s.room_id || s.room?.id,
-              subject_id: s.subject_id || s.subject?.id,
-              teacherName: s.teacher?.name || s.teacherName || 'Guru',
-              className: s.school_class?.name || s.className || 'Kelas',
-              level: s.school_class?.level || s.level || 10,
-              roomName: s.room?.name || s.roomName || 'Ruang',
-              roomType: s.room?.type || s.roomType || 'kelas',
-              subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
-            }));
-            setScheduleList(mapped);
-          }
-        } catch {
-          if (isMounted) {
-            setScheduleList([]);
-          }
+        const setRes = await academicSettingApi.getSettings();
+        if (setRes?.data) {
+          setActiveCycleSetting(Number(setRes.data.active_cycle || 1));
+          setMondayIsUpacara(Boolean(setRes.data.is_monday_ceremony ?? true));
         }
       } catch {
-        if (isMounted) {
-          setScheduleList([]);
-        }
+        // ignore fallback
       }
+
+      // 2. Master Data (parallel)
+      const [cRes, rRes, sRes, tRes] = await Promise.allSettled([
+        classApi.getClasses({ per_page: 100 }),
+        roomApi.getRooms({ per_page: 100 }),
+        subjectApi.getSubjects({ per_page: 100 }),
+        teacherApi.getTeachers({ per_page: 100 }),
+      ]);
+
+      const classes =
+        cRes.status === 'fulfilled' && cRes.value.data
+          ? Array.isArray(cRes.value.data)
+            ? cRes.value.data
+            : cRes.value.data.data || []
+          : [];
+      const rooms =
+        rRes.status === 'fulfilled' && rRes.value.data
+          ? Array.isArray(rRes.value.data)
+            ? rRes.value.data
+            : rRes.value.data.data || []
+          : [];
+      const subjects =
+        sRes.status === 'fulfilled' && sRes.value.data
+          ? Array.isArray(sRes.value.data)
+            ? sRes.value.data
+            : sRes.value.data.data || []
+          : [];
+      const teachers =
+        tRes.status === 'fulfilled' && tRes.value.data
+          ? Array.isArray(tRes.value.data)
+            ? tRes.value.data
+            : tRes.value.data.data || []
+          : [];
+
+      setClassList(classes);
+      setRoomList(rooms);
+      setSubjectList(subjects);
+      setTeacherList(teachers);
+
+      // 3. Schedules (Fetch all schedules for current cycle via all=1)
+      const schedRes = await scheduleApi.getSchedules({ cycle: selectedCycle, all: 1 });
+      const raw = schedRes?.data
+        ? Array.isArray(schedRes.data)
+          ? schedRes.data
+          : schedRes.data.data || []
+        : [];
+      const mapped = raw.map((s) => ({
+        id: s.id,
+        cycle: Number(s.cycle_type || s.cycle || 1),
+        cycle_type: Number(s.cycle_type || s.cycle || 1),
+        day:
+          typeof s.day_of_week === 'number'
+            ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
+            : s.day || 'Senin',
+        day_of_week:
+          typeof s.day_of_week === 'number'
+            ? s.day_of_week
+            : DAY_TO_NUMBER[s.day] || 1,
+        slot: Number(s.period_number || s.slot || 1),
+        period_number: Number(s.period_number || s.slot || 1),
+        duration: Number(s.duration_periods || s.duration || 1),
+        duration_periods: Number(s.duration_periods || s.duration || 1),
+        teacher_id: s.teacher_id || s.teacher?.id,
+        class_id: s.class_id || s.school_class?.id,
+        room_id: s.room_id || s.room?.id,
+        subject_id: s.subject_id || s.subject?.id,
+        teacherName: s.teacher?.name || s.teacherName || 'Guru',
+        fetStaffId: s.teacher?.fet_staff_id,
+        className: s.school_class?.name || s.className || 'Kelas',
+        level: s.school_class?.level || s.level || 10,
+        roomName: s.room?.name || s.roomName || 'Ruang',
+        roomType: s.room?.type || s.roomType || 'kelas',
+        subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
+      }));
+      setScheduleList(mapped);
+    } catch (err) {
+      setFetchError(
+        err.message || 'Gagal memuat data jadwal pelajaran dari backend. Silakan coba beberapa saat lagi.'
+      );
+      setScheduleList([]);
+    } finally {
+      setIsPageLoading(false);
+      setIsMasterDataLoading(false);
     }
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
   }, [selectedCycle]);
 
-  // Conflict detection
+  // Trigger fetch on mount or cycle switch
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Conflict detection across all schedules in current cycle
   const conflictScheduleIds = useMemo(() => {
     const cycleSchedules = scheduleList.filter(
       (s) => Number(s.cycle || s.cycle_type) === Number(selectedCycle)
     );
     return detectScheduleConflicts(cycleSchedules);
   }, [scheduleList, selectedCycle]);
+
+  // Filtered Classes based on Level, Specific Class, and Search Query
+  const filteredClasses = useMemo(() => {
+    return classList.filter((c) => {
+      // 1. Level filter
+      if (selectedLevelFilter !== 'ALL' && String(c.level) !== String(selectedLevelFilter)) {
+        return false;
+      }
+      // 2. Specific class filter
+      if (selectedClassFilter !== 'all' && String(c.id) !== String(selectedClassFilter)) {
+        return false;
+      }
+      // 3. Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesClassName = c.name?.toLowerCase().includes(q);
+        const classSchedules = scheduleList.filter(
+          (s) =>
+            String(s.class_id) === String(c.id) &&
+            Number(s.cycle || s.cycle_type) === Number(selectedCycle)
+        );
+        const matchesContent = classSchedules.some(
+          (s) =>
+            s.subjectName?.toLowerCase().includes(q) ||
+            s.teacherName?.toLowerCase().includes(q) ||
+            s.roomName?.toLowerCase().includes(q)
+        );
+        if (!matchesClassName && !matchesContent) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [classList, selectedLevelFilter, selectedClassFilter, searchQuery, scheduleList, selectedCycle]);
+
+  // Pagination for classes
+  const totalClasses = filteredClasses.length;
+  const totalPages = Math.max(1, Math.ceil(totalClasses / classesPerPage));
+  const currentSafePage = Math.min(Math.max(1, classPage), totalPages);
+
+  const paginatedClasses = useMemo(() => {
+    const startIdx = (currentSafePage - 1) * classesPerPage;
+    return filteredClasses.slice(startIdx, startIdx + classesPerPage);
+  }, [filteredClasses, currentSafePage, classesPerPage]);
+
+  // Days list to display in table columns (All 5 days or single selected day)
+  const isAllDaysView = selectedDay === 'Semua Hari';
+  const matrixDays = useMemo(() => {
+    if (isAllDaysView) {
+      return DAYS_LIST;
+    }
+    return [selectedDay];
+  }, [isAllDaysView, selectedDay]);
+
+  // Time slots for display
+  const displaySlots = useMemo(() => {
+    return getTimeSlotsForDay(selectedDay === 'Semua Hari' ? 'Senin' : selectedDay, mondayIsUpacara);
+  }, [selectedDay, mondayIsUpacara]);
+
+  // Smooth filter & pagination transition handlers (avoid flickering)
+  const handlePageChange = (newPage) => {
+    if (newPage === currentSafePage) return;
+    setIsTransitioning(true);
+    setClassPage(newPage);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 180);
+  };
+
+  const handleFilterChange = (setter, value, resetPage = true) => {
+    setIsTransitioning(true);
+    setter(value);
+    if (resetPage) setClassPage(1);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 180);
+  };
+
+  const handleSearchChange = (val) => {
+    const text = typeof val === 'string' ? val : val?.target?.value || '';
+    setSearchQuery(text);
+    setIsTransitioning(true);
+    setClassPage(1);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 220);
+  };
+
+  const handleResetFilters = () => {
+    setIsTransitioning(true);
+    setSelectedLevelFilter('ALL');
+    setSelectedClassFilter('all');
+    setSelectedDay('Semua Hari');
+    setSelectedRoomTypeFilter('ALL');
+    setSearchQuery('');
+    setClassPage(1);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 200);
+  };
 
   // Open modal to add schedule
   const handleOpenAddModal = (presetSlot = null, presetDay = null, presetClassId = null) => {
@@ -203,7 +355,7 @@ export default function ScheduleManagementPage() {
     setFormError('');
     setFormData({
       teacher_id: teacherList[0]?.id || '',
-      class_id: presetClassId || classList[0]?.id || '',
+      class_id: presetClassId || (selectedClassFilter !== 'all' ? selectedClassFilter : classList[0]?.id || ''),
       room_id: roomList[0]?.id || '',
       subject_id: subjectList[0]?.id || '',
       day: presetDay && presetDay !== 'Semua Hari' ? presetDay : 'Senin',
@@ -299,7 +451,6 @@ export default function ScheduleManagementPage() {
             setPasswordModalLoading(false);
             return;
           }
-          // Fallback offline create
           const fallbackNew = {
             id: Date.now(),
             ...payload,
@@ -392,47 +543,6 @@ export default function ScheduleManagementPage() {
     }
   };
 
-  // Filtered schedules for current cycle and active filters
-  const filteredSchedules = useMemo(() => {
-    return scheduleList.filter((s) => {
-      if (Number(s.cycle || s.cycle_type) !== Number(selectedCycle)) return false;
-      if (selectedDay !== 'Semua Hari' && s.day !== selectedDay) return false;
-      if (selectedClassFilter !== 'all' && Number(s.class_id) !== Number(selectedClassFilter)) return false;
-      if (selectedLevelFilter !== 'ALL' && String(s.level) !== String(selectedLevelFilter)) return false;
-      if (selectedRoomTypeFilter !== 'ALL' && s.roomType !== selectedRoomTypeFilter) return false;
-      return true;
-    });
-  }, [
-    scheduleList,
-    selectedCycle,
-    selectedDay,
-    selectedClassFilter,
-    selectedLevelFilter,
-    selectedRoomTypeFilter,
-  ]);
-
-  // Columns definition: if 'Semua Hari' -> Columns are Days (Senin - Jumat)
-  // If specific day -> Columns are classes
-  const isAllDaysView = selectedDay === 'Semua Hari';
-
-  const matrixColumns = useMemo(() => {
-    if (isAllDaysView) {
-      return DAYS_LIST.map((d) => ({ key: d, label: d, type: 'day' }));
-    }
-    // Specific Day view: columns are classes
-    const classesToShow = classList.filter((c) => {
-      if (selectedLevelFilter !== 'ALL' && String(c.level) !== String(selectedLevelFilter)) return false;
-      if (selectedClassFilter !== 'all' && Number(c.id) !== Number(selectedClassFilter)) return false;
-      return true;
-    });
-    return classesToShow.map((c) => ({ key: String(c.id), label: c.name, type: 'class', classObj: c }));
-  }, [isAllDaysView, classList, selectedLevelFilter, selectedClassFilter]);
-
-  // Time slots for selected day (if all days, use regular standard 1-10)
-  const displaySlots = useMemo(() => {
-    return getTimeSlotsForDay(selectedDay === 'Semua Hari' ? 'Senin' : selectedDay, mondayIsUpacara);
-  }, [selectedDay, mondayIsUpacara]);
-
   return (
     <div className="schedule-page">
       {/* Toast Messages */}
@@ -478,35 +588,50 @@ export default function ScheduleManagementPage() {
       </div>
 
       {/* Pre-condition Gate Alert Banner */}
-      {!prerequisiteCheck.isReady && (
+      {!isMasterDataLoading && !prerequisiteCheck.isReady && (
         <div className="schedule-precondition-card" role="alert">
           <div className="schedule-precondition-left">
             <AlertTriangle size={20} className="shrink-0 text-amber-700" />
             <div>
               <strong>Prasyarat Master Data Belum Lengkap</strong>
               <p className="mt-0.5 text-xs text-amber-800">
-                Penyusunan jadwal dinonaktifkan sementara karena entitas master data berikut belum tersedia:{' '}
-                <em>{prerequisiteCheck.missingEntities.join(', ')}</em>.
+                {prerequisiteCheck.missingEntities.length === 1 &&
+                prerequisiteCheck.missingEntities[0] === 'Master Ruangan Belajar' ? (
+                  <>
+                    Penyusunan jadwal manual dinonaktifkan sementara karena <em>Master Ruangan Belajar</em>{' '}
+                    belum tersedia. Data ruangan akan otomatis terisi saat mengimpor Jadwal Ruangan, atau
+                    dapat ditambahkan di Master Data.
+                  </>
+                ) : (
+                  <>
+                    Penyusunan jadwal dinonaktifkan sementara karena entitas master data berikut belum
+                    tersedia: <em>{prerequisiteCheck.missingEntities.join(', ')}</em>.
+                  </>
+                )}
               </p>
             </div>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate('/web/master-data')}
-          >
-            Lengkapi di Master Data &rarr;
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {prerequisiteCheck.missingEntities.includes('Master Ruangan Belajar') && (
+              <Button variant="primary" size="sm" onClick={() => navigate('/kurikulum/jadwal/import')}>
+                Impor Jadwal Ruangan &rarr;
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => navigate('/kurikulum/master-data')}>
+              Lengkapi di Master Data &rarr;
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Conflict Summary Alert Banner (If Any Conflicts Found) */}
+      {/* Conflict Summary Alert Banner */}
       {conflictScheduleIds.size > 0 && (
         <div className="schedule-conflict-card" role="alert">
           <div className="schedule-conflict-left">
             <Badge variant="error">{conflictScheduleIds.size} Bentrok Terdeteksi</Badge>
             <span className="text-xs text-gray-700">
-              Terdapat jadwal yang bertabrakan pada guru, ruangan, atau kelas yang sama di slot waktu bersamaan.
+              Terdapat jadwal yang bertabrakan pada guru, ruangan, atau kelas yang sama di slot waktu
+              bersamaan.
             </span>
           </div>
           <span className="text-xs font-mono text-red-600 font-semibold">
@@ -547,7 +672,7 @@ export default function ScheduleManagementPage() {
             </div>
           </div>
 
-          {/* Day Filter */}
+          {/* Hari Filter */}
           <div className="schedule-filter-item">
             <Select
               label="Hari Pelajaran"
@@ -556,11 +681,11 @@ export default function ScheduleManagementPage() {
                 { value: 'Semua Hari', label: 'Semua Hari (Senin - Jumat)' },
                 ...DAYS_LIST.map((d) => ({ value: d, label: d })),
               ]}
-              onChange={(e) => setSelectedDay(e.target.value)}
+              onChange={(e) => handleFilterChange(setSelectedDay, e.target.value, false)}
             />
           </div>
 
-          {/* Level Filter */}
+          {/* Tingkat Filter */}
           <div className="schedule-filter-item">
             <Select
               label="Tingkat Kelas"
@@ -572,8 +697,10 @@ export default function ScheduleManagementPage() {
                 { value: '12', label: 'Tingkat 12 (Kelas XII)' },
               ]}
               onChange={(e) => {
-                setSelectedLevelFilter(e.target.value);
-                setSelectedClassFilter('all');
+                handleFilterChange((val) => {
+                  setSelectedLevelFilter(val);
+                  setSelectedClassFilter('all');
+                }, e.target.value, true);
               }}
             />
           </div>
@@ -589,7 +716,7 @@ export default function ScheduleManagementPage() {
                   .filter((c) => selectedLevelFilter === 'ALL' || String(c.level) === String(selectedLevelFilter))
                   .map((c) => ({ value: String(c.id), label: c.name })),
               ]}
-              onChange={(e) => setSelectedClassFilter(e.target.value)}
+              onChange={(e) => handleFilterChange(setSelectedClassFilter, e.target.value, true)}
             />
           </div>
 
@@ -604,8 +731,36 @@ export default function ScheduleManagementPage() {
                 { value: 'lab', label: 'Laboratorium Komputer' },
                 { value: 'bengkel', label: 'Bengkel / Praktik' },
               ]}
-              onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
+              onChange={(e) => handleFilterChange(setSelectedRoomTypeFilter, e.target.value, false)}
             />
+          </div>
+        </div>
+
+        {/* Row 2: Search Input & Per Page Selector */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-gray-100">
+          <div className="flex-1 max-w-md">
+            <SearchInput
+              value={searchQuery}
+              onChange={handleSearchChange}
+              onClear={() => handleSearchChange('')}
+              placeholder="Cari kelas, nama guru, atau mata pelajaran..."
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Tampilkan:</span>
+            <select
+              value={String(classesPerPage)}
+              onChange={(e) => {
+                setClassesPerPage(Number(e.target.value));
+                setClassPage(1);
+              }}
+              className="text-xs border border-gray-300 rounded px-2.5 py-1.5 bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              <option value="1">1 Kelas / Halaman</option>
+              <option value="2">2 Kelas / Halaman</option>
+              <option value="3">3 Kelas / Halaman</option>
+              <option value="4">4 Kelas / Halaman</option>
+            </select>
           </div>
         </div>
 
@@ -628,151 +783,298 @@ export default function ScheduleManagementPage() {
             )}
           </div>
           <div>
-            Tampilan:{' '}
+            Menampilkan:{' '}
             <strong className="text-gray-900">
-              {isAllDaysView ? 'Matriks Hari (Senin - Jumat)' : `Matriks Kelas (${selectedDay})`}
+              {isPageLoading || isTransitioning ? (
+                <span className="inline-block animate-pulse text-gray-400">Memuat...</span>
+              ) : (
+                `${totalClasses} Rombel Kelas ${selectedLevelFilter !== 'ALL' ? `(Tingkat ${selectedLevelFilter})` : ''}`
+              )}
             </strong>
           </div>
         </div>
       </div>
 
-      {/* Main Schedule Matrix Grid */}
-      <div className="schedule-matrix-container">
-        <table className="schedule-matrix">
-          <thead>
-            <tr>
-              <th scope="col" className="whitespace-nowrap">Jam / Waktu Riil</th>
-              {matrixColumns.map((col) => (
-                <th key={col.key} scope="col" className="whitespace-nowrap">
-                  {col.type === 'day' ? col.label : `Kelas ${col.label}`}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {/* Optional Ceremony Header Row on Monday */}
-            {(selectedDay === 'Senin' || isAllDaysView) && mondayIsUpacara && (
-              <tr className="bg-amber-50/60 border-b border-amber-200/50">
-                <td className="schedule-slot-cell whitespace-nowrap bg-amber-100/50">
-                  <div className="schedule-slot-header">
-                    <span className="schedule-slot-num text-amber-900">Upacara</span>
-                    <span className="schedule-slot-time text-amber-700">07:00 - 07:45</span>
-                  </div>
-                </td>
-                <td colSpan={matrixColumns.length} className="py-2.5 px-4 text-center">
-                  <div className="flex items-center justify-center gap-2 text-[12px] font-medium text-amber-900">
-                    <Flag size={14} className="text-amber-700" />
-                    <span>Upacara Bendera Hari Senin &bull; KBM Jam Ke-1 Dimulai Pukul 08:00 WIB</span>
-                  </div>
-                </td>
-              </tr>
-            )}
+      {/* Dynamic Content: 1. Loading Skeleton | 2. Error State | 3. Empty State | 4. Schedule Tables */}
+      {isPageLoading || isTransitioning ? (
+        <ScheduleTableSkeleton
+          count={classesPerPage}
+          days={matrixDays}
+          hasCeremony={mondayIsUpacara}
+        />
+      ) : fetchError ? (
+        <div className="bg-white border border-red-200 rounded-lg p-6">
+          <ErrorState
+            title="Gagal Memuat Jadwal Pelajaran"
+            message={fetchError}
+            onRetry={fetchData}
+            retryLabel="Muat Ulang Jadwal"
+          />
+        </div>
+      ) : paginatedClasses.length === 0 ? (
+        <EmptyState
+          type={searchQuery || selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'all' ? 'search' : 'default'}
+          title={
+            searchQuery || selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'all'
+              ? 'Tidak Ada Jadwal atau Kelas Ditemukan'
+              : 'Belum Ada Jadwal Pelajaran'
+          }
+          description={
+            searchQuery
+              ? `Tidak ditemukan rombel kelas atau jadwal yang cocok dengan kata kunci "${searchQuery}".`
+              : selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'all'
+              ? 'Tidak ada rombel kelas yang sesuai dengan kombinasi filter yang Anda pilih.'
+              : 'Jadwal pelajaran untuk putaran ini belum diatur atau belum diimpor dari berkas FET.'
+          }
+          actionLabel={
+            searchQuery || selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'all'
+              ? 'Reset Semua Filter'
+              : 'Impor Jadwal FET'
+          }
+          onAction={
+            searchQuery || selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'all'
+              ? handleResetFilters
+              : () => navigate('/kurikulum/jadwal/import')
+          }
+        />
+      ) : (
+        <div className="schedule-classes-container">
+          {paginatedClasses.map((c) => {
+            // Schedules for this specific class in the active cycle
+            const classSchedules = scheduleList.filter(
+              (s) =>
+                String(s.class_id) === String(c.id) &&
+                Number(s.cycle || s.cycle_type) === Number(selectedCycle)
+            );
 
-            {/* Slots Iteration */}
-            {displaySlots.map((slotObj) => (
-              <tr key={slotObj.slot}>
-                <td className="schedule-slot-cell whitespace-nowrap">
-                  <div className="schedule-slot-header">
-                    <span className="schedule-slot-num">{slotObj.label}</span>
-                    <span className="schedule-slot-time">
-                      {slotObj.start} - {slotObj.end}
+            const totalJP = classSchedules.reduce(
+              (sum, s) => sum + Number(s.duration || s.duration_periods || 1),
+              0
+            );
+            const uniqueSubjects = new Set(classSchedules.map((s) => s.subject_id)).size;
+            const uniqueTeachers = new Set(classSchedules.map((s) => s.teacher_id)).size;
+            const hasConflict = classSchedules.some((s) => conflictScheduleIds.has(s.id));
+
+            return (
+              <div key={c.id} className="schedule-class-section">
+                {/* Header Identitas Rombel Kelas */}
+                <div className="schedule-class-header">
+                  <div className="schedule-class-title-group">
+                    <div className="schedule-class-title-row">
+                      <GraduationCap size={20} className="text-gray-700" />
+                      <h2 className="schedule-class-title">Kelas {c.name}</h2>
+                      <Badge variant="outline">Tingkat {c.level}</Badge>
+                      {hasConflict && (
+                        <Badge variant="error" className="text-[10px]">
+                          Bentrok Terdeteksi
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="schedule-class-subtitle">
+                      SMK NEGERI 1 BANTUL &bull; Putaran {selectedCycle} {activeCycleSetting === selectedCycle && '(Aktif)'}
                     </span>
                   </div>
-                </td>
 
-                {matrixColumns.map((col) => {
-                  // Find schedule items matching this cell
-                  const cellSchedules = filteredSchedules.filter((s) => {
-                    const matchSlot = Number(s.slot || s.period_number) === Number(slotObj.slot);
-                    if (!matchSlot) return false;
+                  <div className="schedule-class-actions">
+                    <span className="schedule-class-stat-badge">
+                      <strong>{totalJP}</strong> JP / Minggu
+                    </span>
+                    <span className="schedule-class-stat-badge">
+                      <strong>{uniqueSubjects}</strong> Mapel
+                    </span>
+                    <span className="schedule-class-stat-badge">
+                      <strong>{uniqueTeachers}</strong> Guru
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Plus}
+                      disabled={!prerequisiteCheck.isReady}
+                      onClick={() => handleOpenAddModal(null, null, c.id)}
+                    >
+                      Tambah Jadwal
+                    </Button>
+                  </div>
+                </div>
 
-                    if (col.type === 'day') {
-                      return s.day === col.key;
-                    }
-                    return String(s.class_id) === String(col.key);
-                  });
+                {/* Table Matrix */}
+                <div className="schedule-matrix-container border-0 rounded-none">
+                  <table className="schedule-matrix">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="whitespace-nowrap">
+                          Jam / Waktu Riil
+                        </th>
+                        {matrixDays.map((dayName) => (
+                          <th key={dayName} scope="col" className="whitespace-nowrap">
+                            {dayName}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Monday Ceremony Header Row */}
+                      {(selectedDay === 'Senin' || isAllDaysView) && mondayIsUpacara && (
+                        <tr className="bg-amber-50/60 border-b border-amber-200/50">
+                          <td className="schedule-slot-cell whitespace-nowrap bg-amber-100/50">
+                            <div className="schedule-slot-header">
+                              <span className="schedule-slot-num text-amber-900">Upacara</span>
+                              <span className="schedule-slot-time text-amber-700">07:00 - 07:45</span>
+                            </div>
+                          </td>
+                          <td colSpan={matrixDays.length} className="py-2.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-2 text-[12px] font-medium text-amber-900">
+                              <Flag size={14} className="text-amber-700" />
+                              <span>Upacara Bendera Hari Senin &bull; KBM Jam Ke-1 Dimulai Pukul 08:00 WIB</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
-                  return (
-                    <td key={col.key}>
-                      {cellSchedules.length > 0 ? (
-                        <div className="schedule-cell-content">
-                          {cellSchedules.map((item) => {
-                            const isConflict = conflictScheduleIds.has(item.id);
-                            const slotTime = resolveSlotTime(
-                              item.day,
-                              item.slot || item.period_number,
-                              item.duration || item.duration_periods || 1,
-                              mondayIsUpacara
-                            );
+                      {/* Slots Iteration */}
+                      {displaySlots.map((slotObj) => (
+                        <tr key={slotObj.slot}>
+                          <td className="schedule-slot-cell whitespace-nowrap">
+                            <div className="schedule-slot-header">
+                              <span className="schedule-slot-num">{slotObj.label}</span>
+                              <span className="schedule-slot-time">
+                                {slotObj.start} - {slotObj.end}
+                              </span>
+                            </div>
+                          </td>
+
+                          {matrixDays.map((dayName) => {
+                            // Find schedule items starting at this slot
+                            const cellSchedules = classSchedules.filter((s) => {
+                              const matchSlot = Number(s.slot || s.period_number) === Number(slotObj.slot);
+                              if (!matchSlot) return false;
+                              if (s.day !== dayName) return false;
+                              if (selectedRoomTypeFilter !== 'ALL' && s.roomType !== selectedRoomTypeFilter) {
+                                return false;
+                              }
+                              return true;
+                            });
+
+                            // Find schedule continuing into this slot from an earlier period
+                            const continuationSchedule = classSchedules.find((s) => {
+                              if (s.day !== dayName) return false;
+                              if (selectedRoomTypeFilter !== 'ALL' && s.roomType !== selectedRoomTypeFilter) {
+                                return false;
+                              }
+                              const start = Number(s.slot || s.period_number);
+                              const dur = Number(s.duration || s.duration_periods || 1);
+                              return start < slotObj.slot && slotObj.slot < start + dur;
+                            });
+
+                            // Check Friday off-KBM slots (period 9-10)
+                            const isFridayOff = dayName === 'Jumat' && slotObj.slot > 8;
 
                             return (
-                              <div
-                                key={item.id}
-                                className={`schedule-card ${isConflict ? 'schedule-card--conflict' : ''}`}
-                                onClick={() => handleOpenEditModal(item)}
-                                title="Klik untuk mengedit atau menghapus jadwal"
-                              >
-                                <div className="schedule-card__top">
-                                  <span className="schedule-card__subject">{item.subjectName}</span>
-                                  {isConflict && (
-                                    <Badge variant="error" className="text-[9px] px-1 py-0">
-                                      Bentrok
-                                    </Badge>
-                                  )}
-                                </div>
-                                <span className="schedule-card__teacher">{item.teacherName}</span>
-                                <div className="schedule-card__badge-row">
-                                  <span className="schedule-card__info-tag">
-                                    <Clock size={10} className="inline mr-1 text-gray-400" />
-                                    {item.duration || item.duration_periods} JP ({slotTime.startTime}-{slotTime.endTime})
-                                  </span>
-                                  <span className="schedule-card__info-tag">
-                                    <MapPin size={10} className="inline mr-1 text-gray-400" />
-                                    {item.roomName}
-                                  </span>
-                                  {col.type === 'day' && (
-                                    <span className="schedule-card__info-tag">
-                                      <GraduationCap size={10} className="inline mr-1 text-gray-400" />
-                                      {item.className}
+                              <td key={dayName}>
+                                {cellSchedules.length > 0 ? (
+                                  <div className="schedule-cell-content">
+                                    {cellSchedules.map((item) => {
+                                      const isConflict = conflictScheduleIds.has(item.id);
+                                      const slotTime = resolveSlotTime(
+                                        item.day,
+                                        item.slot || item.period_number,
+                                        item.duration || item.duration_periods || 1,
+                                        mondayIsUpacara
+                                      );
+
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          className={`schedule-card ${isConflict ? 'schedule-card--conflict' : ''}`}
+                                          onClick={() => handleOpenEditModal(item)}
+                                          title="Klik untuk mengedit atau menghapus jadwal"
+                                        >
+                                          <div className="schedule-card__top">
+                                            <span className="schedule-card__subject">{item.subjectName}</span>
+                                            {isConflict && (
+                                              <Badge variant="error" className="text-[9px] px-1 py-0">
+                                                Bentrok
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <span className="schedule-card__teacher">
+                                            {item.fetStaffId
+                                              ? `"${item.fetStaffId}. ${item.teacherName}"`
+                                              : item.teacherName}
+                                          </span>
+                                          <div className="schedule-card__badge-row">
+                                            <span className="schedule-card__info-tag">
+                                              <Clock size={10} className="inline mr-1 text-gray-400" />
+                                              {item.duration || item.duration_periods} JP ({slotTime.startTime}-
+                                              {slotTime.endTime})
+                                            </span>
+                                            <span className="schedule-card__info-tag">
+                                              <MapPin size={10} className="inline mr-1 text-gray-400" />
+                                              {item.roomName}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : continuationSchedule ? (
+                                  <div
+                                    className="schedule-continuation-block"
+                                    onClick={() => handleOpenEditModal(continuationSchedule)}
+                                    title={`Lanjutan dari Jam Ke-${continuationSchedule.slot}: ${continuationSchedule.subjectName}`}
+                                  >
+                                    <span className="schedule-continuation-text">
+                                      ↳ Lanjutan: {continuationSchedule.subjectName} ({continuationSchedule.roomName})
                                     </span>
-                                  )}
-                                </div>
-                              </div>
+                                  </div>
+                                ) : isFridayOff ? (
+                                  <div className="schedule-cell-off" title="Di luar alokasi jam KBM Jumat (Off)">
+                                    -x-
+                                  </div>
+                                ) : (
+                                  <div className="schedule-cell--empty">
+                                    <button
+                                      type="button"
+                                      className="schedule-cell__empty-btn"
+                                      disabled={!prerequisiteCheck.isReady}
+                                      onClick={() => handleOpenAddModal(slotObj.slot, dayName, c.id)}
+                                      title={
+                                        prerequisiteCheck.isReady
+                                          ? `Tambah jadwal ${c.name} hari ${dayName} Jam Ke-${slotObj.slot}`
+                                          : 'Lengkapi Master Data terlebih dahulu'
+                                      }
+                                    >
+                                      <Plus size={12} />
+                                      <span>Kosong</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
                             );
                           })}
-                        </div>
-                      ) : (
-                        <div className="schedule-cell--empty">
-                          <button
-                            type="button"
-                            className="schedule-cell__empty-btn"
-                            disabled={!prerequisiteCheck.isReady}
-                            onClick={() =>
-                              handleOpenAddModal(
-                                slotObj.slot,
-                                col.type === 'day' ? col.key : selectedDay,
-                                col.type === 'class' ? col.key : null
-                              )
-                            }
-                            title={
-                              prerequisiteCheck.isReady
-                                ? 'Klik untuk menambah jadwal pada slot ini'
-                                : 'Lengkapi Master Data terlebih dahulu'
-                            }
-                          >
-                            <Plus size={12} />
-                            <span>Kosong</span>
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Class Pagination */}
+      {!isPageLoading && !isTransitioning && !fetchError && filteredClasses.length > classesPerPage && (
+        <div className="flex justify-center mt-2">
+          <Pagination
+            currentPage={currentSafePage}
+            totalPages={totalPages}
+            totalItems={totalClasses}
+            perPage={classesPerPage}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
 
       {/* Modal Form Tambah / Edit Jadwal */}
       <Modal

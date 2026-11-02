@@ -16,9 +16,11 @@ export const scheduleImportApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000,
     }),
 
   getImportDetail: (id) => api.get(`/schedule-imports/${id}`),
+  getScheduleImport: (id) => api.get(`/schedule-imports/${id}`),
 
   resolveImportRow: (importId, rowId, data) =>
     api.patch(`/schedule-imports/${importId}/rows/${rowId}`, data), // { matched_class_id, matched_teacher_id, matched_room_id, matched_subject_id, exclude: boolean }

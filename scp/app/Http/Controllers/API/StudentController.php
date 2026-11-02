@@ -27,10 +27,15 @@ class StudentController extends Controller
             $templatePath = storage_path('app/templates/siswa_import_template.xlsx');
         }
 
+        $headers = [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ];
+
         if (file_exists($templatePath)) {
-            return response()->download($templatePath, 'siswa_import_template.xlsx', [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ]);
+            return response()->download($templatePath, 'siswa_import_template.xlsx', $headers);
         }
 
         return response()->streamDownload(function () {
@@ -43,8 +48,6 @@ class StudentController extends Controller
                     'class_name' => 'X RPL 1',
                     'gender' => 'L',
                     'nisn' => '0081234567',
-                    'parent_name' => 'Bambang Pratama',
-                    'parent_phone' => '081223344556',
                 ],
                 [
                     'nis' => '12046',
@@ -52,8 +55,6 @@ class StudentController extends Controller
                     'class_name' => 'X RPL 1',
                     'gender' => 'P',
                     'nisn' => '0089876543',
-                    'parent_name' => 'Siti Aminah',
-                    'parent_phone' => '081334455667',
                 ],
                 [
                     'nis' => '11580',
@@ -61,15 +62,11 @@ class StudentController extends Controller
                     'class_name' => 'XI TKJ 2',
                     'gender' => 'L',
                     'nisn' => '0071122334',
-                    'parent_name' => 'Joko Santoso',
-                    'parent_phone' => '085712345678',
                 ],
             ]);
 
             $writer->close();
-        }, 'siswa_import_template.xlsx', [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+        }, 'siswa_import_template.xlsx', $headers);
     }
 
     /**
@@ -77,6 +74,8 @@ class StudentController extends Controller
      */
     public function import(Request $request): JsonResponse
     {
+        set_time_limit(300);
+
         $request->validate([
             'file' => [
                 'required',
@@ -91,7 +90,7 @@ class StudentController extends Controller
         ]);
 
         $uploadedFile = $request->file('file');
-        $reader = SimpleExcelReader::create($uploadedFile->getRealPath())->trimHeaderRow()->headersToSnakeCase();
+        $reader = SimpleExcelReader::create($uploadedFile->getRealPath(), 'xlsx')->trimHeaderRow()->headersToSnakeCase();
         $headers = $reader->getHeaders();
 
         if (empty($headers)) {
@@ -128,6 +127,10 @@ class StudentController extends Controller
         $seenNisns = [];
         $validRows = [];
 
+        // Preload active NIS and NISNs to prevent N+1 queries on large datasets
+        $existingNis = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
+        $existingNisns = User::whereNotNull('nisn')->whereNull('deleted_at')->pluck('nisn')->flip()->toArray();
+
         foreach ($rows as $row) {
             $rowNumber++;
 
@@ -136,8 +139,6 @@ class StudentController extends Controller
             $rawClassName = isset($row['class_name']) ? trim((string) $row['class_name']) : '';
             $rawGender = isset($row['gender']) ? strtoupper(trim((string) $row['gender'])) : '';
             $rawNisn = isset($row['nisn']) ? trim((string) $row['nisn']) : '';
-            $rawParentName = isset($row['parent_name']) ? trim((string) $row['parent_name']) : '';
-            $rawParentPhone = isset($row['parent_phone']) ? trim((string) $row['parent_phone']) : '';
 
             // 1. Validasi NIS
             if ($rawNis === '') {
@@ -152,13 +153,13 @@ class StudentController extends Controller
                     'attribute' => 'nis',
                     'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNis[$rawNis]}).",
                 ];
-            } elseif (User::where('nis_nip', $rawNis)->whereNull('deleted_at')->exists()) {
+            } elseif (isset($existingNis[$rawNis])) {
                 $errors[] = [
                     'row' => $rowNumber,
                     'attribute' => 'nis',
                     'message' => "NIS '{$rawNis}' sudah terdaftar di sistem.",
                 ];
-            } elseif (User::where('nis_nip', 'P-' . $rawNis)->whereNull('deleted_at')->exists()) {
+            } elseif (isset($existingNis['P-' . $rawNis])) {
                 $errors[] = [
                     'row' => $rowNumber,
                     'attribute' => 'nis',
@@ -227,7 +228,7 @@ class StudentController extends Controller
                         'attribute' => 'nisn',
                         'message' => "NISN '{$rawNisn}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNisns[$rawNisn]}).",
                     ];
-                } elseif (User::where('nisn', $rawNisn)->whereNull('deleted_at')->exists()) {
+                } elseif (isset($existingNisns[$rawNisn])) {
                     $errors[] = [
                         'row' => $rowNumber,
                         'attribute' => 'nisn',
@@ -238,31 +239,12 @@ class StudentController extends Controller
                 }
             }
 
-            // 6. Validasi Nama & Telepon Orang Tua (Opsional)
-            if ($rawParentName !== '' && mb_strlen($rawParentName) > 100) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'parent_name',
-                    'message' => 'Nama orang tua tidak boleh melebihi 100 karakter.',
-                ];
-            }
-
-            if ($rawParentPhone !== '' && mb_strlen($rawParentPhone) > 20) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'parent_phone',
-                    'message' => 'Nomor telepon orang tua tidak boleh melebihi 20 karakter.',
-                ];
-            }
-
             $validRows[] = [
                 'nis' => $rawNis,
                 'name' => $rawName,
                 'class_name' => trim(preg_replace('/\s+/', ' ', $rawClassName)),
                 'gender' => $rawGender,
                 'nisn' => $rawNisn !== '' ? $rawNisn : null,
-                'parent_name' => $rawParentName !== '' ? $rawParentName : null,
-                'parent_phone' => $rawParentPhone !== '' ? $rawParentPhone : null,
             ];
         }
 
@@ -322,12 +304,13 @@ class StudentController extends Controller
 
             foreach ($validRows as $row) {
                 $classId = $classMap[$row['class_name']];
+                $passwordHash = Hash::make($row['nis'], ['rounds' => 4]);
 
                 $student = User::create([
                     'name' => $row['name'],
                     'role' => 'student',
                     'nis_nip' => $row['nis'],
-                    'password' => Hash::make($row['nis']),
+                    'password' => $passwordHash,
                     'class_id' => $classId,
                     'gender' => $row['gender'],
                     'nisn' => $row['nisn'],
@@ -337,12 +320,12 @@ class StudentController extends Controller
                 $studentsImported++;
 
                 User::create([
-                    'name' => $row['parent_name'] ?: ('Wali dari ' . $row['name']),
+                    'name' => 'Wali Murid ' . $row['name'],
                     'role' => 'parent',
                     'nis_nip' => 'P-' . $row['nis'],
                     'linked_student_id' => $student->id,
-                    'password' => Hash::make($row['nis']),
-                    'phone_number' => $row['parent_phone'],
+                    'password' => $passwordHash,
+                    'phone_number' => null,
                     'must_change_password' => true,
                 ]);
                 $parentsImported++;
@@ -368,9 +351,10 @@ class StudentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'per_page' => 'nullable|integer|min:1|max:100',
+            'per_page' => 'nullable|integer|min:1|max:5000',
             'search' => 'nullable|string|max:100',
             'class_id' => 'nullable|integer|exists:classes,id',
+            'all' => 'nullable|in:true,false,1,0',
         ]);
 
         $perPage = $request->integer('per_page', 15);
@@ -389,6 +373,22 @@ class StudentController extends Controller
                 $q->where('name', $like, '%' . $search . '%')
                     ->orWhere('nis_nip', $like, '%' . $search . '%');
             });
+        }
+
+        if ($request->boolean('all')) {
+            $students = $query->orderBy('name')->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data siswa berhasil diambil.',
+                'data' => $students,
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => $students->count(),
+                    'total' => $students->count(),
+                    'last_page' => 1,
+                ],
+            ], 200);
         }
 
         $students = $query->orderBy('name')->paginate($perPage);
@@ -448,7 +448,7 @@ class StudentController extends Controller
             ]);
 
             $parent = User::create([
-                'name' => 'Wali dari ' . $request->name,
+                'name' => 'Wali Murid ' . $request->name,
                 'role' => 'parent',
                 'nis_nip' => 'P-' . $request->nis,
                 'linked_student_id' => $student->id,
@@ -473,8 +473,14 @@ class StudentController extends Controller
     /**
      * Memperbarui data siswa.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
+        if ($request->filled('password')) {
+            if ($error = $this->passwordIsConfirmed($request)) {
+                return $error;
+            }
+        }
+
         $student = User::where('role', 'student')->findOrFail($id);
 
         $request->validate([
@@ -520,7 +526,7 @@ class StudentController extends Controller
             User::where('linked_student_id', $student->id)
                 ->where('role', 'parent')
                 ->update([
-                    'name' => 'Wali dari ' . $request->name,
+                    'name' => 'Wali Murid ' . $request->name,
                     'nis_nip' => 'P-' . $request->nis,
                 ]);
         });
@@ -535,8 +541,14 @@ class StudentController extends Controller
     /**
      * Menghapus siswa (soft-delete siswa dan akun orang tuanya).
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
+        if ($request->filled('password')) {
+            if ($error = $this->passwordIsConfirmed($request)) {
+                return $error;
+            }
+        }
+
         $student = User::where('role', 'student')->findOrFail($id);
 
         DB::transaction(function () use ($student) {
@@ -554,7 +566,7 @@ class StudentController extends Controller
     /**
      * Menandai siswa tidak naik kelas sebelum promosi kelas massal (PRD 5.13).
      */
-    public function holdBack(Request $request, int $id): JsonResponse
+    public function holdBack(Request $request, $id): JsonResponse
     {
         $student = User::where('role', 'student')->findOrFail($id);
 

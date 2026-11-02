@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Subject;
 use App\Models\TeacherAssignment;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -27,10 +28,15 @@ class TeacherController extends Controller
             $templatePath = storage_path('app/templates/template_import_guru.xlsx');
         }
 
+        $headers = [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ];
+
         if (file_exists($templatePath)) {
-            return response()->download($templatePath, 'guru_import_template.xlsx', [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ]);
+            return response()->download($templatePath, 'guru_import_template.xlsx', $headers);
         }
 
         return response()->streamDownload(function () {
@@ -41,22 +47,24 @@ class TeacherController extends Controller
                     'nip' => '198001012010011002',
                     'name' => 'Budi Santoso, S.Pd.',
                     'fet_staff_id' => '1',
-                    'email' => 'budi.santoso@sekolah.sch.id',
-                    'phone_number' => '081234567890',
+                    'mata_pelajaran' => 'Matematika',
                 ],
                 [
                     'nip' => '198502022015022003',
                     'name' => 'Dewi Lestari, M.Pd.',
                     'fet_staff_id' => '14',
-                    'email' => 'dewi.lestari@sekolah.sch.id',
-                    'phone_number' => '082345678901',
+                    'mata_pelajaran' => 'Bahasa Indonesia',
+                ],
+                [
+                    'nip' => '199003032020031004',
+                    'name' => 'Ahmad Fauzi, S.Kom.',
+                    'fet_staff_id' => '25',
+                    'mata_pelajaran' => 'Pemrograman Web',
                 ],
             ]);
 
             $writer->close();
-        }, 'guru_import_template.xlsx', [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+        }, 'guru_import_template.xlsx', $headers);
     }
 
     /**
@@ -64,6 +72,8 @@ class TeacherController extends Controller
      */
     public function import(Request $request): JsonResponse
     {
+        set_time_limit(300);
+
         $request->validate([
             'file' => [
                 'required',
@@ -78,7 +88,7 @@ class TeacherController extends Controller
         ]);
 
         $uploadedFile = $request->file('file');
-        $reader = SimpleExcelReader::create($uploadedFile->getRealPath())->trimHeaderRow()->headersToSnakeCase();
+        $reader = SimpleExcelReader::create($uploadedFile->getRealPath(), 'xlsx')->trimHeaderRow()->headersToSnakeCase();
         $headers = $reader->getHeaders();
 
         if (empty($headers)) {
@@ -89,7 +99,11 @@ class TeacherController extends Controller
             ], 422);
         }
 
+        $hasSubjectHeader = in_array('mata_pelajaran', $headers) || in_array('mapel', $headers) || in_array('subject', $headers);
         $requiredHeaders = ['nip', 'name', 'fet_staff_id'];
+        if (!$hasSubjectHeader) {
+            $requiredHeaders[] = 'mata_pelajaran';
+        }
         $missingHeaders = array_diff($requiredHeaders, $headers);
 
         if (!empty($missingHeaders)) {
@@ -113,8 +127,11 @@ class TeacherController extends Controller
         $errors = [];
         $seenNips = [];
         $seenFetStaffIds = [];
-        $seenEmails = [];
         $validTeachers = [];
+
+        // Preload active NIPs and FET Staff IDs to prevent N+1 queries
+        $existingNips = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
+        $existingFetStaffIds = User::whereNotNull('fet_staff_id')->whereNull('deleted_at')->pluck('fet_staff_id')->flip()->toArray();
 
         foreach ($rows as $row) {
             $rowNumber++;
@@ -122,8 +139,9 @@ class TeacherController extends Controller
             $rawNip = isset($row['nip']) ? trim((string) $row['nip']) : '';
             $rawName = isset($row['name']) ? trim((string) $row['name']) : '';
             $rawFetId = isset($row['fet_staff_id']) ? trim((string) $row['fet_staff_id']) : '';
-            $rawEmail = isset($row['email']) ? trim((string) $row['email']) : '';
-            $rawPhone = isset($row['phone_number']) ? trim((string) $row['phone_number']) : '';
+            $rawSubject = isset($row['mata_pelajaran'])
+                ? trim((string) $row['mata_pelajaran'])
+                : (isset($row['mapel']) ? trim((string) $row['mapel']) : (isset($row['subject']) ? trim((string) $row['subject']) : ''));
 
             // Validasi NIP
             if ($rawNip === '') {
@@ -138,7 +156,7 @@ class TeacherController extends Controller
                     'attribute' => 'nip',
                     'message' => "NIP '{$rawNip}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNips[$rawNip]}).",
                 ];
-            } elseif (User::where('nis_nip', $rawNip)->whereNull('deleted_at')->exists()) {
+            } elseif (isset($existingNips[$rawNip])) {
                 $errors[] = [
                     'row' => $rowNumber,
                     'attribute' => 'nip',
@@ -176,7 +194,7 @@ class TeacherController extends Controller
                     'attribute' => 'fet_staff_id',
                     'message' => "ID staf FET '{$rawFetId}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenFetStaffIds[$rawFetId]}).",
                 ];
-            } elseif (User::where('fet_staff_id', $rawFetId)->whereNull('deleted_at')->exists()) {
+            } elseif (isset($existingFetStaffIds[$rawFetId])) {
                 $errors[] = [
                     'row' => $rowNumber,
                     'attribute' => 'fet_staff_id',
@@ -186,40 +204,33 @@ class TeacherController extends Controller
                 $seenFetStaffIds[$rawFetId] = $rowNumber;
             }
 
-            // Validasi Email jika diisi
-            if ($rawEmail !== '') {
-                if (!filter_var($rawEmail, FILTER_VALIDATE_EMAIL)) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'email',
-                        'message' => "Format email '{$rawEmail}' tidak valid.",
-                    ];
-                } elseif (isset($seenEmails[$rawEmail])) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'email',
-                        'message' => "Email '{$rawEmail}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenEmails[$rawEmail]}).",
-                    ];
-                } elseif (User::where('email', $rawEmail)->whereNull('deleted_at')->exists()) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'email',
-                        'message' => "Email '{$rawEmail}' sudah terdaftar di sistem.",
-                    ];
-                } else {
-                    $seenEmails[$rawEmail] = $rowNumber;
-                }
+            // Validasi Mata Pelajaran
+            if ($rawSubject === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'mata_pelajaran',
+                    'message' => 'Kolom mata pelajaran wajib diisi.',
+                ];
+            } elseif (mb_strlen($rawSubject) > 100) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'mata_pelajaran',
+                    'message' => 'Nama mata pelajaran tidak boleh melebihi 100 karakter.',
+                ];
             }
 
             $validTeachers[] = [
-                'name' => $rawName,
-                'role' => 'teacher',
-                'nis_nip' => $rawNip,
-                'password' => Hash::make($rawNip),
-                'fet_staff_id' => $rawFetId,
-                'email' => $rawEmail !== '' ? $rawEmail : null,
-                'phone_number' => $rawPhone !== '' ? $rawPhone : null,
-                'must_change_password' => true,
+                'subject_name' => $rawSubject,
+                'data' => [
+                    'name' => $rawName,
+                    'role' => 'teacher',
+                    'nis_nip' => $rawNip,
+                    'password' => Hash::make($rawNip, ['rounds' => 4]),
+                    'fet_staff_id' => $rawFetId,
+                    'email' => null,
+                    'phone_number' => null,
+                    'must_change_password' => true,
+                ],
             ];
         }
 
@@ -232,7 +243,22 @@ class TeacherController extends Controller
         }
 
         DB::transaction(function () use ($validTeachers) {
-            foreach ($validTeachers as $teacherData) {
+            $subjectCache = [];
+            foreach ($validTeachers as $item) {
+                $subjectName = $item['subject_name'];
+                $key = mb_strtolower($subjectName);
+
+                if (!isset($subjectCache[$key])) {
+                    $found = Subject::whereRaw('LOWER(name) = ?', [$key])->first();
+                    if (!$found) {
+                        $found = Subject::create(['name' => $subjectName]);
+                    }
+                    $subjectCache[$key] = $found;
+                }
+
+                $teacherData = $item['data'];
+                $teacherData['subject_id'] = $subjectCache[$key]->id;
+
                 User::create($teacherData);
             }
         });
@@ -258,7 +284,7 @@ class TeacherController extends Controller
         $perPage = $request->integer('per_page', 15);
         $search = $request->input('search');
 
-        $query = User::where('role', 'teacher')->with(['assignments.schoolClass']);
+        $query = User::where('role', 'teacher')->with(['assignments.schoolClass', 'subject']);
 
         if ($search) {
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
@@ -312,6 +338,8 @@ class TeacherController extends Controller
                 Rule::unique('users', 'fet_staff_id')->whereNull('deleted_at'),
             ],
             'email' => 'nullable|email|unique:users,email',
+            'subject_id' => 'nullable|exists:subjects,id',
+            'phone_number' => 'nullable|string|max:30',
         ]);
 
         $nip = $request->input('nip') ?? $request->input('nis_nip');
@@ -322,10 +350,14 @@ class TeacherController extends Controller
             'role' => 'teacher',
             'nis_nip' => $nip,
             'email' => $request->input('email'),
+            'phone_number' => $request->input('phone_number'),
+            'subject_id' => $request->input('subject_id'),
             'fet_staff_id' => $request->fet_staff_id,
             'password' => Hash::make($randomPassword),
             'must_change_password' => true,
         ]);
+
+        $teacher->load('subject');
 
         return response()->json([
             'success' => true,
@@ -340,8 +372,14 @@ class TeacherController extends Controller
     /**
      * Memperbarui data profil guru.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
+        if ($request->filled('password')) {
+            if ($error = $this->passwordIsConfirmed($request)) {
+                return $error;
+            }
+        }
+
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
         $request->validate([
@@ -369,6 +407,8 @@ class TeacherController extends Controller
                 'email',
                 Rule::unique('users', 'email')->ignore($teacher->id),
             ],
+            'subject_id' => 'nullable|exists:subjects,id',
+            'phone_number' => 'nullable|string|max:30',
         ]);
 
         $data = [];
@@ -384,8 +424,15 @@ class TeacherController extends Controller
         if ($request->has('email')) {
             $data['email'] = $request->email;
         }
+        if ($request->has('phone_number')) {
+            $data['phone_number'] = $request->phone_number;
+        }
+        if ($request->has('subject_id')) {
+            $data['subject_id'] = $request->subject_id;
+        }
 
         $teacher->update($data);
+        $teacher->load('subject');
 
         return response()->json([
             'success' => true,
@@ -397,8 +444,14 @@ class TeacherController extends Controller
     /**
      * Menghapus akun guru (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
+        if ($request->filled('password')) {
+            if ($error = $this->passwordIsConfirmed($request)) {
+                return $error;
+            }
+        }
+
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
         if ($teacher->schedules()->exists()) {
@@ -423,7 +476,7 @@ class TeacherController extends Controller
     /**
      * Memberikan penugasan tambahan (Kesiswaan / Wali Kelas) kepada guru.
      */
-    public function assignRole(Request $request, int $id): JsonResponse
+    public function assignRole(Request $request, $id): JsonResponse
     {
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
@@ -462,7 +515,7 @@ class TeacherController extends Controller
     /**
      * Mencabut penugasan tambahan spesifik milik guru.
      */
-    public function revokeRole(int $id, int $assignment_id): JsonResponse
+    public function revokeRole($id, $assignment_id): JsonResponse
     {
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 

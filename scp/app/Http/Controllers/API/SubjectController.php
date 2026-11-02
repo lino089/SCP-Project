@@ -71,7 +71,7 @@ class SubjectController extends Controller
     /**
      * Memperbarui data mata pelajaran.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $subject = Subject::findOrFail($id);
 
@@ -96,7 +96,7 @@ class SubjectController extends Controller
     /**
      * Menghapus mata pelajaran (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy($id): JsonResponse
     {
         $subject = Subject::findOrFail($id);
 

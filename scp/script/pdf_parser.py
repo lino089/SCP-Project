@@ -47,8 +47,8 @@ def parse_cell(cell_text):
     
     full_text = " ".join([l.strip() for l in cell_text.strip().split("\n") if l.strip()])
     
-    # Match teacher with or without closing quote (handles 78 unclosed quotes anomaly)
-    quote_match = re.search(r'"(\d+)\.?\s*([^"\n\r]+?)(?:"|\s+(?:LAB|OR|HALL)\b|$)', full_text)
+    # Match teacher with or without closing quote (handles unclosed quotes anomaly without consuming room keyword)
+    quote_match = re.search(r'"(\d+)\.?\s*([^"\n\r]+?)(?:"|(?=\s+(?:LAB|L\.|OR\d*|HALL|\d+)\b)|$)', full_text)
     
     fet_staff_id = None
     teacher_name = None

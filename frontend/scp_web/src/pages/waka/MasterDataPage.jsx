@@ -10,6 +10,9 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
+  CheckSquare,
+  XSquare,
+  Eye,
 } from 'lucide-react';
 import {
   Button,
@@ -22,9 +25,12 @@ import {
   SearchInput,
   ConfirmDialog,
   FileUpload,
+  PasswordModal,
 } from '../../components/shared';
 import { SkeletonRow, EmptyState, ErrorState } from '../../components/feedback';
+import { authApi } from '../../services/api';
 import {
+  masterDataSummaryApi,
   classApi,
   roomApi,
   subjectApi,
@@ -47,6 +53,8 @@ export default function MasterDataPage() {
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
   const [studentList, setStudentList] = useState([]);
+  const [tabCounts, setTabCounts] = useState({ kelas: 0, ruang: 0, mapel: 0, guru: 0, siswa: 0 });
+  const [loadedTabs, setLoadedTabs] = useState(new Set());
 
   // Teacher Import & Template states
   const [isTeacherImportModalOpen, setIsTeacherImportModalOpen] = useState(false);
@@ -88,90 +96,121 @@ export default function MasterDataPage() {
   // Teacher assignment modal
   const [assignmentTeacher, setAssignmentTeacher] = useState(null);
 
-  // Manual refresh handler
-  const handleRefresh = useCallback(async () => {
+  // Row selection states for Guru and Siswa
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+
+  // Detail Modal state (Read action)
+  const [detailItem, setDetailItem] = useState(null);
+
+  // Bulk Delete states
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteSummary, setBulkDeleteSummary] = useState(null);
+
+  // Step-Up Auth Password Confirmation States
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordModalLoading, setPasswordModalLoading] = useState(false);
+  const [passwordModalError, setPasswordModalError] = useState('');
+  const [pendingPasswordAction, setPendingPasswordAction] = useState(null);
+
+  // Fetch summary counts for instant tab badges (~2ms)
+  const refreshSummary = useCallback(async () => {
+    try {
+      const res = await masterDataSummaryApi.getSummary();
+      if (res?.data) {
+        setTabCounts({
+          kelas: Number(res.data.classes || 0),
+          ruang: Number(res.data.rooms || 0),
+          mapel: Number(res.data.subjects || 0),
+          guru: Number(res.data.teachers || 0),
+          siswa: Number(res.data.students || 0),
+        });
+      }
+    } catch {
+      // Graceful fallback
+    }
+  }, []);
+
+  // Load specific tab data with in-memory caching
+  const loadTabData = useCallback(async (tabId, force = false) => {
+    if (!force && loadedTabs.has(tabId)) {
+      // Data already in memory, render instantly
+      return;
+    }
+
     setIsLoading(true);
     setFetchError(null);
     try {
-      if (activeTab === 'kelas') {
+      if (tabId === 'kelas') {
         const res = await classApi.getClasses({ per_page: 100 });
-        if (res?.data) setClassList(res.data);
-      } else if (activeTab === 'ruang') {
+        if (res?.data) {
+          setClassList(res.data);
+          setTabCounts((prev) => ({ ...prev, kelas: res.data.length }));
+        }
+      } else if (tabId === 'ruang') {
         const res = await roomApi.getRooms({ per_page: 100 });
-        if (res?.data) setRoomList(res.data);
-      } else if (activeTab === 'mapel') {
+        if (res?.data) {
+          setRoomList(res.data);
+          setTabCounts((prev) => ({ ...prev, ruang: res.data.length }));
+        }
+      } else if (tabId === 'mapel') {
         const res = await subjectApi.getSubjects({ per_page: 100 });
-        if (res?.data) setSubjectList(res.data);
-      } else if (activeTab === 'guru') {
-        const [tRes, cRes] = await Promise.all([
+        if (res?.data) {
+          setSubjectList(res.data);
+          setTabCounts((prev) => ({ ...prev, mapel: res.data.length }));
+        }
+      } else if (tabId === 'guru') {
+        const [tRes, cRes, sRes] = await Promise.all([
           teacherApi.getTeachers({ per_page: 100 }),
           classApi.getClasses({ per_page: 100 }).catch(() => null),
+          subjectApi.getSubjects({ per_page: 100 }).catch(() => null),
         ]);
-        if (tRes?.data) setTeacherList(tRes.data);
+        if (tRes?.data) {
+          setTeacherList(tRes.data);
+          setTabCounts((prev) => ({ ...prev, guru: tRes.data.length }));
+        }
         if (cRes?.data) setClassList(cRes.data);
-      } else if (activeTab === 'siswa') {
+        if (sRes?.data) setSubjectList(sRes.data);
+      } else if (tabId === 'siswa') {
         const [sRes, cRes] = await Promise.all([
-          studentApi.getStudents({ per_page: 100 }),
+          studentApi.getStudents({ all: 1, per_page: 5000 }),
           classApi.getClasses({ per_page: 100 }).catch(() => null),
         ]);
-        if (sRes?.data) setStudentList(sRes.data);
+        if (sRes?.data) {
+          setStudentList(sRes.data);
+          setTabCounts((prev) => ({ ...prev, siswa: sRes.data.length }));
+        }
         if (cRes?.data) setClassList(cRes.data);
       }
-    } catch {
-      if (activeTab === 'kelas') setClassList([]);
-      else if (activeTab === 'ruang') setRoomList([]);
-      else if (activeTab === 'mapel') setSubjectList([]);
-      else if (activeTab === 'guru') { setTeacherList([]); setClassList([]); }
-      else if (activeTab === 'siswa') { setStudentList([]); setClassList([]); }
+      setLoadedTabs((prev) => new Set(prev).add(tabId));
+    } catch (err) {
+      setFetchError(err.message || 'Gagal memuat data.');
+      if (tabId === 'kelas') setClassList([]);
+      else if (tabId === 'ruang') setRoomList([]);
+      else if (tabId === 'mapel') setSubjectList([]);
+      else if (tabId === 'guru') { setTeacherList([]); setClassList([]); }
+      else if (tabId === 'siswa') { setStudentList([]); setClassList([]); }
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab]);
+  }, [loadedTabs]);
 
-  // Load data on mount & tab change without cascading render
+  // Load summary on mount
   useEffect(() => {
-    let isMounted = true;
-    async function init() {
-      try {
-        if (activeTab === 'kelas') {
-          const res = await classApi.getClasses({ per_page: 100 });
-          if (isMounted && res?.data) setClassList(res.data);
-        } else if (activeTab === 'ruang') {
-          const res = await roomApi.getRooms({ per_page: 100 });
-          if (isMounted && res?.data) setRoomList(res.data);
-        } else if (activeTab === 'mapel') {
-          const res = await subjectApi.getSubjects({ per_page: 100 });
-          if (isMounted && res?.data) setSubjectList(res.data);
-        } else if (activeTab === 'guru') {
-          const [tRes, cRes] = await Promise.all([
-            teacherApi.getTeachers({ per_page: 100 }),
-            classApi.getClasses({ per_page: 100 }).catch(() => null),
-          ]);
-          if (isMounted && tRes?.data) setTeacherList(tRes.data);
-          if (isMounted && cRes?.data) setClassList(cRes.data);
-        } else if (activeTab === 'siswa') {
-          const [sRes, cRes] = await Promise.all([
-            studentApi.getStudents({ per_page: 100 }),
-            classApi.getClasses({ per_page: 100 }).catch(() => null),
-          ]);
-          if (isMounted && sRes?.data) setStudentList(sRes.data);
-          if (isMounted && cRes?.data) setClassList(cRes.data);
-        }
-      } catch {
-        if (isMounted) {
-          if (activeTab === 'kelas') setClassList([]);
-          else if (activeTab === 'ruang') setRoomList([]);
-          else if (activeTab === 'mapel') setSubjectList([]);
-          else if (activeTab === 'guru') { setTeacherList([]); setClassList([]); }
-          else if (activeTab === 'siswa') { setStudentList([]); setClassList([]); }
-        }
-      }
-    }
-    init();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTab]);
+    refreshSummary();
+  }, [refreshSummary]);
+
+  // Load active tab data on mount & tab change
+  useEffect(() => {
+    loadTabData(activeTab);
+  }, [activeTab, loadTabData]);
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(async () => {
+    refreshSummary();
+    await loadTabData(activeTab, true);
+  }, [activeTab, loadTabData, refreshSummary]);
 
   // Template Download Handlers
   const handleDownloadTeacherTemplate = async () => {
@@ -226,9 +265,14 @@ export default function MasterDataPage() {
     try {
       const res = await teacherApi.importTeachers(formData);
       setTeacherImportSuccess(res.data || { imported_count: 0 });
-      // Refresh teacherList
-      const tRes = await teacherApi.getTeachers({ per_page: 100 }).catch(() => null);
+      // Refresh teacherList and subjectList
+      const [tRes, sRes] = await Promise.all([
+        teacherApi.getTeachers({ per_page: 100 }).catch(() => null),
+        subjectApi.getSubjects({ per_page: 100 }).catch(() => null),
+      ]);
       if (tRes?.data) setTeacherList(tRes.data);
+      if (sRes?.data) setSubjectList(sRes.data);
+      refreshSummary();
     } catch (err) {
       if (Array.isArray(err.errors)) {
         setTeacherImportErrors(err.errors);
@@ -259,11 +303,12 @@ export default function MasterDataPage() {
       setStudentImportSuccess(res.data || {});
       // Refresh both studentList and classList (since classes may be auto-created!)
       const [sRes, cRes] = await Promise.all([
-        studentApi.getStudents({ per_page: 100 }).catch(() => null),
+        studentApi.getStudents({ all: 1, per_page: 5000 }).catch(() => null),
         classApi.getClasses({ per_page: 100 }).catch(() => null),
       ]);
       if (sRes?.data) setStudentList(sRes.data);
       if (cRes?.data) setClassList(cRes.data);
+      refreshSummary();
     } catch (err) {
       if (Array.isArray(err.errors)) {
         setStudentImportErrors(err.errors);
@@ -282,13 +327,13 @@ export default function MasterDataPage() {
   // Tab definitions
   const tabs = useMemo(
     () => [
-      { id: 'kelas', label: 'Kelas', count: classList.length },
-      { id: 'ruang', label: 'Ruang', count: roomList.length },
-      { id: 'mapel', label: 'Mata Pelajaran', count: subjectList.length },
-      { id: 'guru', label: 'Guru', count: teacherList.length },
-      { id: 'siswa', label: 'Siswa', count: studentList.length },
+      { id: 'kelas', label: 'Kelas', count: tabCounts.kelas },
+      { id: 'ruang', label: 'Ruang', count: tabCounts.ruang },
+      { id: 'mapel', label: 'Mata Pelajaran', count: tabCounts.mapel },
+      { id: 'guru', label: 'Guru', count: tabCounts.guru },
+      { id: 'siswa', label: 'Siswa', count: tabCounts.siswa },
     ],
-    [classList.length, roomList.length, subjectList.length, teacherList.length, studentList.length]
+    [tabCounts]
   );
 
   const handleTabChange = (tabId) => {
@@ -320,6 +365,8 @@ export default function MasterDataPage() {
           nip: '',
           fet_staff_id: '',
           email: '',
+          phone_number: '',
+          subject_id: '',
         });
         break;
       case 'siswa':
@@ -363,6 +410,8 @@ export default function MasterDataPage() {
         nip: item.nis_nip || item.nip || '',
         fet_staff_id: item.fet_staff_id || '',
         email: item.email || '',
+        phone_number: item.phone_number || '',
+        subject_id: item.subject_id ? String(item.subject_id) : (item.subject?.id ? String(item.subject.id) : ''),
       });
     } else if (activeTab === 'siswa') {
       setFormData({
@@ -370,7 +419,7 @@ export default function MasterDataPage() {
         nis: item.nis_nip || item.nis || '',
         gender: item.gender || '',
         nisn: item.nisn || '',
-        class_id: item.class_id ? String(item.class_id) : '',
+        class_id: item.class_id ? String(item.class_id) : (item.school_class?.id ? String(item.school_class.id) : (item.schoolClass?.id ? String(item.schoolClass.id) : '')),
       });
     }
   }, [activeTab]);
@@ -436,10 +485,15 @@ export default function MasterDataPage() {
             nip: formData.nip,
             fet_staff_id: formData.fet_staff_id || null,
             email: formData.email || null,
+            phone_number: formData.phone_number || null,
+            subject_id: formData.subject_id ? Number(formData.subject_id) : null,
           };
           try {
             const res = await teacherApi.createTeacher(payload);
             const createdTeacher = res.data?.teacher || { id: Date.now(), ...payload, assignments: [] };
+            if (!createdTeacher.subject && payload.subject_id) {
+              createdTeacher.subject = subjectList.find((s) => s.id === payload.subject_id);
+            }
             const password = res.data?.password || 'GURU' + Math.floor(100000 + Math.random() * 900000);
             setTeacherList((prev) => [...prev, createdTeacher]);
             // Pop up the initial credential modal
@@ -496,9 +550,10 @@ export default function MasterDataPage() {
               gender: payload.gender,
               nisn: payload.nisn,
               schoolClass: classList.find((c) => c.id === payload.class_id),
+              school_class: classList.find((c) => c.id === payload.class_id),
             };
             const parent = res.data?.parent || {
-              name: 'Wali dari ' + payload.name,
+              name: 'Wali Murid ' + payload.name,
               nis_nip: 'P-' + payload.nis,
             };
             const password = res.data?.generate_password || 'SISWA' + Math.floor(1000 + Math.random() * 9000);
@@ -531,7 +586,7 @@ export default function MasterDataPage() {
             setCredentialModalData({
               type: 'student',
               student: fallbackStudent,
-              parent: { name: 'Wali dari ' + payload.name, nis_nip: 'P-' + payload.nis },
+              parent: { name: 'Wali Murid ' + payload.name, nis_nip: 'P-' + payload.nis },
               password: dummyPass,
             });
           }
@@ -582,24 +637,34 @@ export default function MasterDataPage() {
           }
           setSubjectList((prev) => prev.map((s) => (s.id === id ? { ...s, ...payload } : s)));
         } else if (activeTab === 'guru') {
-          const payload = {
-            name: formData.name,
-            nip: formData.nip,
-            fet_staff_id: formData.fet_staff_id || null,
-            email: formData.email || null,
-          };
-          try {
-            await teacherApi.updateTeacher(id, payload);
-          } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
+          const errors = {};
+          if (!formData.name?.trim()) errors.name = ['Nama lengkap guru wajib diisi.'];
+          if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            setIsSubmitting(false);
+            return;
           }
-          setTeacherList((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, ...payload, nis_nip: payload.nip } : t))
-          );
+
+          const payload = {
+            name: formData.name.trim(),
+            nip: formData.nip?.trim() || null,
+            fet_staff_id: formData.fet_staff_id?.trim() || null,
+            email: formData.email?.trim() || null,
+            phone_number: formData.phone_number?.trim() || null,
+            subject_id: formData.subject_id ? Number(formData.subject_id) : null,
+          };
+
+          // Step-Up Auth password confirmation for Guru edit
+          setPendingPasswordAction({
+            type: 'edit',
+            id,
+            payload,
+            name: formData.name.trim(),
+          });
+          setPasswordModalError('');
+          setIsPasswordModalOpen(true);
+          setIsSubmitting(false);
+          return;
         } else if (activeTab === 'siswa') {
           const errors = {};
           if (!formData.name?.trim()) errors.name = ['Nama lengkap siswa wajib diisi.'];
@@ -623,32 +688,22 @@ export default function MasterDataPage() {
             gender: formData.gender,
             nisn: formData.nisn.trim(),
           };
-          try {
-            await studentApi.updateStudent(id, payload);
-          } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-          }
-          setStudentList((prev) =>
-            prev.map((st) =>
-              st.id === id
-                ? {
-                    ...st,
-                    ...payload,
-                    nis_nip: payload.nis,
-                    gender: payload.gender,
-                    nisn: payload.nisn,
-                    schoolClass: classList.find((c) => c.id === payload.class_id),
-                  }
-                : st
-            )
-          );
+
+          // Step-Up Auth password confirmation for Siswa edit
+          setPendingPasswordAction({
+            type: 'edit',
+            id,
+            payload,
+            name: formData.name.trim(),
+          });
+          setPasswordModalError('');
+          setIsPasswordModalOpen(true);
+          setIsSubmitting(false);
+          return;
         }
       }
 
+      refreshSummary();
       setModalType(null);
       setEditingItem(null);
     } finally {
@@ -658,8 +713,17 @@ export default function MasterDataPage() {
 
   // Delete Action Handler
   const handleOpenDelete = useCallback((item) => {
-    setDeletingItem(item);
-  }, []);
+    if (activeTab === 'guru' || activeTab === 'siswa') {
+      setPendingPasswordAction({
+        type: 'delete_single',
+        item,
+      });
+      setPasswordModalError('');
+      setIsPasswordModalOpen(true);
+    } else {
+      setDeletingItem(item);
+    }
+  }, [activeTab]);
 
   const handleConfirmDelete = async () => {
     if (!deletingItem) return;
@@ -672,9 +736,11 @@ export default function MasterDataPage() {
       if (activeTab === 'kelas') {
         try {
           await classApi.deleteClass(id);
+          setClassList((prev) => prev.filter((c) => c.id !== id));
         } catch (err) {
+          setDeletingItem(null);
+          refreshSummary();
           if (err.status === 409 || err.message?.includes('jadwal')) {
-            setDeletingItem(null);
             setConflictError({
               entityName: name,
               entityType: 'Kelas',
@@ -682,14 +748,17 @@ export default function MasterDataPage() {
             });
             return;
           }
+          alert(err.message || 'Gagal menghapus data kelas.');
+          return;
         }
-        setClassList((prev) => prev.filter((c) => c.id !== id));
       } else if (activeTab === 'ruang') {
         try {
           await roomApi.deleteRoom(id);
+          setRoomList((prev) => prev.filter((r) => r.id !== id));
         } catch (err) {
+          setDeletingItem(null);
+          refreshSummary();
           if (err.status === 409 || err.message?.includes('jadwal')) {
-            setDeletingItem(null);
             setConflictError({
               entityName: name,
               entityType: 'Ruangan',
@@ -697,14 +766,17 @@ export default function MasterDataPage() {
             });
             return;
           }
+          alert(err.message || 'Gagal menghapus data ruangan.');
+          return;
         }
-        setRoomList((prev) => prev.filter((r) => r.id !== id));
       } else if (activeTab === 'mapel') {
         try {
           await subjectApi.deleteSubject(id);
+          setSubjectList((prev) => prev.filter((s) => s.id !== id));
         } catch (err) {
+          setDeletingItem(null);
+          refreshSummary();
           if (err.status === 409 || err.message?.includes('jadwal')) {
-            setDeletingItem(null);
             setConflictError({
               entityName: name,
               entityType: 'Mata Pelajaran',
@@ -712,14 +784,18 @@ export default function MasterDataPage() {
             });
             return;
           }
+          alert(err.message || 'Gagal menghapus data mata pelajaran.');
+          return;
         }
-        setSubjectList((prev) => prev.filter((s) => s.id !== id));
       } else if (activeTab === 'guru') {
         try {
           await teacherApi.deleteTeacher(id);
+          setTeacherList((prev) => prev.filter((t) => t.id !== id));
+          setSelectedTeacherIds((prev) => prev.filter((tId) => tId !== id));
         } catch (err) {
+          setDeletingItem(null);
+          refreshSummary();
           if (err.status === 409 || err.message?.includes('jadwal')) {
-            setDeletingItem(null);
             setConflictError({
               entityName: name,
               entityType: 'Guru',
@@ -727,14 +803,18 @@ export default function MasterDataPage() {
             });
             return;
           }
+          alert(err.message || 'Gagal menghapus data guru.');
+          return;
         }
-        setTeacherList((prev) => prev.filter((t) => t.id !== id));
       } else if (activeTab === 'siswa') {
         try {
           await studentApi.deleteStudent(id);
+          setStudentList((prev) => prev.filter((s) => s.id !== id));
+          setSelectedStudentIds((prev) => prev.filter((sId) => sId !== id));
         } catch (err) {
+          setDeletingItem(null);
+          refreshSummary();
           if (err.status === 409) {
-            setDeletingItem(null);
             setConflictError({
               entityName: name,
               entityType: 'Siswa',
@@ -742,10 +822,12 @@ export default function MasterDataPage() {
             });
             return;
           }
+          alert(err.message || 'Gagal menghapus data siswa.');
+          return;
         }
-        setStudentList((prev) => prev.filter((s) => s.id !== id));
       }
       setDeletingItem(null);
+      refreshSummary();
     } finally {
       setIsDeleting(false);
     }
@@ -807,59 +889,348 @@ export default function MasterDataPage() {
 
   // Filtered dataset based on search & levels
   const filteredData = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    const q = (typeof searchQuery === 'string' ? searchQuery : (searchQuery?.target?.value ?? '')).toLowerCase().trim();
 
     if (activeTab === 'kelas') {
       return classList.filter((c) => {
         if (levelFilter !== 'ALL' && String(c.level) !== levelFilter) return false;
         if (!q) return true;
-        return c.name.toLowerCase().includes(q) || String(c.level).includes(q);
+        return String(c.name || '').toLowerCase().includes(q) || String(c.level || '').includes(q);
       });
     }
 
     if (activeTab === 'ruang') {
       return roomList.filter((r) => {
         if (!q) return true;
-        return r.name.toLowerCase().includes(q) || String(r.capacity).includes(q);
+        return String(r.name || '').toLowerCase().includes(q) || String(r.capacity || '').includes(q);
       });
     }
 
     if (activeTab === 'mapel') {
       return subjectList.filter((s) => {
         if (!q) return true;
-        return s.name.toLowerCase().includes(q);
+        return String(s.name || '').toLowerCase().includes(q);
       });
     }
 
     if (activeTab === 'guru') {
       return teacherList.filter((t) => {
         if (!q) return true;
-        const nip = t.nis_nip || t.nip || '';
-        const fet = t.fet_staff_id || '';
+        const name = String(t.name || '').toLowerCase();
+        const nip = String(t.nis_nip || t.nip || '').toLowerCase();
+        const fet = String(t.fet_staff_id || '').toLowerCase();
         return (
-          t.name.toLowerCase().includes(q) ||
-          nip.toLowerCase().includes(q) ||
-          fet.toLowerCase().includes(q)
+          name.includes(q) ||
+          nip.includes(q) ||
+          fet.includes(q)
         );
       });
     }
 
     if (activeTab === 'siswa') {
       return studentList.filter((s) => {
-        const nis = s.nis_nip || s.nis || '';
-        const className = s.schoolClass?.name || s.className || '';
-        if (levelFilter !== 'ALL' && String(s.schoolClass?.level) !== levelFilter) return false;
+        const name = String(s.name || '').toLowerCase();
+        const nis = String(s.nis_nip || s.nis || '').toLowerCase();
+        const className = String(s.school_class?.name || s.schoolClass?.name || s.className || '').toLowerCase();
+        const classLevel = s.school_class?.level || s.schoolClass?.level;
+        if (levelFilter !== 'ALL' && String(classLevel) !== levelFilter) return false;
         if (!q) return true;
         return (
-          s.name.toLowerCase().includes(q) ||
-          nis.toLowerCase().includes(q) ||
-          className.toLowerCase().includes(q)
+          name.includes(q) ||
+          nis.includes(q) ||
+          className.includes(q)
         );
       });
     }
 
     return [];
   }, [activeTab, searchQuery, levelFilter, classList, roomList, subjectList, teacherList, studentList]);
+
+  // Current active selection based on active tab
+  const currentSelectedIds = useMemo(() => {
+    if (activeTab === 'guru') return selectedTeacherIds;
+    if (activeTab === 'siswa') return selectedStudentIds;
+    return [];
+  }, [activeTab, selectedTeacherIds, selectedStudentIds]);
+
+  const selectedItems = useMemo(() => {
+    if (activeTab === 'guru') {
+      return teacherList.filter((t) => selectedTeacherIds.includes(t.id));
+    }
+    if (activeTab === 'siswa') {
+      return studentList.filter((s) => selectedStudentIds.includes(s.id));
+    }
+    return [];
+  }, [activeTab, teacherList, studentList, selectedTeacherIds, selectedStudentIds]);
+
+  const singleSelectedItem = selectedItems.length === 1 ? selectedItems[0] : null;
+
+  const setCurrentSelectedIds = useCallback(
+    (updater) => {
+      if (activeTab === 'guru') {
+        setSelectedTeacherIds(updater);
+      } else if (activeTab === 'siswa') {
+        setSelectedStudentIds(updater);
+      }
+    },
+    [activeTab]
+  );
+
+  const handleSelectRow = useCallback(
+    (key, isChecked) => {
+      setCurrentSelectedIds((prev) => {
+        if (isChecked) {
+          return prev.includes(key) ? prev : [...prev, key];
+        } else {
+          return prev.filter((id) => id !== key);
+        }
+      });
+    },
+    [setCurrentSelectedIds]
+  );
+
+  const handleSelectAllCurrentPage = useCallback(
+    (pageKeys, willSelectAll) => {
+      setCurrentSelectedIds((prev) => {
+        if (willSelectAll) {
+          const toAdd = pageKeys.filter((k) => !prev.includes(k));
+          return [...prev, ...toAdd];
+        } else {
+          return prev.filter((id) => !pageKeys.includes(id));
+        }
+      });
+    },
+    [setCurrentSelectedIds]
+  );
+
+  const handleSelectAllFiltered = useCallback(() => {
+    const allFilteredKeys = filteredData.map((item) => item.id);
+    setCurrentSelectedIds(allFilteredKeys);
+  }, [filteredData, setCurrentSelectedIds]);
+
+  const handleDeselectAll = useCallback(() => {
+    setCurrentSelectedIds([]);
+  }, [setCurrentSelectedIds]);
+
+  // Bulk Delete Execution with Step-Up Auth Password
+  const executeBulkDeleteWithPassword = useCallback(async (password) => {
+    if (selectedItems.length === 0) return;
+    setIsBulkDeleting(true);
+
+    const total = selectedItems.length;
+    const successfulIds = [];
+    const failedItems = [];
+
+    for (const item of selectedItems) {
+      try {
+        if (activeTab === 'guru') {
+          await teacherApi.deleteTeacher(item.id, { password });
+        } else if (activeTab === 'siswa') {
+          await studentApi.deleteStudent(item.id, { password });
+        }
+        successfulIds.push(item.id);
+      } catch (err) {
+        const errMsg =
+          err?.message ||
+          (err?.status === 409
+            ? 'Data masih digunakan pada jadwal aktif atau relasi data lainnya.'
+            : 'Gagal menghapus data.');
+        failedItems.push({
+          id: item.id,
+          name: item.name || `ID #${item.id}`,
+          identifier:
+            activeTab === 'guru'
+              ? item.nip || (item.fet_staff_id ? `FET: ${item.fet_staff_id}` : '-')
+              : item.nis || '-',
+          reason: errMsg,
+        });
+      }
+    }
+
+    if (successfulIds.length > 0) {
+      if (activeTab === 'guru') {
+        setTeacherList((prev) => prev.filter((t) => !successfulIds.includes(t.id)));
+        setSelectedTeacherIds((prev) => prev.filter((id) => !successfulIds.includes(id)));
+      } else if (activeTab === 'siswa') {
+        setStudentList((prev) => prev.filter((s) => !successfulIds.includes(s.id)));
+        setSelectedStudentIds((prev) => prev.filter((id) => !successfulIds.includes(id)));
+      }
+      refreshSummary();
+    }
+
+    setIsBulkDeleting(false);
+
+    setBulkDeleteSummary({
+      total,
+      successCount: successfulIds.length,
+      failedCount: failedItems.length,
+      failedItems,
+      entityType: activeTab === 'guru' ? 'Guru' : 'Siswa',
+    });
+  }, [selectedItems, activeTab, refreshSummary]);
+
+  // Request Bulk Delete - Opens Password Confirmation Modal
+  const handleRequestBulkDeletePassword = useCallback(() => {
+    setIsBulkDeleteOpen(false);
+    setPendingPasswordAction({
+      type: 'delete_bulk',
+    });
+    setPasswordModalError('');
+    setIsPasswordModalOpen(true);
+  }, []);
+
+  // Step-Up Auth Password Confirmation Handler (Edit & Delete)
+  const handlePasswordConfirm = useCallback(async (password) => {
+    if (!pendingPasswordAction) return;
+    setPasswordModalLoading(true);
+    setPasswordModalError('');
+
+    try {
+      // 1. Verifikasi kata sandi pengguna saat ini ke backend
+      await authApi.verifyPassword(password);
+    } catch (err) {
+      const errMsg =
+        err?.errors?.password?.[0] ||
+        err?.message ||
+        'Kata sandi yang Anda masukkan salah.';
+      setPasswordModalError(errMsg);
+      setPasswordModalLoading(false);
+      return;
+    }
+
+    try {
+      if (pendingPasswordAction.type === 'edit') {
+        const { id, payload } = pendingPasswordAction;
+        const payloadWithPassword = { ...payload, password };
+
+        if (activeTab === 'guru') {
+          try {
+            const res = await teacherApi.updateTeacher(id, payloadWithPassword);
+            const updatedTeacherData = res.data?.data || res.data;
+            const chosenSubject = payload.subject_id
+              ? subjectList.find((s) => s.id === payload.subject_id)
+              : null;
+            setTeacherList((prev) =>
+              prev.map((t) =>
+                t.id === id
+                  ? {
+                      ...t,
+                      ...payload,
+                      nis_nip: payload.nip,
+                      subject: updatedTeacherData?.subject || chosenSubject || null,
+                    }
+                  : t
+              )
+            );
+          } catch (apiErr) {
+            if (apiErr.errors) {
+              setFormErrors(apiErr.errors);
+              setIsPasswordModalOpen(false);
+              setPasswordModalLoading(false);
+              return;
+            }
+          }
+        } else if (activeTab === 'siswa') {
+          try {
+            await studentApi.updateStudent(id, payloadWithPassword);
+          } catch (apiErr) {
+            if (apiErr.errors) {
+              setFormErrors(apiErr.errors);
+              setIsPasswordModalOpen(false);
+              setPasswordModalLoading(false);
+              return;
+            }
+          }
+          setStudentList((prev) =>
+            prev.map((st) =>
+              st.id === id
+                ? {
+                    ...st,
+                    ...payload,
+                    nis_nip: payload.nis,
+                    gender: payload.gender,
+                    nisn: payload.nisn,
+                    schoolClass: classList.find((c) => c.id === payload.class_id),
+                    school_class: classList.find((c) => c.id === payload.class_id),
+                  }
+                : st
+            )
+          );
+        }
+
+        setIsPasswordModalOpen(false);
+        setModalType(null);
+        setEditingItem(null);
+        setPendingPasswordAction(null);
+        refreshSummary();
+      } else if (pendingPasswordAction.type === 'delete_single') {
+        const item = pendingPasswordAction.item;
+        const id = item.id;
+        const name = item.name || 'Item';
+
+        if (activeTab === 'guru') {
+          try {
+            await teacherApi.deleteTeacher(id, { password });
+            setTeacherList((prev) => prev.filter((t) => t.id !== id));
+            setSelectedTeacherIds((prev) => prev.filter((tId) => tId !== id));
+          } catch (err) {
+            setIsPasswordModalOpen(false);
+            setPendingPasswordAction(null);
+            refreshSummary();
+            if (err.status === 409 || err.message?.includes('jadwal')) {
+              setConflictError({
+                entityName: name,
+                entityType: 'Guru',
+                errorMessage: err.message,
+              });
+              return;
+            }
+            throw err;
+          }
+        } else if (activeTab === 'siswa') {
+          try {
+            await studentApi.deleteStudent(id, { password });
+            setStudentList((prev) => prev.filter((s) => s.id !== id));
+            setSelectedStudentIds((prev) => prev.filter((sId) => sId !== id));
+          } catch (err) {
+            setIsPasswordModalOpen(false);
+            setPendingPasswordAction(null);
+            refreshSummary();
+            if (err.status === 409) {
+              setConflictError({
+                entityName: name,
+                entityType: 'Siswa',
+                errorMessage: err.message,
+              });
+              return;
+            }
+            throw err;
+          }
+        }
+
+        setIsPasswordModalOpen(false);
+        setPendingPasswordAction(null);
+        refreshSummary();
+      } else if (pendingPasswordAction.type === 'delete_bulk') {
+        setIsPasswordModalOpen(false);
+        setPendingPasswordAction(null);
+        await executeBulkDeleteWithPassword(password);
+      }
+    } catch (actionErr) {
+      setPasswordModalError(
+        actionErr?.message || 'Terjadi kesalahan saat memproses permintaan.'
+      );
+    } finally {
+      setPasswordModalLoading(false);
+    }
+  }, [
+    pendingPasswordAction,
+    activeTab,
+    subjectList,
+    classList,
+    refreshSummary,
+    executeBulkDeleteWithPassword,
+  ]);
 
   // Dynamic columns definition
   const columns = useMemo(() => {
@@ -869,6 +1240,18 @@ export default function MasterDataPage() {
       align: 'right',
       renderCell: (row) => (
         <div className="master-data__action-cell">
+          {(activeTab === 'guru' || activeTab === 'siswa') && (
+            <button
+              type="button"
+              className="master-data__icon-btn"
+              onClick={() => setDetailItem(row)}
+              title="Lihat Detail Data"
+              aria-label="Lihat Detail Data"
+            >
+              <Eye size={14} />
+            </button>
+          )}
+
           {activeTab === 'guru' && (
             <button
               type="button"
@@ -1038,6 +1421,15 @@ export default function MasterDataPage() {
             ),
           },
           {
+            key: 'subject',
+            label: 'Mata Pelajaran',
+            renderCell: (r) => (
+              <span className="text-xs text-neutral-800 font-medium">
+                {r.subject?.name || <span className="text-neutral-400 italic">Belum Diatur</span>}
+              </span>
+            ),
+          },
+          {
             key: 'fet_staff_id',
             label: 'FET Staff ID',
             renderCell: (r) =>
@@ -1133,7 +1525,7 @@ export default function MasterDataPage() {
             label: 'Kelas',
             renderCell: (r) => (
               <Badge variant="neutral">
-                {r.schoolClass?.name || r.className || 'Belum Masuk Kelas'}
+                {r.school_class?.name || r.schoolClass?.name || r.className || 'Belum Masuk Kelas'}
               </Badge>
             ),
           },
@@ -1143,7 +1535,7 @@ export default function MasterDataPage() {
       default:
         return [];
     }
-  }, [activeTab, classList, handleOpenEdit, handleOpenAssignment, handleOpenDelete]);
+  }, [activeTab, classList, handleOpenEdit, handleOpenAssignment, handleOpenDelete, setDetailItem]);
 
   return (
     <div className="master-data-page">
@@ -1239,8 +1631,11 @@ export default function MasterDataPage() {
         <div className="master-data__search">
           <SearchInput
             placeholder={`Cari ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase()}...`}
-            value={searchQuery}
-            onChange={(val) => setSearchQuery(val)}
+            value={typeof searchQuery === 'string' ? searchQuery : ''}
+            onChange={(val) => {
+              const str = typeof val === 'string' ? val : (val?.target?.value ?? '');
+              setSearchQuery(str);
+            }}
           />
         </div>
 
@@ -1257,8 +1652,157 @@ export default function MasterDataPage() {
               <option value="12">Tingkat 12</option>
             </select>
           )}
+
+          {/* Quick Select All / Deselect All Button for Guru & Siswa */}
+          {(activeTab === 'guru' || activeTab === 'siswa') && filteredData.length > 0 && (
+            <div className="master-data__selection-quick-actions">
+              {currentSelectedIds.length === 0 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={CheckSquare}
+                  onClick={handleSelectAllFiltered}
+                  title={`Pilih seluruh ${filteredData.length} ${activeTab === 'guru' ? 'guru' : 'siswa'}`}
+                >
+                  Pilih Semua ({filteredData.length})
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={XSquare}
+                  onClick={handleDeselectAll}
+                  title="Batalkan seluruh pilihan data"
+                >
+                  Batalkan Pilihan ({currentSelectedIds.length})
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Selection Action Toolbar for Guru & Siswa */}
+      {(activeTab === 'guru' || activeTab === 'siswa') && currentSelectedIds.length > 0 && (
+        <div className="master-data__selection-bar">
+          <div className="master-data__selection-bar-left">
+            <div className="master-data__selection-bar-info">
+              <CheckSquare size={16} className="text-slate-800" />
+              <span className="master-data__selection-bar-text">
+                <strong>{currentSelectedIds.length}</strong> {activeTab === 'guru' ? 'guru' : 'siswa'} dipilih
+                {filteredData.length < (activeTab === 'guru' ? teacherList.length : studentList.length) && (
+                  <span className="text-xs text-neutral-500 font-normal ml-1">
+                    (dari {filteredData.length} hasil filter)
+                  </span>
+                )}
+              </span>
+            </div>
+
+            <div className="master-data__selection-bar-actions">
+              {currentSelectedIds.length < filteredData.length && (
+                <button
+                  type="button"
+                  className="master-data__selection-link-btn"
+                  onClick={handleSelectAllFiltered}
+                >
+                  Pilih Semua ({filteredData.length})
+                </button>
+              )}
+              <button
+                type="button"
+                className="master-data__selection-link-btn master-data__selection-link-btn--danger"
+                onClick={handleDeselectAll}
+              >
+                Batalkan Pilihan
+              </button>
+            </div>
+          </div>
+
+          <div className="master-data__selection-crud-toolbar">
+            {/* Create */}
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Plus}
+              onClick={handleOpenAdd}
+              title={`Tambah data ${activeTab === 'guru' ? 'guru' : 'siswa'} baru`}
+            >
+              Tambah Baru
+            </Button>
+
+            {/* Read: Detail */}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Eye}
+              onClick={() => singleSelectedItem && setDetailItem(singleSelectedItem)}
+              disabled={currentSelectedIds.length !== 1}
+              title={
+                currentSelectedIds.length === 1
+                  ? `Lihat detail lengkap ${singleSelectedItem?.name}`
+                  : 'Pilih tepat 1 data untuk melihat detail'
+              }
+            >
+              Lihat Detail
+            </Button>
+
+            {/* Update: Edit */}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Pencil}
+              onClick={() => singleSelectedItem && handleOpenEdit(singleSelectedItem)}
+              disabled={currentSelectedIds.length !== 1}
+              title={
+                currentSelectedIds.length === 1
+                  ? `Edit data ${singleSelectedItem?.name}`
+                  : 'Pilih tepat 1 data untuk mengedit data'
+              }
+            >
+              Edit
+            </Button>
+
+            {/* Extra for Guru: Penugasan */}
+            {activeTab === 'guru' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={UserCheck}
+                onClick={() => singleSelectedItem && handleOpenAssignment(singleSelectedItem)}
+                disabled={currentSelectedIds.length !== 1}
+                title={
+                  currentSelectedIds.length === 1
+                    ? `Kelola tugas tambahan & mapel ${singleSelectedItem?.name}`
+                    : 'Pilih tepat 1 guru untuk penugasan'
+                }
+              >
+                Penugasan
+              </Button>
+            )}
+
+            {/* Delete: Single or Bulk */}
+            <Button
+              variant="danger"
+              size="sm"
+              icon={Trash2}
+              onClick={() => {
+                if (currentSelectedIds.length === 1) {
+                  handleOpenDelete(singleSelectedItem);
+                } else {
+                  setIsBulkDeleteOpen(true);
+                }
+              }}
+              title={
+                currentSelectedIds.length === 1
+                  ? `Hapus data ${singleSelectedItem?.name}`
+                  : `Hapus ${currentSelectedIds.length} data terpilih`
+              }
+            >
+              Hapus {currentSelectedIds.length > 1 ? `(${currentSelectedIds.length})` : ''}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table Data or States */}
       {isLoading ? (
@@ -1284,7 +1828,18 @@ export default function MasterDataPage() {
         />
       ) : (
         <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden shadow-2xs">
-          <Table columns={columns} data={filteredData} />
+          <Table
+            columns={columns}
+            data={filteredData}
+            pageSize={25}
+            selectable={activeTab === 'guru' || activeTab === 'siswa'}
+            selectedRowKeys={currentSelectedIds}
+            onSelectRow={handleSelectRow}
+            onSelectAllCurrentPage={handleSelectAllCurrentPage}
+            onSelectAllData={handleSelectAllFiltered}
+            onDeselectAll={handleDeselectAll}
+            selectionLabel={activeTab === 'guru' ? 'guru' : activeTab === 'siswa' ? 'siswa' : 'data'}
+          />
         </div>
       )}
 
@@ -1429,6 +1984,20 @@ export default function MasterDataPage() {
                 error={formErrors.fet_staff_id?.[0]}
               />
 
+              <Select
+                label="Mata Pelajaran yang Diampu"
+                value={formData.subject_id || ''}
+                onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
+                error={formErrors.subject_id?.[0]}
+                options={[
+                  { value: '', label: '-- Pilih Mata Pelajaran --' },
+                  ...subjectList.map((s) => ({
+                    value: String(s.id),
+                    label: s.name,
+                  })),
+                ]}
+              />
+
               <Input
                 label="Email Institusi (Opsional)"
                 type="email"
@@ -1436,6 +2005,15 @@ export default function MasterDataPage() {
                 value={formData.email || ''}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 error={formErrors.email?.[0]}
+              />
+
+              <Input
+                label="Nomor Telepon / WhatsApp (Opsional)"
+                type="tel"
+                placeholder="081234567890"
+                value={formData.phone_number || ''}
+                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                error={formErrors.phone_number?.[0]}
               />
 
               {modalType === 'create' && (
@@ -1611,9 +2189,8 @@ export default function MasterDataPage() {
               <span>Ketentuan Format Berkas Excel Guru:</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
-              <li>Header wajib: <strong>nip</strong> (wajib format teks), <strong>name</strong>, <strong>fet_staff_id</strong> (kode staf pada FET).</li>
-              <li>Header opsional: <strong>email</strong>, <strong>phone_number</strong>.</li>
-              <li>Akun login guru akan dibuat otomatis dengan username &amp; kata sandi default NIP (wajib ganti kata sandi pada login pertama).</li>
+              <li>Header wajib: <strong>nip</strong> (wajib format teks), <strong>name</strong>, <strong>fet_staff_id</strong> (kode staf pada FET), <strong>mata_pelajaran</strong> (mata pelajaran yang diampu).</li>
+              <li>Akun login guru akan dibuat otomatis dengan username &amp; kata sandi default NIP (wajib ganti kata sandi pada login pertama). Email dan nomor telepon dapat dilengkapi secara manual setelah akun terdaftar.</li>
             </ul>
           </div>
 
@@ -1745,9 +2322,9 @@ export default function MasterDataPage() {
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
               <li>Header wajib: <strong>nis</strong>, <strong>name</strong>, <strong>class_name</strong>, <strong>gender</strong> (L atau P).</li>
-              <li>Header opsional: <strong>nisn</strong> (10 digit numerik), <strong>parent_name</strong>, <strong>parent_phone</strong>.</li>
+              <li>Header opsional: <strong>nisn</strong> (10 digit numerik).</li>
               <li><strong>Auto-Create Kelas</strong>: Rombel baru pada kolom <code>class_name</code> akan didaftarkan otomatis dengan deteksi tingkat (10, 11, 12).</li>
-              <li><strong>Auto-Provisioning</strong>: Akun siswa &amp; akun orang tua (format <code>P-NIS</code>) dibuat secara otomatis.</li>
+              <li><strong>Auto-Provisioning Akun Orang Tua</strong>: Akun orang tua otomatis dibuat dengan format nama <strong>"Wali Murid [Nama Siswa]"</strong> dan username <code>P-[NIS]</code>. Nomor kontak orang tua dapat diinput secara manual setelah akun terdaftar.</li>
             </ul>
           </div>
 
@@ -1852,6 +2429,301 @@ export default function MasterDataPage() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Detail Modal (Read Action) */}
+      <Modal
+        isOpen={detailItem !== null}
+        onClose={() => setDetailItem(null)}
+        title={`Detail Data ${activeTab === 'guru' ? 'Guru' : 'Siswa'}`}
+        size="md"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Button variant="secondary" onClick={() => setDetailItem(null)}>
+              Tutup
+            </Button>
+            <div className="flex items-center gap-2">
+              {activeTab === 'guru' && detailItem && (
+                <Button
+                  variant="outline"
+                  icon={UserCheck}
+                  onClick={() => {
+                    const item = detailItem;
+                    setDetailItem(null);
+                    handleOpenAssignment(item);
+                  }}
+                >
+                  Penugasan
+                </Button>
+              )}
+              {detailItem && (
+                <Button
+                  variant="primary"
+                  icon={Pencil}
+                  onClick={() => {
+                    const item = detailItem;
+                    setDetailItem(null);
+                    handleOpenEdit(item);
+                  }}
+                >
+                  Edit Data
+                </Button>
+              )}
+            </div>
+          </div>
+        }
+      >
+        {detailItem && (
+          <div className="space-y-4">
+            <div className="master-data__detail-card">
+              <div className="master-data__detail-avatar">
+                {detailItem.name?.charAt(0)?.toUpperCase() || '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-base text-neutral-900 truncate">
+                    {detailItem.name}
+                  </h3>
+                  {activeTab === 'guru' ? (
+                    <Badge variant={detailItem.status === 'ASN' ? 'success' : 'neutral'}>
+                      {detailItem.status || 'GTT'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="primary">
+                      {detailItem.school_class?.name || detailItem.schoolClass?.name || detailItem.className || 'Belum Ada Kelas'}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-neutral-500 font-mono mt-0.5">
+                  {activeTab === 'guru'
+                    ? `NIP: ${detailItem.nip || detailItem.nis_nip || '-'} • Kode FET: ${detailItem.fet_staff_id || '-'}`
+                    : `NIS: ${detailItem.nis || detailItem.nis_nip || '-'} • NISN: ${detailItem.nisn || '-'}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="master-data__detail-grid">
+              {activeTab === 'guru' ? (
+                <>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Jenis Kelamin</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.gender === 'L' ? 'Laki-laki (L)' : detailItem.gender === 'P' ? 'Perempuan (P)' : '-'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Status Kepegawaian</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.status || 'GTT / Honorer'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Email</span>
+                    <span className="master-data__detail-value truncate" title={detailItem.email}>
+                      {detailItem.email || '-'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Nomor Telepon</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.phone_number || detailItem.phone || '-'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item col-span-2">
+                    <span className="master-data__detail-label">Mata Pelajaran Diampu</span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {Array.isArray(detailItem.subjects) && detailItem.subjects.length > 0 ? (
+                        detailItem.subjects.map((sub, idx) => (
+                          <Badge key={idx} variant="info">{sub.name || sub}</Badge>
+                        ))
+                      ) : detailItem.subject_name || detailItem.subject?.name ? (
+                        <Badge variant="info">{detailItem.subject_name || detailItem.subject?.name}</Badge>
+                      ) : (
+                        <span className="text-xs text-neutral-400">Belum ada mapel diampu</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="master-data__detail-item col-span-2">
+                    <span className="master-data__detail-label">Tugas Tambahan &amp; Jabatan</span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {Array.isArray(detailItem.roles) && detailItem.roles.length > 0 ? (
+                        detailItem.roles.map((r, idx) => (
+                          <Badge key={idx} variant="neutral">{r.name || r}</Badge>
+                        ))
+                      ) : detailItem.additional_task ? (
+                        <Badge variant="neutral">{detailItem.additional_task}</Badge>
+                      ) : (
+                        <span className="text-xs text-neutral-400">Guru Reguler (Tanpa Tugas Tambahan)</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">NIS</span>
+                    <span className="master-data__detail-value font-mono">{detailItem.nis || detailItem.nis_nip || '-'}</span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">NISN</span>
+                    <span className="master-data__detail-value font-mono">{detailItem.nisn || '-'}</span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Jenis Kelamin</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.gender === 'L' ? 'Laki-laki (L)' : detailItem.gender === 'P' ? 'Perempuan (P)' : '-'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Kelas / Rombel</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.school_class?.name || detailItem.schoolClass?.name || detailItem.className || '-'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Nama Orang Tua / Wali</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.parent?.name || `Wali Murid ${detailItem.name}`}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Username Akun Orang Tua</span>
+                    <span className="master-data__detail-value font-mono">P-{detailItem.nis || detailItem.nis_nip}</span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Kontak Orang Tua</span>
+                    <span className="master-data__detail-value">
+                      {detailItem.parent?.phone || detailItem.parent_phone || 'Belum diisi'}
+                    </span>
+                  </div>
+                  <div className="master-data__detail-item">
+                    <span className="master-data__detail-label">Status Siswa</span>
+                    <span className="master-data__detail-value">
+                      <Badge variant="success">Aktif</Badge>
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isBulkDeleteOpen}
+        onClose={() => !isBulkDeleting && setIsBulkDeleteOpen(false)}
+        onConfirm={handleRequestBulkDeletePassword}
+        title={`Hapus ${currentSelectedIds.length} ${activeTab === 'guru' ? 'Guru' : 'Siswa'} Terpilih`}
+        message={`Apakah Anda yakin ingin menghapus ${currentSelectedIds.length} data ${
+          activeTab === 'guru' ? 'guru' : 'siswa'
+        } terpilih secara massal? Tindakan ini tidak dapat dibatalkan.`}
+        confirmLabel="Lanjutkan ke Konfirmasi Sandi"
+        confirmVariant="danger"
+        loading={isBulkDeleting}
+      />
+
+      {/* Password Confirmation Modal (Step-Up Auth) */}
+      <PasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => {
+          if (!passwordModalLoading) {
+            setIsPasswordModalOpen(false);
+            setPasswordModalError('');
+            setPendingPasswordAction(null);
+          }
+        }}
+        onConfirm={handlePasswordConfirm}
+        title={
+          pendingPasswordAction?.type === 'edit'
+            ? `Konfirmasi Pembaruan Data ${activeTab === 'guru' ? 'Guru' : 'Siswa'}`
+            : pendingPasswordAction?.type === 'delete_bulk'
+            ? `Konfirmasi Hapus Massal (${selectedItems.length} Data)`
+            : `Konfirmasi Hapus Data ${activeTab === 'guru' ? 'Guru' : 'Siswa'}`
+        }
+        description={
+          pendingPasswordAction?.type === 'edit'
+            ? `Masukkan kata sandi akun Anda untuk memvalidasi dan menyimpan pembaruan data "${pendingPasswordAction?.name}".`
+            : pendingPasswordAction?.type === 'delete_bulk'
+            ? `Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk mengonfirmasi penghapusan ${selectedItems.length} data ${
+                activeTab === 'guru' ? 'guru' : 'siswa'
+              } terpilih secara permanen.`
+            : `Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk menghapus data "${pendingPasswordAction?.item?.name}".`
+        }
+        confirmText={
+          pendingPasswordAction?.type === 'edit'
+            ? 'Konfirmasi & Simpan'
+            : pendingPasswordAction?.type === 'delete_bulk'
+            ? `Konfirmasi & Hapus (${selectedItems.length})`
+            : 'Konfirmasi & Hapus'
+        }
+        confirmVariant={pendingPasswordAction?.type === 'edit' ? 'primary' : 'danger'}
+        loading={passwordModalLoading}
+        serverError={passwordModalError}
+      />
+
+      {/* Bulk Delete Summary / Report Modal */}
+      <Modal
+        isOpen={bulkDeleteSummary !== null}
+        onClose={() => setBulkDeleteSummary(null)}
+        title={`Laporan Penghapusan Massal ${bulkDeleteSummary?.entityType || 'Data'}`}
+        size="md"
+        footer={
+          <div className="flex justify-end w-full">
+            <Button variant="primary" onClick={() => setBulkDeleteSummary(null)}>
+              Tutup
+            </Button>
+          </div>
+        }
+      >
+        {bulkDeleteSummary && (
+          <div className="space-y-4">
+            {bulkDeleteSummary.failedCount === 0 ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-3 text-emerald-800 text-sm">
+                <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+                <div>
+                  <div className="font-semibold">Penghapusan Massal Berhasil</div>
+                  <div className="text-xs text-emerald-700 mt-0.5">
+                    Seluruh {bulkDeleteSummary.successCount} data {bulkDeleteSummary.entityType.toLowerCase()} terpilih berhasil dihapus dari sistem.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5 text-xs text-amber-800">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">
+                      {bulkDeleteSummary.successCount} dari {bulkDeleteSummary.total} data berhasil dihapus.
+                    </span>
+                    <p className="mt-0.5 text-amber-700">
+                      Terdapat {bulkDeleteSummary.failedCount} data yang tidak dapat dihapus karena keterkaitan relasi database (misal jadwal KBM aktif).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border border-neutral-200 rounded-lg overflow-hidden text-xs">
+                  <div className="bg-neutral-50 px-3 py-2 font-semibold text-neutral-700 border-b border-neutral-200">
+                    Daftar Data yang Gagal Dihapus ({bulkDeleteSummary.failedCount})
+                  </div>
+                  <div className="max-h-52 overflow-y-auto divide-y divide-neutral-100">
+                    {bulkDeleteSummary.failedItems.map((fail) => (
+                      <div key={fail.id} className="p-3 bg-white space-y-1">
+                        <div className="flex items-center justify-between font-medium text-neutral-900">
+                          <span>{fail.name}</span>
+                          <span className="text-[11px] font-mono text-neutral-500">{fail.identifier}</span>
+                        </div>
+                        <div className="text-[11px] text-red-600">
+                          {fail.reason}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

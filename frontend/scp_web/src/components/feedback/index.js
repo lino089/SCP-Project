@@ -1,5 +1,6 @@
 export { default as SkeletonRow } from './SkeletonRow';
 export { default as SkeletonCard } from './SkeletonCard';
+export { default as ScheduleTableSkeleton } from './ScheduleTableSkeleton';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
 export { default as ForbiddenState } from './ForbiddenState';

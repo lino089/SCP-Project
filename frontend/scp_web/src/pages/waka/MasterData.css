@@ -86,6 +86,141 @@
   border-color: #0F172A;
 }
 
+/* Selection Action Bar for Guru & Siswa */
+.master-data__selection-quick-actions {
+  display: flex;
+  align-items: center;
+}
+
+.master-data__selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 10px 16px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-left: 4px solid #0F172A;
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.master-data__selection-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.master-data__selection-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--neutral-800);
+}
+
+.master-data__selection-bar-text {
+  font-weight: 500;
+}
+
+.master-data__selection-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.master-data__selection-crud-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.master-data__selection-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0F172A;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.master-data__selection-link-btn:hover {
+  color: #2563EB;
+}
+
+.master-data__selection-link-btn--danger {
+  color: var(--danger-600);
+}
+
+.master-data__selection-link-btn--danger:hover {
+  color: var(--danger-700);
+}
+
+/* Detail Modal Styles */
+.master-data__detail-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-sm);
+}
+
+.master-data__detail-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #0F172A;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.master-data__detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .master-data__detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.master-data__detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.master-data__detail-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748B;
+}
+
+.master-data__detail-value {
+  font-size: 0.875rem;
+  color: #0F172A;
+  font-weight: 500;
+}
+
 .master-data__action-cell {
   display: flex;
   align-items: center;

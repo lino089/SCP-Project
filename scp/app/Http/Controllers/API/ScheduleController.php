@@ -43,9 +43,11 @@ class ScheduleController extends Controller
             'cycle' => 'nullable|integer|in:1,2',
             'day' => 'nullable|integer|between:1,7',
             'class_id' => 'nullable|integer|exists:classes,id',
+            'class_ids' => 'nullable',
             'teacher_id' => 'nullable|integer|exists:users,id',
             'status' => 'nullable|string|in:missing_journal',
-            'per_page' => 'nullable|integer|min:1|max:100',
+            'per_page' => 'nullable|integer|min:1|max:1000',
+            'all' => 'nullable|boolean',
         ]);
 
         $user = $request->user();
@@ -166,6 +168,13 @@ class ScheduleController extends Controller
 
             if ($request->filled('class_id')) {
                 $query->where('class_id', $request->input('class_id'));
+            } elseif ($request->filled('class_ids')) {
+                $rawIds = $request->input('class_ids');
+                $ids = is_array($rawIds) ? $rawIds : explode(',', (string) $rawIds);
+                $cleanIds = array_filter(array_map('intval', $ids));
+                if (!empty($cleanIds)) {
+                    $query->whereIn('class_id', $cleanIds);
+                }
             }
         } elseif ($user->role === 'student') {
             if ($user->class_id) {
@@ -184,6 +193,31 @@ class ScheduleController extends Controller
 
         if ($request->filled('day')) {
             $query->where('day_of_week', $request->input('day'));
+        }
+
+        $isAll = $request->boolean('all') || ($user->role === 'vice_principal' && $request->integer('per_page') >= 1000);
+
+        if ($isAll) {
+            $allSchedules = $query->orderBy('day_of_week')->orderBy('period_number')->get();
+            $referenceDate = Carbon::now('Asia/Jakarta');
+            $items = $allSchedules->map(function ($schedule) use ($referenceDate) {
+                $scheduleArray = $schedule->toArray();
+                $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
+                return $scheduleArray;
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data jadwal berhasil diambil.',
+                'data' => $items,
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => $allSchedules->count(),
+                    'total' => $allSchedules->count(),
+                    'last_page' => 1,
+                    'cycle' => $cycle,
+                ],
+            ], 200);
         }
 
         $schedules = $query->orderBy('day_of_week')->orderBy('period_number')->paginate($perPage);
@@ -289,7 +323,7 @@ class ScheduleController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $validated = $request->validate([
             'cycle_type' => 'required|integer|in:1,2',
@@ -371,7 +405,7 @@ class ScheduleController extends Controller
         ], 200);
     }
 
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
         $request->validate([
             'password' => 'required|string',

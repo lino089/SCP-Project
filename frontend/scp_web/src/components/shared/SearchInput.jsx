@@ -47,11 +47,18 @@ export default function SearchInput({
     return () => clearTimeout(timer);
   }, [value, debounceMs, onDebouncedChange]);
 
+  const handleInputChange = (e) => {
+    const val = typeof e?.target?.value !== 'undefined' ? e.target.value : (typeof e === 'string' ? e : '');
+    if (onChange) {
+      onChange(val);
+    }
+  };
+
   const handleClear = () => {
     if (onClear) {
       onClear();
     } else if (onChange) {
-      onChange({ target: { value: '' } });
+      onChange('');
     }
     inputRef.current?.focus();
   };
@@ -65,7 +72,7 @@ export default function SearchInput({
         ref={inputRef}
         type="text"
         value={value}
-        onChange={onChange}
+        onChange={handleInputChange}
         placeholder={placeholder}
         className="search-input-field"
         {...props}

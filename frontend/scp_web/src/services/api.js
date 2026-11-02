@@ -68,6 +68,7 @@ export const authApi = {
   getMe: () => api.get('/me'),
   logout: () => api.post('/logout'),
   changePassword: (data) => api.patch('/me/password', data),
+  verifyPassword: (password) => api.post('/me/verify-password', { password }),
   requestEmailOtp: (email) => api.post('/me/email', { email }),
   verifyEmailOtp: (data) => api.post('/me/email/verify', data),
   requestPhoneOtp: (phone) => api.post('/me/phone', { phone_number: phone }),

@@ -58,13 +58,22 @@ class ScheduleImportController extends Controller
             'parser_version' => 'v1.0',
         ]);
 
-        ParseSchedulePdfJob::dispatch($import->id);
+        try {
+            ParseSchedulePdfJob::dispatchSync($import->id);
+            $import->refresh();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('PDF Extraction Error: ' . $e->getMessage());
+            $import->update(['status' => 'failed']);
+            $import->refresh();
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'File jadwal diunggah. Sedang memproses...',
+            'message' => $import->status === 'preview_ready'
+                ? 'File jadwal berhasil diekstraksi. Preview siap ditinjau.'
+                : 'File jadwal diunggah. Sedang memproses...',
             'data' => $import,
-        ], 202);
+        ], $import->status === 'preview_ready' ? 200 : 202);
     }
 
     /**
@@ -159,18 +168,59 @@ class ScheduleImportController extends Controller
             $row->matched_room_id &&
             $row->matched_subject_id
         ) {
-            $conflictService = new ScheduleConflictService();
-            $conflicts = $conflictService->findConflicts([
-                'teacher_id' => $row->matched_teacher_id,
-                'class_id' => $row->matched_class_id,
-                'room_id' => $row->matched_room_id,
-                'cycle_type' => $import->cycle_type,
-                'day_of_week' => $row->day_of_week,
-                'period_number' => $row->period_number,
-                'duration_periods' => $row->duration_periods,
-            ]);
+            $batchClassIds = $import->rows
+                ->pluck('matched_class_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            if ($row->matched_class_id && !in_array($row->matched_class_id, $batchClassIds)) {
+                $batchClassIds[] = $row->matched_class_id;
+            }
 
-            $row->match_status = $conflicts->isEmpty() ? 'matched' : 'conflict';
+            // 1. Check intra-batch collisions against other non-excluded rows in the same import
+            $intraConflict = false;
+            $startPeriod = (int) $row->period_number;
+            $endPeriod = $startPeriod + (int) $row->duration_periods - 1;
+            $isSharedRoom = ScheduleConflictService::isSharedRoom($row->matched_room_id);
+
+            $otherRows = $import->rows()
+                ->where('id', '!=', $row->id)
+                ->where('match_status', '!=', 'excluded')
+                ->where('day_of_week', $row->day_of_week)
+                ->get();
+
+            foreach ($otherRows as $other) {
+                $otherStart = (int) $other->period_number;
+                $otherEnd = $otherStart + (int) $other->duration_periods - 1;
+                if ($startPeriod <= $otherEnd && $endPeriod >= $otherStart) {
+                    if (
+                        ($other->matched_teacher_id && $other->matched_teacher_id === $row->matched_teacher_id) ||
+                        ($other->matched_class_id && $other->matched_class_id === $row->matched_class_id) ||
+                        (!$isSharedRoom && $other->matched_room_id && $other->matched_room_id === $row->matched_room_id)
+                    ) {
+                        $intraConflict = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($intraConflict) {
+                $row->match_status = 'conflict';
+            } else {
+                $conflictService = new ScheduleConflictService();
+                $conflicts = $conflictService->findConflicts([
+                    'teacher_id' => $row->matched_teacher_id,
+                    'class_id' => $row->matched_class_id,
+                    'room_id' => $row->matched_room_id,
+                    'cycle_type' => $import->cycle_type,
+                    'day_of_week' => $row->day_of_week,
+                    'period_number' => $row->period_number,
+                    'duration_periods' => $row->duration_periods,
+                ], ignoreClassIds: $batchClassIds);
+
+                $row->match_status = $conflicts->isEmpty() ? 'matched' : 'conflict';
+            }
         } else {
             $row->match_status = 'unmatched';
         }
@@ -212,8 +262,22 @@ class ScheduleImportController extends Controller
         $insertedCount = 0;
 
         DB::transaction(function () use ($import, &$insertedCount) {
-            // Soft-delete previous schedules on this cycle_type only
-            Schedule::where('cycle_type', $import->cycle_type)->delete();
+            $batchClassIds = $import->rows
+                ->where('match_status', 'matched')
+                ->pluck('matched_class_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            // Soft-delete previous schedules on this cycle_type for target classes being updated
+            if (!empty($batchClassIds)) {
+                Schedule::where('cycle_type', $import->cycle_type)
+                    ->whereIn('class_id', $batchClassIds)
+                    ->delete();
+            } else {
+                Schedule::where('cycle_type', $import->cycle_type)->delete();
+            }
 
             foreach ($import->rows as $row) {
                 if ($row->match_status === 'matched') {
@@ -274,17 +338,19 @@ class ScheduleImportController extends Controller
             ], 422);
         }
 
-        // Delete temporary physical files
-        if ($import->file_path_kelas) {
-            Storage::disk('local')->delete($import->file_path_kelas);
-        }
-        if ($import->file_path_ruangan) {
-            Storage::disk('local')->delete($import->file_path_ruangan);
-        }
+        DB::transaction(function () use ($import) {
+            // Delete temporary physical files
+            if ($import->file_path_kelas) {
+                Storage::disk('local')->delete($import->file_path_kelas);
+            }
+            if ($import->file_path_ruangan) {
+                Storage::disk('local')->delete($import->file_path_ruangan);
+            }
 
-        // Delete rows and import
-        $import->rows()->delete();
-        $import->delete();
+            // Delete rows and import
+            $import->rows()->delete();
+            $import->delete();
+        });
 
         return response()->json([
             'success' => true,

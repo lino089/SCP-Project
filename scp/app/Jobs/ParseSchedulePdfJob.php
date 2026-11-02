@@ -96,7 +96,20 @@ class ParseSchedulePdfJob implements ShouldQueue
         $allSubjects = Subject::all();
         $allRooms = Room::all();
 
+        // Ensure clean state if import is re-parsed
+        $import->rows()->delete();
+
         $conflictService = new ScheduleConflictService();
+
+        // Identify all classes present in this import batch (schedules of these classes are being replaced/updated)
+        $batchClassIds = [];
+        foreach ($parseData as $row) {
+            $cls = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
+            if ($cls) {
+                $batchClassIds[$cls->id] = $cls->id;
+            }
+        }
+        $batchClassIds = array_values($batchClassIds);
 
         // Track intra-batch slots for conflict detection: key = "day-period"
         $batchSlots = [];
@@ -125,15 +138,16 @@ class ParseSchedulePdfJob implements ShouldQueue
             } else {
                 // Anti-collision checking: intra-batch and existing schedules
                 $hasConflict = false;
+                $isSharedRoom = ScheduleConflictService::isSharedRoom($matchedRoom);
 
                 // 1. Check intra-batch collisions
                 for ($p = $startPeriod; $p <= $endPeriod; $p++) {
                     $slotKey = "{$day}-{$p}";
                     if (isset($batchSlots[$slotKey])) {
                         if (
-                            in_array($matchedTeacher->id, $batchSlots[$slotKey]['teachers']) ||
-                            in_array($matchedClass->id, $batchSlots[$slotKey]['classes']) ||
-                            in_array($matchedRoom->id, $batchSlots[$slotKey]['rooms'])
+                            in_array($matchedTeacher->id, $batchSlots[$slotKey]['teachers'] ?? []) ||
+                            in_array($matchedClass->id, $batchSlots[$slotKey]['classes'] ?? []) ||
+                            (!$isSharedRoom && in_array($matchedRoom->id, $batchSlots[$slotKey]['rooms'] ?? []))
                         ) {
                             $hasConflict = true;
                             break;
@@ -142,6 +156,8 @@ class ParseSchedulePdfJob implements ShouldQueue
                 }
 
                 // 2. Check collisions against existing schedules on same cycle_type
+                // Note: Existing schedules belonging to classes in $batchClassIds are being replaced/updated
+                // by this import, so they are excluded to allow valid schedule updates without false-positive conflicts.
                 if (!$hasConflict) {
                     $existingConflicts = $conflictService->findConflicts([
                         'teacher_id' => $matchedTeacher->id,
@@ -151,7 +167,7 @@ class ParseSchedulePdfJob implements ShouldQueue
                         'day_of_week' => $day,
                         'period_number' => $startPeriod,
                         'duration_periods' => $duration,
-                    ]);
+                    ], ignoreClassIds: $batchClassIds);
 
                     if ($existingConflicts->isNotEmpty()) {
                         $hasConflict = true;
@@ -166,9 +182,14 @@ class ParseSchedulePdfJob implements ShouldQueue
                     // Register slot occupation in this batch
                     for ($p = $startPeriod; $p <= $endPeriod; $p++) {
                         $slotKey = "{$day}-{$p}";
+                        if (!isset($batchSlots[$slotKey])) {
+                            $batchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => []];
+                        }
                         $batchSlots[$slotKey]['teachers'][] = $matchedTeacher->id;
                         $batchSlots[$slotKey]['classes'][] = $matchedClass->id;
-                        $batchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
+                        if (!$isSharedRoom) {
+                            $batchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
+                        }
                     }
                 }
             }
@@ -215,15 +236,23 @@ class ParseSchedulePdfJob implements ShouldQueue
         }
 
         // Priority 2: Fallback to teacher name matching
+        // CRITICAL: If row specifies a fet_staff_id, NEVER match a teacher with a DIFFERENT non-empty fet_staff_id!
         if ($teacherRaw) {
             $cleanRaw = strtoupper(trim($teacherRaw));
 
+            $candidates = $teachers;
+            if ($fetStaffId !== null && $fetStaffId !== '') {
+                $candidates = $teachers->filter(function ($t) use ($fetStaffId) {
+                    return empty($t->fet_staff_id) || (string) $t->fet_staff_id === (string) $fetStaffId;
+                });
+            }
+
             // Exact match
-            $match = $teachers->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
+            $match = $candidates->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
             if ($match) return $match;
 
             // Substring match
-            $match = $teachers->first(
+            $match = $candidates->first(
                 fn ($t) => stripos($t->name, $cleanRaw) !== false || stripos($cleanRaw, $t->name) !== false
             );
             if ($match) return $match;
@@ -232,7 +261,7 @@ class ParseSchedulePdfJob implements ShouldQueue
             $cleanNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', $cleanRaw);
             $cleanNoTitle = trim($cleanNoTitle);
             if ($cleanNoTitle && $cleanNoTitle !== $cleanRaw) {
-                $match = $teachers->first(function ($t) use ($cleanNoTitle) {
+                $match = $candidates->first(function ($t) use ($cleanNoTitle) {
                     $tNameNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', strtoupper($t->name));
                     return stripos($tNameNoTitle, $cleanNoTitle) !== false || stripos($cleanNoTitle, $tNameNoTitle) !== false;
                 });
@@ -277,23 +306,35 @@ class ParseSchedulePdfJob implements ShouldQueue
         $match = $rooms->first(fn ($r) => strtoupper(trim($r->name)) === $code);
         if ($match) return $match;
 
-        // 2. Numeric room (e.g. "12" -> "Ruang 12", "Ruang Teori 12")
+        // 2. Numeric room (e.g. "12" -> "Ruang 12", "Ruang Teori 12", "R. 12")
+        // CRITICAL: Numeric rooms must NEVER match lab rooms (e.g. "16" must NOT match "L.16")
         if (is_numeric($code)) {
             $numMatch = $rooms->first(function ($r) use ($code) {
-                $rName = strtoupper($r->name);
-                return preg_match('/(?:RUANG(?:\s+TEORI)?\s+|^)' . preg_quote($code, '/') . '$/i', $rName);
+                $rName = strtoupper(trim($r->name));
+                if (preg_match('/^(?:LAB|L\.)/i', $rName)) {
+                    return false;
+                }
+                return preg_match('/^(?:RUANG(?:\s+TEORI)?|R\.?)\s*' . preg_quote($code, '/') . '$/i', $rName)
+                    || $rName === $code;
             });
             if ($numMatch) return $numMatch;
+
+            // Pure numeric code with no exact/theory match must NOT fall through to substring matching
+            return null;
         }
 
         // 3. Lab with number (e.g. "L.16", "LAB 16" -> "Lab Komputer 16", "L.16")
+        // CRITICAL: Lab rooms must NEVER match pure numeric rooms
         if (preg_match('/^(?:LAB\.?|L\.)\s*(\d+)$/i', $code, $m)) {
             $num = $m[1];
             $labMatch = $rooms->first(function ($r) use ($num) {
-                $rName = strtoupper($r->name);
-                return preg_match('/(?:LAB(?:ORATORIUM)?(?:\s+KOMPUTER)?|L\.?)\s*' . $num . '$/i', $rName);
+                $rName = strtoupper(trim($r->name));
+                return preg_match('/^(?:LAB(?:ORATORIUM)?(?:\s+KOMPUTER)?|L\.?)\s*' . $num . '$/i', $rName);
             });
             if ($labMatch) return $labMatch;
+
+            // Lab code with no matching lab room must NOT fall through to match a theory room
+            return null;
         }
 
         // 4. Special rooms
@@ -317,10 +358,17 @@ class ParseSchedulePdfJob implements ShouldQueue
             if ($hallMatch) return $hallMatch;
         }
 
-        // 5. Fallback substring
-        return $rooms->first(
-            fn ($r) => stripos($r->name, $code) !== false || stripos($code, $r->name) !== false
-        );
+        // 5. Fallback substring (only for descriptive names, avoiding lab vs numeric cross-matches)
+        return $rooms->first(function ($r) use ($code) {
+            $rName = strtoupper(trim($r->name));
+            if (is_numeric($code) || is_numeric($rName)) {
+                return false;
+            }
+            if (preg_match('/^(?:LAB|L\.)/i', $code) xor preg_match('/^(?:LAB|L\.)/i', $rName)) {
+                return false;
+            }
+            return stripos($rName, $code) !== false || stripos($code, $rName) !== false;
+        });
     }
 
     /**

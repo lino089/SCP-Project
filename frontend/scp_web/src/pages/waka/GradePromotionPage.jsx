@@ -160,7 +160,7 @@ export default function GradePromotionPage() {
 
   // Filtered students
   const filteredStudents = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    const q = (typeof searchQuery === 'string' ? searchQuery : (searchQuery?.target?.value ?? '')).toLowerCase().trim();
 
     return studentList.filter((s) => {
       const cls = classList.find((c) => c.id === s.class_id);
@@ -174,8 +174,9 @@ export default function GradePromotionPage() {
       }
 
       if (!q) return true;
-      const nis = s.nis_nip || s.nis || '';
-      return s.name.toLowerCase().includes(q) || nis.toLowerCase().includes(q);
+      const name = String(s.name || '').toLowerCase();
+      const nis = String(s.nis_nip || s.nis || '').toLowerCase();
+      return name.includes(q) || nis.includes(q);
     });
   }, [studentList, classList, searchQuery, selectedLevelFilter, selectedClassFilter]);
 
@@ -401,8 +402,11 @@ export default function GradePromotionPage() {
           <div className="promotion-search">
             <SearchInput
               placeholder="Cari siswa berdasarkan nama atau NIS..."
-              value={searchQuery}
-              onChange={(val) => setSearchQuery(val)}
+              value={typeof searchQuery === 'string' ? searchQuery : ''}
+              onChange={(val) => {
+                const str = typeof val === 'string' ? val : (val?.target?.value ?? '');
+                setSearchQuery(str);
+              }}
             />
           </div>
 

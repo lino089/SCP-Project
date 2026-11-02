@@ -166,7 +166,7 @@ class StudentManagementTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'id' => $parent->id,
-            'name' => 'Wali dari Doni Pratama',
+            'name' => 'Wali Murid Doni Pratama',
             'nis_nip' => 'P-1005',
         ]);
     }

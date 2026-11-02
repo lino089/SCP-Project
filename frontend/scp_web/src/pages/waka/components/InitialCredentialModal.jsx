@@ -42,7 +42,7 @@ Kelas: ${student.schoolClass?.name || student.className || '-'}
 Kata Sandi Awal: ${password}
 
 --- AKUN ORANG TUA / WALI ---
-Nama: ${parent.name || `Wali dari ${student.name}`}
+Nama: ${parent.name || `Wali Murid ${student.name}`}
 Username: ${parent.nis_nip || `P-${student.nis_nip || student.nis}`}
 Kata Sandi Awal: ${password}
 Status: Wajib Ganti Password saat login perdana.`;
@@ -165,7 +165,7 @@ Status: Wajib Ganti Password saat login perdana.`;
               <div className="credential-card__header">
                 <span className="credential-badge credential-badge--parent">Akun Orang Tua</span>
                 <span className="credential-user">
-                  {parent.name || `Wali dari ${student.name}`}
+                  {parent.name || `Wali Murid ${student.name}`}
                 </span>
               </div>
               <div className="credential-card__grid">

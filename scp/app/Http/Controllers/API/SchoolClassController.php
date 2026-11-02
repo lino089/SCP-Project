@@ -75,7 +75,7 @@ class SchoolClassController extends Controller
     /**
      * Memperbarui data kelas (nama, level, next_class_id).
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $class = Classes::findOrFail($id);
 
@@ -107,7 +107,7 @@ class SchoolClassController extends Controller
     /**
      * Menghapus kelas (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy($id): JsonResponse
     {
         $class = Classes::findOrFail($id);
 

@@ -26,6 +26,7 @@ import {
   Table,
   Modal,
   PasswordModal,
+  ConfirmDialog,
 } from '../../components/shared';
 import { scheduleImportApi } from '../../services/scheduleImportApi';
 import {
@@ -56,7 +57,7 @@ function mapImportRow(r) {
   let normalizedStatus;
   if (matchStatus === 'matched' || r.status === 'Matched') {
     normalizedStatus = 'Matched';
-  } else if (matchStatus === 'conflict' || r.status === 'Conflict' || Boolean(r.room_source_conflict)) {
+  } else if (matchStatus === 'conflict' || r.status === 'Conflict') {
     normalizedStatus = 'Conflict';
   } else if (isDuplicateOrExcluded) {
     normalizedStatus = 'Excluded';
@@ -157,6 +158,11 @@ export default function ScheduleImportPage() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState('');
   const [commitSuccess, setCommitSuccess] = useState(false);
+
+  // Cancel / Rollback modal state
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelBatchTargetId, setCancelBatchTargetId] = useState(null);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -351,25 +357,33 @@ export default function ScheduleImportPage() {
         // Ignore storage errors
       }
 
+      if (res.data?.status === 'preview_ready') {
+        clearPolling();
+        setProgressValue(100);
+        setProcessStatus('preview_ready');
+        setStatusMessage('Ekstraksi selesai! Data siap ditinjau dan divalidasi.');
+        return;
+      }
+
       setProgressValue(50);
       setProcessStatus('parsing');
-      setStatusMessage('Berkas diterima (HTTP 202 Accepted). Memproses ekstraksi koordinat FET...');
+      setStatusMessage('Berkas diterima. Memproses ekstraksi koordinat FET...');
 
       // Polling every 1.5s
       pollingRef.current = setInterval(async () => {
         pollingCountRef.current += 1;
 
-        if (pollingCountRef.current > 40) {
+        if (pollingCountRef.current > 80) {
           clearPolling();
           setProcessStatus('error');
           setErrorMessage(
-            'Proses ekstraksi memakan waktu lebih lama dari biasanya (melebihi batas waktu 60 detik). Anda dapat memeriksa halaman tinjauan secara manual atau mencoba kembali.'
+            'Proses ekstraksi memakan waktu lebih lama dari biasanya (melebihi batas waktu 120 detik). Anda dapat memeriksa halaman tinjauan secara manual atau mencoba kembali.'
           );
           return;
         }
 
         try {
-          const checkRes = await scheduleImportApi.getScheduleImport(importedId);
+          const checkRes = await scheduleImportApi.getImportDetail(importedId);
           const currentStatus = checkRes?.data?.status;
 
           if (currentStatus === 'preview_ready') {
@@ -609,24 +623,38 @@ export default function ScheduleImportPage() {
     }
   };
 
-  // Cancel / Delete Batch handler
-  const handleCancelImport = async () => {
-    const currentId = activeBatchId || uploadedBatchId;
-    if (currentId && !isNaN(Number(currentId))) {
+  // Open cancel confirmation dialog
+  const handleTriggerCancel = (batchId = null) => {
+    const target = batchId || activeBatchId || uploadedBatchId || draftBatchId;
+    setCancelBatchTargetId(target);
+    setIsCancelModalOpen(true);
+  };
+
+  // Execute cancel and rollback after confirmation
+  const handleExecuteCancel = async () => {
+    const targetId = cancelBatchTargetId || activeBatchId || uploadedBatchId || draftBatchId;
+    setIsCancelling(true);
+    try {
+      if (targetId && !isNaN(Number(targetId))) {
+        await scheduleImportApi.cancelImport(targetId);
+      }
+    } catch (err) {
+      console.error('Gagal membatalkan draf import:', err);
+    } finally {
       try {
-        await scheduleImportApi.cancelImport(currentId);
+        sessionStorage.removeItem('scp_last_schedule_import_id');
       } catch {
         // Ignore
       }
+      setDraftBatchId(null);
+      setUploadedBatchId(null);
+      setRows([]);
+      setIsCancelling(false);
+      setIsCancelModalOpen(false);
+      setCancelBatchTargetId(null);
+      handleResetUpload();
+      navigate('/kurikulum/jadwal');
     }
-    try {
-      sessionStorage.removeItem('scp_last_schedule_import_id');
-    } catch {
-      // Ignore
-    }
-    setDraftBatchId(null);
-    setRows([]);
-    navigate('/kurikulum/jadwal/import');
   };
 
   // Table rows filter
@@ -784,6 +812,13 @@ export default function ScheduleImportPage() {
 
           <div className="schedule-import-header-actions">
             <Button
+              variant="danger"
+              icon={Ban}
+              onClick={() => handleTriggerCancel(activeBatchId)}
+            >
+              Batalkan Impor
+            </Button>
+            <Button
               variant="outline"
               icon={ArrowLeft}
               onClick={() => navigate('/kurikulum/jadwal/import')}
@@ -922,7 +957,7 @@ export default function ScheduleImportPage() {
 
         {/* Sticky Bottom Action Bar */}
         <div className="review-import-bottom-bar">
-          <Button variant="secondary" onClick={handleCancelImport}>
+          <Button variant="danger" icon={Ban} onClick={() => handleTriggerCancel(activeBatchId)}>
             Batalkan &amp; Hapus Batch Impor
           </Button>
 
@@ -1052,6 +1087,24 @@ export default function ScheduleImportPage() {
           loading={isCommitting}
           error={commitError}
         />
+
+        {/* Confirmation Modal for Cancelling Import */}
+        <ConfirmDialog
+          isOpen={isCancelModalOpen}
+          onClose={() => {
+            if (!isCancelling) {
+              setIsCancelModalOpen(false);
+              setCancelBatchTargetId(null);
+            }
+          }}
+          onConfirm={handleExecuteCancel}
+          title="Konfirmasi Pembatalan Impor Jadwal"
+          message={`Apakah Anda yakin ingin membatalkan proses impor ini${cancelBatchTargetId ? ` (Batch #${cancelBatchTargetId})` : ''}? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali.`}
+          confirmLabel="Ya, Batalkan Impor"
+          cancelLabel="Kembali / Tetap Simpan"
+          confirmVariant="danger"
+          loading={isCancelling}
+        />
       </div>
     );
   }
@@ -1086,6 +1139,14 @@ export default function ScheduleImportPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="danger"
+              size="sm"
+              icon={Ban}
+              onClick={() => handleTriggerCancel(draftBatchId)}
+            >
+              Batalkan Draf
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1360,6 +1421,13 @@ export default function ScheduleImportPage() {
             </p>
 
             <div className="upload-ready-action-row">
+              <Button
+                variant="danger"
+                icon={Ban}
+                onClick={() => handleTriggerCancel(uploadedBatchId)}
+              >
+                Batalkan Draf #{uploadedBatchId}
+              </Button>
               <Button variant="secondary" icon={RefreshCw} onClick={handleResetUpload}>
                 Unggah Berkas Lain
               </Button>
@@ -1390,6 +1458,24 @@ export default function ScheduleImportPage() {
           </p>
         </div>
       </aside>
+
+      {/* Confirmation Modal for Cancelling Import */}
+      <ConfirmDialog
+        isOpen={isCancelModalOpen}
+        onClose={() => {
+          if (!isCancelling) {
+            setIsCancelModalOpen(false);
+            setCancelBatchTargetId(null);
+          }
+        }}
+        onConfirm={handleExecuteCancel}
+        title="Konfirmasi Pembatalan Impor Jadwal"
+        message={`Apakah Anda yakin ingin membatalkan proses impor ini${cancelBatchTargetId ? ` (Batch #${cancelBatchTargetId})` : ''}? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali.`}
+        confirmLabel="Ya, Batalkan Impor"
+        cancelLabel="Kembali / Tetap Simpan"
+        confirmVariant="danger"
+        loading={isCancelling}
+      />
     </div>
   );
 }

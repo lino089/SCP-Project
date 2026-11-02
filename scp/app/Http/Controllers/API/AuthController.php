@@ -124,4 +124,30 @@ class AuthController extends Controller
             ],
         ], 200);
     }
+
+    /**
+     * Verifikasi kata sandi pengguna saat ini untuk Step-Up Auth / tindakan sensitif.
+     * POST /api/me/verify-password
+     */
+    public function verifyPassword(Request $request)
+    {
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        if (! Hash::check($request->password, $request->user()->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kata sandi tidak valid.',
+                'errors' => [
+                    'password' => ['Kata sandi yang Anda masukkan salah.'],
+                ],
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kata sandi terverifikasi.',
+        ], 200);
+    }
 }

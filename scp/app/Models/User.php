@@ -30,7 +30,8 @@ use Laravel\Sanctum\HasApiTokens;
     'google_id',
     'phone_number',
     'graduation_date',
-    'is_held_back'
+    'is_held_back',
+    'subject_id'
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -125,6 +126,14 @@ class User extends Authenticatable
     public function schedules(): HasMany
     {
         return $this->hasMany(Schedule::class, 'teacher_id');
+    }
+
+    /**
+     * Relasi guru ke mata pelajaran yang diampu
+     */
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class, 'subject_id');
     }
 
     /**
