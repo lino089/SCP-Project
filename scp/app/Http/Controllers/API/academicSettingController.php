@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\CycleHistory;
+use App\Models\PeriodTemplate;
 use App\Models\SystemConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,16 +13,42 @@ use Illuminate\Support\Facades\DB;
 class AcademicSettingController extends Controller
 {
     /**
-     * Menampilkan konfigurasi akademik aktif (active_cycle, monday_is_upacara).
+     * Menampilkan konfigurasi akademik aktif (active_cycle, monday_is_upacara) dan template jam pelajaran.
      */
     public function index(Request $request): JsonResponse
     {
-        $config = SystemConfiguration::firstOrFail();
+        $config = SystemConfiguration::firstOrCreate(
+            ['id' => 1],
+            ['active_cycle' => 1, 'monday_is_upacara' => true]
+        );
+
+        $periodTemplates = PeriodTemplate::orderBy('day_type')
+            ->orderBy('period_number')
+            ->get();
+
+        $data = $config->toArray();
+        $data['period_templates'] = $periodTemplates;
 
         return response()->json([
             'success' => true,
             'message' => 'Pengaturan akademik berhasil diambil.',
-            'data' => $config,
+            'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Menampilkan daftar seluruh template jam pelajaran (period_templates).
+     */
+    public function periodTemplates(Request $request): JsonResponse
+    {
+        $templates = PeriodTemplate::orderBy('day_type')
+            ->orderBy('period_number')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Template jam pelajaran berhasil diambil.',
+            'data' => $templates,
         ], 200);
     }
 
@@ -40,7 +67,10 @@ class AcademicSettingController extends Controller
         }
 
         $result = DB::transaction(function () use ($request) {
-            $config = SystemConfiguration::firstOrFail();
+            $config = SystemConfiguration::firstOrCreate(
+                ['id' => 1],
+                ['active_cycle' => 1, 'monday_is_upacara' => true]
+            );
             $config->update(['active_cycle' => $request->cycle_type]);
 
             // Tutup riwayat putaran sebelumnya jika ada
@@ -80,7 +110,10 @@ class AcademicSettingController extends Controller
             return $error;
         }
 
-        $config = SystemConfiguration::firstOrFail();
+        $config = SystemConfiguration::firstOrCreate(
+            ['id' => 1],
+            ['active_cycle' => 1, 'monday_is_upacara' => true]
+        );
         $config->update(['monday_is_upacara' => $request->is_upacara]);
 
         return response()->json([

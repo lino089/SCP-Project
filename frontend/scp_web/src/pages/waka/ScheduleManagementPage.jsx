@@ -37,6 +37,8 @@ import {
   getTimeSlotsForDay,
   resolveSlotTime,
   detectScheduleConflicts,
+  getMorningActivity,
+  getDayKbmStartTime,
 } from '../../utils/timetableHelper';
 import { checkMasterDataPrerequisites } from '../../utils/prerequisiteHelper';
 import './ScheduleManagement.css';
@@ -47,6 +49,7 @@ export default function ScheduleManagementPage() {
   // Settings & Master Datasets
   const [activeCycleSetting, setActiveCycleSetting] = useState(1);
   const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [periodTemplates, setPeriodTemplates] = useState([]);
 
   const [classList, setClassList] = useState([]);
   const [roomList, setRoomList] = useState([]);
@@ -137,7 +140,10 @@ export default function ScheduleManagementPage() {
         const setRes = await academicSettingApi.getSettings();
         if (setRes?.data) {
           setActiveCycleSetting(Number(setRes.data.active_cycle || 1));
-          setMondayIsUpacara(Boolean(setRes.data.is_monday_ceremony ?? true));
+          setMondayIsUpacara(Boolean(setRes.data.monday_is_upacara));
+          if (Array.isArray(setRes.data.period_templates)) {
+            setPeriodTemplates(setRes.data.period_templates);
+          }
         }
       } catch {
         // ignore fallback
@@ -297,8 +303,12 @@ export default function ScheduleManagementPage() {
 
   // Time slots for display
   const displaySlots = useMemo(() => {
-    return getTimeSlotsForDay(selectedDay === 'Semua Hari' ? 'Senin' : selectedDay, mondayIsUpacara);
-  }, [selectedDay, mondayIsUpacara]);
+    return getTimeSlotsForDay(
+      selectedDay === 'Semua Hari' ? 'Senin' : selectedDay,
+      mondayIsUpacara,
+      periodTemplates
+    );
+  }, [selectedDay, mondayIsUpacara, periodTemplates]);
 
   // Smooth filter & pagination transition handlers (avoid flickering)
   const handlePageChange = (newPage) => {
@@ -417,6 +427,17 @@ export default function ScheduleManagementPage() {
       type: 'reset',
     });
     setPasswordModalError('');
+    setIsPasswordModalOpen(true);
+  };
+
+  // Upacara toggle trigger - requests password modal
+  const handleRequestUpacaraToggle = () => {
+    const nextStatus = !mondayIsUpacara;
+    setPasswordModalError('');
+    setPendingAction({
+      type: 'upacara',
+      target: nextStatus,
+    });
     setIsPasswordModalOpen(true);
   };
 
@@ -565,6 +586,30 @@ export default function ScheduleManagementPage() {
           setPasswordModalLoading(false);
           return;
         }
+      } else if (pendingAction.type === 'upacara') {
+        const nextStatus = pendingAction.target;
+        try {
+          await academicSettingApi.updateMondayStatus({ is_upacara: nextStatus, password });
+        } catch (apiErr) {
+          if (apiErr.status === 422) {
+            setPasswordModalError(
+              apiErr.errors?.password?.[0] || apiErr.message || 'Kata sandi verifikasi tidak valid.'
+            );
+          } else {
+            setPasswordModalError(
+              apiErr.message || 'Gagal memperbarui status upacara hari Senin.'
+            );
+          }
+          setPasswordModalLoading(false);
+          return;
+        }
+
+        setMondayIsUpacara(nextStatus);
+        setIsPasswordModalOpen(false);
+        setPendingAction(null);
+        showToast(
+          `Status Upacara Hari Senin berhasil diubah ke ${nextStatus ? 'AKTIF' : 'NONAKTIF'}.`
+        );
       }
     } catch {
       setPasswordModalError('Terjadi kesalahan saat memproses jadwal.');
@@ -678,6 +723,31 @@ export default function ScheduleManagementPage() {
           </span>
         </div>
       )}
+
+      {/* Monday Ceremony Control Card */}
+      <div className="schedule-ceremony-card">
+        <div className="schedule-ceremony-card__info">
+          <div className="schedule-ceremony-card__top">
+            <span className="schedule-ceremony-card__label">Upacara hari Senin</span>
+            <Badge variant={mondayIsUpacara ? 'success' : 'neutral'}>
+              {mondayIsUpacara ? 'Aktif' : 'Nonaktif'}
+            </Badge>
+          </div>
+          <div className="schedule-ceremony-card__title">
+            {mondayIsUpacara ? 'Upacara Aktif' : 'KBM Normal'}
+          </div>
+          <p className="schedule-ceremony-card__desc">
+            {mondayIsUpacara
+              ? 'Jam ke-1 dialokasikan untuk upacara bendera (mulai 08:00).'
+              : 'Tidak ada upacara, KBM jam ke-1 dimulai normal (07:15).'}
+          </p>
+        </div>
+        <div className="schedule-ceremony-card__actions">
+          <Button variant="secondary" size="sm" icon={Flag} onClick={handleRequestUpacaraToggle}>
+            Ubah ke {mondayIsUpacara ? 'Nonaktif' : 'Aktif'}
+          </Button>
+        </div>
+      </div>
 
       {/* Filters Card */}
       <div className="schedule-filters-card">
@@ -929,31 +999,82 @@ export default function ScheduleManagementPage() {
                         <th scope="col" className="whitespace-nowrap">
                           Jam / Waktu Riil
                         </th>
-                        {matrixDays.map((dayName) => (
-                          <th key={dayName} scope="col" className="whitespace-nowrap">
-                            {dayName}
-                          </th>
-                        ))}
+                        {matrixDays.map((dayName) => {
+                          const kbmStartTime = getDayKbmStartTime(dayName, mondayIsUpacara);
+                          return (
+                            <th key={dayName} scope="col" className="whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span>{dayName}</span>
+                                <span className="text-[10px] text-text-tertiary font-normal tracking-normal lowercase">
+                                  &bull; mulai {kbmStartTime} WIB
+                                </span>
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Monday Ceremony Header Row */}
-                      {(selectedDay === 'Senin' || isAllDaysView) && mondayIsUpacara && (
-                        <tr className="bg-amber-50/60 border-b border-amber-200/50">
-                          <td className="schedule-slot-cell whitespace-nowrap bg-amber-100/50">
-                            <div className="schedule-slot-header">
-                              <span className="schedule-slot-num text-amber-900">Upacara</span>
-                              <span className="schedule-slot-time text-amber-700">07:00 - 07:45</span>
-                            </div>
-                          </td>
-                          <td colSpan={matrixDays.length} className="py-2.5 px-4 text-center">
-                            <div className="flex items-center justify-center gap-2 text-[12px] font-medium text-amber-900">
-                              <Flag size={14} className="text-amber-700" />
-                              <span>Upacara Bendera Hari Senin &bull; KBM Jam Ke-1 Dimulai Pukul 08:00 WIB</span>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                      {/* Morning Entry & Character Building Row (07:00 WIB) */}
+                      <tr className="schedule-morning-row border-b border-border-default/70 bg-slate-50/30">
+                        <td className="schedule-slot-cell whitespace-nowrap bg-slate-50/80">
+                          <div className="schedule-slot-header">
+                            <span className="schedule-slot-num text-text-primary font-semibold">
+                              Jam Masuk
+                            </span>
+                            <span className="schedule-slot-time text-primary-600 font-semibold">
+                              07:00 WIB
+                            </span>
+                          </div>
+                        </td>
+
+                        {matrixDays.map((dayName) => {
+                          const morning = getMorningActivity(dayName, mondayIsUpacara);
+                          const isMondayUpacara = dayName === 'Senin' && mondayIsUpacara;
+
+                          return (
+                            <td key={`morning-${dayName}`} className="schedule-morning-cell align-top p-2.5">
+                              <div
+                                className={`schedule-morning-card p-2.5 rounded-lg border transition-all ${
+                                  isMondayUpacara
+                                    ? 'schedule-morning-card--upacara bg-amber-50/70 border-amber-200/80'
+                                    : 'schedule-morning-card--regular bg-slate-50/70 border-slate-200/70'
+                                }`}
+                              >
+                                <div className="schedule-morning-card__header flex items-center justify-between gap-1.5 mb-1">
+                                  <span
+                                    className={`schedule-morning-badge text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                      isMondayUpacara
+                                        ? 'schedule-morning-badge--upacara bg-amber-100 text-amber-900 border border-amber-300/60'
+                                        : 'schedule-morning-badge--regular bg-slate-200/70 text-slate-700 border border-slate-300/50'
+                                    }`}
+                                  >
+                                    {isMondayUpacara && (
+                                      <Flag size={10} className="inline mr-1 text-amber-700 shrink-0" />
+                                    )}
+                                    {morning.badge}
+                                  </span>
+                                  <span className="schedule-morning-time text-[10px] font-mono text-text-tertiary">
+                                    {morning.time}
+                                  </span>
+                                </div>
+                                <div
+                                  className={`schedule-morning-title text-[12px] font-semibold leading-tight ${
+                                    isMondayUpacara ? 'text-amber-950' : 'text-slate-800'
+                                  }`}
+                                >
+                                  {morning.title}
+                                </div>
+                                <div className="schedule-morning-desc text-[10px] text-text-tertiary mt-1">
+                                  {isMondayUpacara
+                                    ? 'KBM Jam Ke-1 dimulai 08:00 WIB'
+                                    : `KBM Jam Ke-1 dimulai ${morning.kbmStart} WIB`}
+                                </div>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
 
                       {/* Slots Iteration */}
                       {displaySlots.map((slotObj) => (
@@ -961,9 +1082,6 @@ export default function ScheduleManagementPage() {
                           <td className="schedule-slot-cell whitespace-nowrap">
                             <div className="schedule-slot-header">
                               <span className="schedule-slot-num">{slotObj.label}</span>
-                              <span className="schedule-slot-time">
-                                {slotObj.start} - {slotObj.end}
-                              </span>
                             </div>
                           </td>
 
@@ -983,8 +1101,9 @@ export default function ScheduleManagementPage() {
                               return start < slotObj.slot && slotObj.slot < start + dur;
                             });
 
-                            // Check Friday off-KBM slots (period 9-10)
-                            const isFridayOff = dayName === 'Jumat' && slotObj.slot > 8;
+                            // Check if this slot is off-KBM for the current day
+                            const daySlots = getTimeSlotsForDay(dayName, mondayIsUpacara, periodTemplates);
+                            const isDayOff = !daySlots.some((s) => s.slot === Number(slotObj.slot));
 
                             return (
                               <td key={dayName}>
@@ -996,7 +1115,8 @@ export default function ScheduleManagementPage() {
                                         item.day,
                                         item.slot || item.period_number,
                                         item.duration || item.duration_periods || 1,
-                                        mondayIsUpacara
+                                        mondayIsUpacara,
+                                        periodTemplates
                                       );
 
                                       return (
@@ -1007,12 +1127,17 @@ export default function ScheduleManagementPage() {
                                           title="Klik untuk mengedit atau menghapus jadwal"
                                         >
                                           <div className="schedule-card__top">
-                                            <span className="schedule-card__subject">{item.subjectName}</span>
-                                            {isConflict && (
-                                              <Badge variant="error" className="text-[9px] px-1 py-0">
-                                                Bentrok
-                                              </Badge>
-                                            )}
+                                            <div className="schedule-card__title-group">
+                                              <span className="schedule-card__subject">{item.subjectName}</span>
+                                              {isConflict && (
+                                                <Badge variant="error" className="text-[9px] px-1 py-0 shrink-0">
+                                                  Bentrok
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <span className="schedule-card__time">
+                                              {slotTime.startTime} - {slotTime.endTime}
+                                            </span>
                                           </div>
                                           <span className="schedule-card__teacher">
                                             {item.fetStaffId
@@ -1022,8 +1147,7 @@ export default function ScheduleManagementPage() {
                                           <div className="schedule-card__badge-row">
                                             <span className="schedule-card__info-tag">
                                               <Clock size={10} className="inline mr-1 text-gray-400" />
-                                              {item.duration || item.duration_periods} JP ({slotTime.startTime}-
-                                              {slotTime.endTime})
+                                              {item.duration || item.duration_periods} JP
                                             </span>
                                             <span className="schedule-card__info-tag">
                                               <MapPin size={10} className="inline mr-1 text-gray-400" />
@@ -1044,8 +1168,8 @@ export default function ScheduleManagementPage() {
                                       ↳ Lanjutan: {continuationSchedule.subjectName} ({continuationSchedule.roomName})
                                     </span>
                                   </div>
-                                ) : isFridayOff ? (
-                                  <div className="schedule-cell-off" title="Di luar alokasi jam KBM Jumat (Off)">
+                                ) : isDayOff ? (
+                                  <div className="schedule-cell-off" title={`Di luar alokasi jam KBM ${dayName} (Off)`}>
                                     -x-
                                   </div>
                                 ) : (
@@ -1234,6 +1358,8 @@ export default function ScheduleManagementPage() {
             ? 'Konfirmasi Reset Data Jadwal'
             : pendingAction?.type === 'delete'
             ? 'Konfirmasi Penghapusan Jadwal'
+            : pendingAction?.type === 'upacara'
+            ? 'Konfirmasi Perubahan Status Upacara'
             : 'Konfirmasi Penyimpanan Jadwal'
         }
         description={
@@ -1241,6 +1367,10 @@ export default function ScheduleManagementPage() {
             ? 'Tindakan ini akan menghapus seluruh data jadwal pelajaran yang aktif di sistem sekolah.'
             : pendingAction?.type === 'delete'
             ? 'Tindakan ini akan menghapus jadwal KBM secara permanen. Jadwal yang telah memiliki jurnal KBM tidak dapat dihapus. Masukkan kata sandi akun Anda untuk konfirmasi.'
+            : pendingAction?.type === 'upacara'
+            ? `Anda akan mengubah status Upacara Hari Senin menjadi ${
+                pendingAction?.target ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'
+              }. Perubahan ini memengaruhi alokasi jam pelajaran pertama pada hari Senin. Masukkan kata sandi akun Anda untuk verifikasi.`
             : 'Perubahan jadwal memengaruhi jadwal KBM aktif sekolah. Masukkan kata sandi akun Anda untuk verifikasi otoritas.'
         }
         consequence={
@@ -1253,6 +1383,8 @@ export default function ScheduleManagementPage() {
             ? 'Reset Semua Jadwal'
             : pendingAction?.type === 'delete'
             ? 'Hapus Jadwal'
+            : pendingAction?.type === 'upacara'
+            ? `Ubah ke ${pendingAction?.target ? 'Aktif' : 'Nonaktif'}`
             : 'Simpan'
         }
         confirmVariant={

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import {
   Users,
   BookOpen,
@@ -11,6 +12,10 @@ import {
   Clock,
   AlertCircle,
   FileSpreadsheet,
+  Filter,
+  Info,
+  RotateCcw,
+  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
@@ -25,7 +30,9 @@ import {
   Select,
   Input,
   StatCard,
+  SearchInput,
 } from '../../components/shared';
+import { EmptyState } from '../../components/feedback';
 import { getStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './MonitoringRecap.css';
@@ -46,9 +53,11 @@ export default function MonitoringRecapPage() {
   const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [filterClass, setFilterClass] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Filter Jurnal
   const [journalFilterDate, setJournalFilterDate] = useState('');
+  const [journalSearchQuery, setJournalSearchQuery] = useState('');
   const [expandedTopicIds, setExpandedTopicIds] = useState(new Set());
   const [previewPhoto, setPreviewPhoto] = useState(null);
 
@@ -100,9 +109,19 @@ export default function MonitoringRecapPage() {
       if (filterDate && item.date !== filterDate) return false;
       if (filterClass !== 'ALL' && String(item.student?.class_id) !== filterClass) return false;
       if (filterStatus !== 'ALL' && item.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const name = (item.student?.name || '').toLowerCase();
+        const nis = (item.student?.nis_nip || '').toLowerCase();
+        const subject = (item.journal?.schedule?.subject?.name || '').toLowerCase();
+        const className = (item.student?.schoolClass?.name || '').toLowerCase();
+        if (!name.includes(q) && !nis.includes(q) && !subject.includes(q) && !className.includes(q)) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [attendances, filterDate, filterClass, filterStatus]);
+  }, [attendances, filterDate, filterClass, filterStatus, searchQuery]);
 
   // Kalkulasi Metrik Kehadiran
   const metrics = useMemo(() => {
@@ -129,9 +148,30 @@ export default function MonitoringRecapPage() {
   const filteredJournals = useMemo(() => {
     return journals.filter((item) => {
       if (journalFilterDate && item.date !== journalFilterDate) return false;
+      if (journalSearchQuery.trim()) {
+        const q = journalSearchQuery.toLowerCase().trim();
+        const subject = (item.schedule?.subject?.name || '').toLowerCase();
+        const teacher = (item.schedule?.teacher?.name || '').toLowerCase();
+        const className = (item.schedule?.schoolClass?.name || '').toLowerCase();
+        const topic = (item.topic_description || '').toLowerCase();
+        if (!subject.includes(q) && !teacher.includes(q) && !className.includes(q) && !topic.includes(q)) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [journals, journalFilterDate]);
+  }, [journals, journalFilterDate, journalSearchQuery]);
+
+  // Kalkulasi Metrik Jurnal Mengajar
+  const journalMetrics = useMemo(() => {
+    const total = filteredJournals.length;
+    const completed = filteredJournals.filter((j) => j.status === 'completed').length;
+    const absent = filteredJournals.filter((j) => j.status === 'teacher_absent').length;
+    const substitute = filteredJournals.filter((j) => Boolean(j.substitute_teacher_id)).length;
+    const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : '100.0';
+
+    return { total, completed, absent, substitute, completionRate };
+  }, [filteredJournals]);
 
   // Toggle Accordion Topik Materi
   const toggleTopicExpand = (id) => {
@@ -143,34 +183,121 @@ export default function MonitoringRecapPage() {
     });
   };
 
-  // Ekspor Data Presensi ke Format CSV
-  const handleExportCSV = () => {
+  // Ekspor Data Presensi ke Format Excel (.xlsx)
+  const handleExportExcel = () => {
     if (filteredAttendances.length === 0) {
       alert('Tidak ada data presensi untuk diekspor pada filter ini.');
       return;
     }
 
-    const headers = ['No,Tanggal,NIS,Nama Siswa,Kelas,Status Kehadiran,Mata Pelajaran'];
-    const rows = filteredAttendances.map((item, idx) => {
-      return [
-        idx + 1,
-        item.date,
-        item.student?.nis_nip || '',
-        `"${item.student?.name || ''}"`,
-        item.student?.schoolClass?.name || '',
-        item.status || 'Hadir',
-        `"${item.journal?.schedule?.subject?.name || 'KBM Reguler'}"`,
-      ].join(',');
-    });
+    const excelData = filteredAttendances.map((item, idx) => ({
+      'No': idx + 1,
+      'Tanggal': item.date || '-',
+      'NIS': item.student?.nis_nip || '-',
+      'Nama Siswa': item.student?.name || '-',
+      'Kelas': item.student?.schoolClass?.name || '-',
+      'Status Kehadiran': (item.status || 'Hadir').toUpperCase(),
+      'Mata Pelajaran': item.journal?.schedule?.subject?.name || 'KBM Reguler',
+      'Guru Pengampu': item.journal?.schedule?.teacher?.name || '-',
+    }));
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `rekap_presensi_${filterDate || 'all'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Set Column Widths for Excel readability
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 28 },
+      { wch: 28 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Presensi Siswa');
+
+    const dateSuffix = filterDate || 'Semua_Tanggal';
+    const classSuffix = filterClass !== 'ALL' ? `_Kelas_${filterClass}` : '';
+    const fileName = `Rekap_Presensi_Siswa_${dateSuffix}${classSuffix}.xlsx`;
+
+    try {
+      XLSX.writeFile(workbook, fileName);
+    } catch {
+      const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  // Ekspor Data Jurnal Mengajar ke Format Excel (.xlsx)
+  const handleExportJournalExcel = () => {
+    if (filteredJournals.length === 0) {
+      alert('Tidak ada data jurnal mengajar untuk diekspor pada filter ini.');
+      return;
+    }
+
+    const excelData = filteredJournals.map((item, idx) => ({
+      'No': idx + 1,
+      'Tanggal KBM': item.date || '-',
+      'Kelas': item.schedule?.schoolClass?.name || '-',
+      'Mata Pelajaran': item.schedule?.subject?.name || '-',
+      'Guru Pengampu': item.schedule?.teacher?.name || '-',
+      'Guru Pengganti': item.substitute_teacher_id ? 'Ya (Kesiswaan)' : 'Tidak',
+      'Status Jurnal':
+        item.status === 'completed'
+          ? 'Selesai'
+          : item.status === 'teacher_absent'
+          ? 'Jam Kosong'
+          : 'Berlangsung',
+      'Topik Pembelajaran': item.topic_description || '-',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 45 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Jurnal KBM');
+
+    const dateSuffix = journalFilterDate || 'Semua_Tanggal';
+    const fileName = `Rekap_Jurnal_Mengajar_${dateSuffix}.xlsx`;
+
+    try {
+      XLSX.writeFile(workbook, fileName);
+    } catch {
+      const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   // Opsi Dropdown Kelas
@@ -240,7 +367,7 @@ export default function MonitoringRecapPage() {
       label: 'Keterangan Sesi KBM',
       renderCell: (row) => (
         <div className="text-xs text-gray-600">
-          <div>{row.journal?.schedule?.subject?.name || 'KBM Kelas'}</div>
+          <div className="font-medium text-gray-800">{row.journal?.schedule?.subject?.name || 'KBM Kelas'}</div>
           <div className="text-[11px] text-gray-400">
             Guru: {row.journal?.schedule?.teacher?.name || '-'}
           </div>
@@ -394,7 +521,7 @@ export default function MonitoringRecapPage() {
       </div>
 
       {/* Tabs Menu Utama: Rekap Presensi vs Jurnal Mengajar */}
-      <div className="mb-5">
+      <div className="mb-6">
         <Tabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -407,100 +534,241 @@ export default function MonitoringRecapPage() {
 
       {/* TAB 1: REKAP PRESENSI SISWA */}
       {activeTab === 'presensi' && (
-        <div>
+        <div className="space-y-6">
           {/* Metrik Cards Kehadiran */}
           <div className="monitoring-recap__metrics">
             <StatCard
-              title="Tingkat Kehadiran"
+              label="Tingkat Kehadiran"
               value={`${metrics.rate}%`}
               icon={CheckCircle2}
               variant="success"
+              description="Rasio kehadiran akumulatif"
             />
             <StatCard
-              title="Siswa Hadir"
-              value={metrics.hadir}
+              label="Siswa Hadir"
+              value={`${metrics.hadir} Siswa`}
               icon={Users}
               variant="default"
+              description="Mengikuti KBM di kelas"
             />
             <StatCard
-              title="Sakit"
-              value={metrics.sakit}
+              label="Sakit"
+              value={`${metrics.sakit} Siswa`}
               icon={Clock}
               variant="info"
+              description="Keterangan sakit resmi"
             />
             <StatCard
-              title="Izin"
-              value={metrics.izin}
+              label="Izin"
+              value={`${metrics.izin} Siswa`}
               icon={Calendar}
               variant="warning"
+              description="Izin terverifikasi Kesiswaan"
             />
             <StatCard
-              title="Alpa / Tanpa Ket"
-              value={metrics.alpa}
+              label="Alpa / Tanpa Ket"
+              value={`${metrics.alpa} Siswa`}
               icon={AlertCircle}
               variant="danger"
+              description="Tidak hadir tanpa konfirmasi"
             />
           </div>
 
-          {/* Filter Bar */}
-          <div className="monitoring-recap__filter-box">
-            <div className="monitoring-recap__filter-group">
-              <Input
-                label="Tanggal Presensi"
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              />
-
-              <Select
-                label="Filter Rombel Kelas"
-                options={classOptions}
-                value={filterClass}
-                onChange={(e) => setFilterClass(e.target.value)}
-              />
-
-              <Select
-                label="Status Kehadiran"
-                options={[
-                  { value: 'ALL', label: 'Semua Status' },
-                  { value: 'Hadir', label: 'Hadir' },
-                  { value: 'Sakit', label: 'Sakit' },
-                  { value: 'Izin', label: 'Izin' },
-                  { value: 'Alpa', label: 'Alpa' },
-                ]}
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              />
+          {/* Filter Card Presensi */}
+          <div className="monitoring-filter-card">
+            <div className="monitoring-filter-card__header">
+              <div className="flex items-center gap-2">
+                <Filter size={15} className="text-gray-500" />
+                <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Filter &amp; Parameter Rekapitulasi Presensi
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {(filterDate !== new Date().toISOString().split('T')[0] || filterClass !== 'ALL' || filterStatus !== 'ALL' || searchQuery) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={RotateCcw}
+                    onClick={() => {
+                      setFilterDate(new Date().toISOString().split('T')[0]);
+                      setFilterClass('ALL');
+                      setFilterStatus('ALL');
+                      setSearchQuery('');
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-800"
+                  >
+                    Reset Filter
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <div>
+            <div className="monitoring-filter-grid">
+              {/* Tanggal dengan Tombol Cepat */}
+              <div className="monitoring-filter-field">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-gray-700">Tanggal Presensi</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFilterDate(new Date().toISOString().split('T')[0])}
+                      className="text-[11px] text-blue-600 hover:underline cursor-pointer font-medium"
+                    >
+                      Hari Ini
+                    </button>
+                    <span className="text-gray-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => setFilterDate('')}
+                      className="text-[11px] text-gray-500 hover:text-gray-800 cursor-pointer"
+                    >
+                      Semua
+                    </button>
+                  </div>
+                </div>
+                <Input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Filter Rombel Kelas */}
+              <div className="monitoring-filter-field">
+                <Select
+                  label="Filter Rombel Kelas"
+                  options={classOptions}
+                  value={filterClass}
+                  onChange={(e) => setFilterClass(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Status Kehadiran */}
+              <div className="monitoring-filter-field">
+                <Select
+                  label="Status Kehadiran"
+                  options={[
+                    { value: 'ALL', label: 'Semua Status' },
+                    { value: 'Hadir', label: 'Hadir' },
+                    { value: 'Sakit', label: 'Sakit' },
+                    { value: 'Izin', label: 'Izin' },
+                    { value: 'Alpa', label: 'Alpa / Tanpa Ket' },
+                  ]}
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Pencarian Nama Siswa / NIS */}
+              <div className="monitoring-filter-field">
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Cari Data Siswa</label>
+                <SearchInput
+                  placeholder="Cari NIS, nama siswa..."
+                  value={searchQuery}
+                  onChange={(val) => setSearchQuery(typeof val === 'string' ? val : val?.target?.value || '')}
+                  onClear={() => setSearchQuery('')}
+                />
+              </div>
+            </div>
+
+            {/* Toolbar Action: Export to Excel (.xlsx) */}
+            <div className="monitoring-filter-actions">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>
+                  Menampilkan <strong className="text-gray-900">{filteredAttendances.length}</strong> catatan presensi
+                </span>
+                {filterDate && (
+                  <Badge variant="neutral" className="font-mono text-[10px]">
+                    {filterDate}
+                  </Badge>
+                )}
+                {filterClass !== 'ALL' && (
+                  <Badge variant="info" className="text-[10px]">
+                    Kelas: {classesList.find((c) => String(c.id) === filterClass)?.name || filterClass}
+                  </Badge>
+                )}
+              </div>
+
               <Button
                 variant="outline"
                 size="md"
                 icon={FileSpreadsheet}
-                onClick={handleExportCSV}
+                className="export-excel-btn"
+                onClick={handleExportExcel}
               >
-                Unduh Rekap CSV
+                Unduh Rekap Excel (.xlsx)
               </Button>
+            </div>
+          </div>
+
+          {/* Info Callout */}
+          <div className="monitoring-info-banner">
+            <div className="monitoring-info-banner__icon">
+              <Info size={16} />
+            </div>
+            <div className="monitoring-info-banner__content">
+              <span className="font-semibold text-gray-900">Mekanisme Presensi Siswa:</span> Catatan presensi siswa diisi secara *real-time* oleh guru pengampu saat membuka sesi pembelajaran di kelas, atau disinkronkan otomatis dari persetujuan surat izin siswa oleh tim Kesiswaan.
             </div>
           </div>
 
           {/* Tabel Presensi Siswa */}
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                Daftar Presensi ({filteredAttendances.length} Baris Data)
-              </h2>
-              <span className="text-[11px] text-gray-500 font-mono">
-                Tanggal: {filterDate || 'Semua'}
-              </span>
+            <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                <GraduationCap size={16} className="text-gray-600" />
+                <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Daftar Presensi Siswa ({filteredAttendances.length} Baris Data)
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 font-mono">
+                  Tanggal: {filterDate || 'Semua Tanggal'}
+                </span>
+              </div>
             </div>
 
             <Table
               columns={attendanceColumns}
               data={filteredAttendances}
               loading={isLoading}
-              emptyMessage="Tidak ada data presensi yang sesuai dengan kriteria filter."
+              emptyComponent={
+                <div className="py-12 px-4">
+                  <EmptyState
+                    type={searchQuery ? 'search' : 'default'}
+                    icon={Users}
+                    title={
+                      searchQuery
+                        ? 'Pencarian Presensi Tidak Ditemukan'
+                        : filterDate
+                        ? `Belum Ada Presensi pada Tanggal ${filterDate}`
+                        : 'Belum Ada Data Presensi Siswa'
+                    }
+                    description={
+                      searchQuery
+                        ? `Tidak ada catatan presensi siswa yang cocok dengan kata kunci "${searchQuery}". Silakan periksa kembali ejaan atau ganti filter pencarian.`
+                        : filterDate
+                        ? `Belum ada catatan presensi yang diinput untuk tanggal ${filterDate}. Guru pengampu akan menginput presensi secara otomatis saat membuka sesi KBM di kelas.`
+                        : 'Belum ada data presensi yang tercatat di sistem institusi saat ini.'
+                    }
+                    actionLabel={
+                      searchQuery
+                        ? 'Bersihkan Pencarian'
+                        : filterDate
+                        ? 'Tampilkan Semua Tanggal'
+                        : 'Pilih Tanggal Hari Ini'
+                    }
+                    onAction={() => {
+                      if (searchQuery) setSearchQuery('');
+                      else if (filterDate) setFilterDate('');
+                      else setFilterDate(new Date().toISOString().split('T')[0]);
+                    }}
+                    compact
+                  />
+                </div>
+              }
             />
           </div>
         </div>
@@ -508,42 +776,193 @@ export default function MonitoringRecapPage() {
 
       {/* TAB 2: REKAP JURNAL MENGAJAR SEKOLAH */}
       {activeTab === 'jurnal' && (
-        <div>
-          {/* Filter Jurnal */}
-          <div className="monitoring-recap__filter-box">
-            <div className="monitoring-recap__filter-group">
-              <Input
-                label="Pilih Tanggal Jurnal KBM"
-                type="date"
-                value={journalFilterDate}
-                onChange={(e) => setJournalFilterDate(e.target.value)}
-              />
+        <div className="space-y-6">
+          {/* Metrik Cards Jurnal KBM */}
+          <div className="monitoring-recap__metrics monitoring-recap__metrics--jurnal">
+            <StatCard
+              label="Keterlaksanaan KBM"
+              value={`${journalMetrics.completionRate}%`}
+              icon={CheckCircle2}
+              variant="success"
+              description="Sesi KBM terlaksana tuntas"
+            />
+            <StatCard
+              label="Total Sesi Jurnal"
+              value={`${journalMetrics.total} Sesi`}
+              icon={BookOpen}
+              variant="default"
+              description="Dokumentasi mengajar tercatat"
+            />
+            <StatCard
+              label="Jam Kosong / Guru Absen"
+              value={`${journalMetrics.absent} Sesi`}
+              icon={AlertCircle}
+              variant="danger"
+              description="Sesi tanpa kehadiran guru"
+            />
+            <StatCard
+              label="Guru Pengganti"
+              value={`${journalMetrics.substitute} Sesi`}
+              icon={Users}
+              variant="warning"
+              description="Ditangani tim kesiswaan / piket"
+            />
+          </div>
+
+          {/* Filter Card Jurnal */}
+          <div className="monitoring-filter-card">
+            <div className="monitoring-filter-card__header">
+              <div className="flex items-center gap-2">
+                <Filter size={15} className="text-gray-500" />
+                <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Filter &amp; Parameter Jurnal Mengajar KBM
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {(journalFilterDate || journalSearchQuery) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={RotateCcw}
+                    onClick={() => {
+                      setJournalFilterDate('');
+                      setJournalSearchQuery('');
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-800"
+                  >
+                    Reset Filter
+                  </Button>
+                )}
+              </div>
             </div>
 
-            {journalFilterDate && (
+            <div className="monitoring-filter-grid">
+              <div className="monitoring-filter-field">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-gray-700">Tanggal Jurnal KBM</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setJournalFilterDate(new Date().toISOString().split('T')[0])}
+                      className="text-[11px] text-blue-600 hover:underline cursor-pointer font-medium"
+                    >
+                      Hari Ini
+                    </button>
+                    <span className="text-gray-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => setJournalFilterDate('')}
+                      className="text-[11px] text-gray-500 hover:text-gray-800 cursor-pointer"
+                    >
+                      Semua
+                    </button>
+                  </div>
+                </div>
+                <Input
+                  type="date"
+                  value={journalFilterDate}
+                  onChange={(e) => setJournalFilterDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="monitoring-filter-field sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Cari Jurnal</label>
+                <SearchInput
+                  placeholder="Cari mata pelajaran, kelas, guru, topik materi..."
+                  value={journalSearchQuery}
+                  onChange={(val) => setJournalSearchQuery(typeof val === 'string' ? val : val?.target?.value || '')}
+                  onClear={() => setJournalSearchQuery('')}
+                />
+              </div>
+            </div>
+
+            <div className="monitoring-filter-actions">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>
+                  Menampilkan <strong className="text-gray-900">{filteredJournals.length}</strong> sesi jurnal KBM
+                </span>
+                {journalFilterDate && (
+                  <Badge variant="neutral" className="font-mono text-[10px]">
+                    {journalFilterDate}
+                  </Badge>
+                )}
+              </div>
+
               <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setJournalFilterDate('')}
+                variant="outline"
+                size="md"
+                icon={FileSpreadsheet}
+                className="export-excel-btn"
+                onClick={handleExportJournalExcel}
               >
-                Reset Filter Tanggal
+                Unduh Rekap Jurnal Excel (.xlsx)
               </Button>
-            )}
+            </div>
+          </div>
+
+          {/* Info Callout Jurnal */}
+          <div className="monitoring-info-banner">
+            <div className="monitoring-info-banner__icon">
+              <Info size={16} />
+            </div>
+            <div className="monitoring-info-banner__content">
+              <span className="font-semibold text-gray-900">Mekanisme Jurnal Mengajar:</span> Seluruh guru pengampu wajib mendokumentasikan pelaksanaan materi ajar, foto kegiatan belajar mengajar di kelas, dan ringkasan topik pembelajaran secara tertib setiap selesai sesi KBM.
+            </div>
           </div>
 
           {/* Tabel Jurnal Mengajar */}
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                Riwayat Jurnal KBM Seluruh Kelas ({filteredJournals.length} Jurnal)
-              </h2>
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-gray-600" />
+                <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Riwayat Jurnal KBM Seluruh Kelas ({filteredJournals.length} Jurnal)
+                </h2>
+              </div>
+              <span className="text-[11px] text-gray-500 font-mono">
+                Tanggal: {journalFilterDate || 'Semua Tanggal'}
+              </span>
             </div>
 
             <Table
               columns={journalColumns}
               data={filteredJournals}
               loading={isLoading}
-              emptyMessage="Belum ada riwayat jurnal mengajar pada tanggal ini."
+              emptyComponent={
+                <div className="py-12 px-4">
+                  <EmptyState
+                    type={journalSearchQuery ? 'search' : 'default'}
+                    icon={BookOpen}
+                    title={
+                      journalSearchQuery
+                        ? 'Pencarian Jurnal Tidak Ditemukan'
+                        : journalFilterDate
+                        ? `Belum Ada Jurnal KBM pada ${journalFilterDate}`
+                        : 'Belum Ada Dokumentasi Jurnal Mengajar'
+                    }
+                    description={
+                      journalSearchQuery
+                        ? `Tidak ada jurnal KBM yang cocok dengan kata kunci "${journalSearchQuery}". Silakan periksa kembali kata kunci Anda.`
+                        : journalFilterDate
+                        ? `Tidak ditemukan agenda KBM yang tercatat pada tanggal ${journalFilterDate}. Guru pengampu mengisi jurnal harian setelah sesi pembelajaran selesai.`
+                        : 'Belum ada dokumentasi kegiatan belajar mengajar yang tersimpan di sistem institusi.'
+                    }
+                    actionLabel={
+                      journalSearchQuery
+                        ? 'Bersihkan Pencarian'
+                        : journalFilterDate
+                        ? 'Tampilkan Semua Tanggal'
+                        : undefined
+                    }
+                    onAction={() => {
+                      if (journalSearchQuery) setJournalSearchQuery('');
+                      else if (journalFilterDate) setJournalFilterDate('');
+                    }}
+                    compact
+                  />
+                </div>
+              }
             />
           </div>
         </div>

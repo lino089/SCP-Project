@@ -57,6 +57,32 @@ class AcademicSettingTest extends TestCase
                     'active_cycle' => 1,
                     'monday_is_upacara' => true,
                 ],
+            ])
+            ->assertJsonStructure([
+                'data' => [
+                    'period_templates',
+                ],
+            ]);
+    }
+
+    public function test_authenticated_user_can_get_period_templates(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->getJson('/api/period-templates');
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+            ])
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'day_type',
+                        'period_number',
+                        'start_time',
+                        'end_time',
+                    ],
+                ],
             ]);
     }
 
@@ -141,6 +167,29 @@ class AcademicSettingTest extends TestCase
 
         $this->assertDatabaseHas('system_configurations', [
             'monday_is_upacara' => false,
+        ]);
+    }
+
+    public function test_update_monday_status_fails_with_wrong_password(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->patchJson('/api/academic-settings/monday-status', [
+            'is_upacara' => false,
+            'password' => 'wrong-password',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi Gagal',
+                'errors' => [
+                    'password' => ['Password tidak valid'],
+                ],
+            ]);
+
+        $this->assertDatabaseHas('system_configurations', [
+            'monday_is_upacara' => true,
         ]);
     }
 

@@ -1,6 +1,6 @@
 /* ==========================================================================
    MonitoringRecap.css — Styling Halaman Monitoring Presensi & Jurnal Institusi
-   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent #FFDE02)
+   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent Emerald & Amber)
    ========================================================================== */
 
 .monitoring-recap {
@@ -57,37 +57,130 @@
 
 @media (min-width: 768px) {
   .monitoring-recap__metrics {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
   }
 }
 
-/* Filter Bar Box */
-.monitoring-recap__filter-box {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  margin-bottom: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-@media (min-width: 768px) {
-  .monitoring-recap__filter-box {
-    flex-direction: row;
-    align-items: flex-end;
-    justify-content: space-between;
+@media (min-width: 1024px) {
+  .monitoring-recap__metrics {
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
-.monitoring-recap__filter-group {
+.monitoring-recap__metrics--jurnal {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 768px) {
+  .monitoring-recap__metrics--jurnal {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Filter Card Box */
+.monitoring-filter-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.monitoring-filter-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.monitoring-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .monitoring-filter-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .monitoring-filter-grid {
+    grid-template-columns: repeat(4, 1fr);
+    align-items: flex-end;
+  }
+}
+
+.monitoring-filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.monitoring-filter-actions {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+@media (min-width: 640px) {
+  .monitoring-filter-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Excel Export Button Styling (.xlsx) */
+.export-excel-btn {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.08) !important;
+  transition: all 0.15s ease !important;
+}
+
+.export-excel-btn:hover {
+  background-color: #d1fae5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Educational / System Info Banner */
+.monitoring-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.625rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.monitoring-info-banner__icon {
+  color: #0284c7;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.monitoring-info-banner__content {
   flex: 1;
 }
 

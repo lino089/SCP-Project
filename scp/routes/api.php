@@ -54,6 +54,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/students', [StudentController::class, 'index']);
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'index']);
+    Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
 
     // 9.6 Perizinan Siswa (Leave Requests)
     Route::get('/leave-requests', [LeaveRequestController::class, 'index']);

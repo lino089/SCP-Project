@@ -51,34 +51,52 @@ export default function ScheduleTableSkeleton({
                   </th>
                   {dayNames.map((d) => (
                     <th key={d} scope="col" className="whitespace-nowrap">
-                      <div className="h-3.5 w-16 bg-gray-200 rounded" />
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-3.5 w-12 bg-gray-200 rounded" />
+                        <div className="h-2.5 w-16 bg-gray-100 rounded" />
+                      </div>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {/* Ceremony Banner Skeleton (Monday) */}
-                {hasCeremony && (dayNames.includes('Senin') || dayNames.length > 1) && (
-                  <tr className="bg-amber-50/40 border-b border-amber-200/30">
-                    <td className="schedule-slot-cell whitespace-nowrap bg-amber-100/30">
-                      <div className="schedule-slot-header">
-                        <div className="h-3 w-14 bg-amber-200/60 rounded mb-1" />
-                        <div className="h-2.5 w-20 bg-amber-100 rounded" />
-                      </div>
-                    </td>
-                    <td colSpan={dayNames.length} className="py-2.5 px-4 text-center">
-                      <div className="h-3.5 w-72 bg-amber-200/50 rounded mx-auto" />
-                    </td>
-                  </tr>
-                )}
+                {/* Morning Opening Row Skeleton (07:00 WIB) */}
+                <tr className="schedule-morning-row border-b border-gray-200/50 bg-slate-50/30">
+                  <td className="schedule-slot-cell whitespace-nowrap bg-slate-50/80">
+                    <div className="schedule-slot-header">
+                      <div className="h-3 w-16 bg-gray-200 rounded mb-1" />
+                      <div className="h-2.5 w-14 bg-gray-100 rounded" />
+                    </div>
+                  </td>
+                  {dayNames.map((d) => {
+                    const isMonCeremony = d === 'Senin' && hasCeremony;
+                    return (
+                      <td key={`morning-skel-${d}`} className="schedule-morning-cell align-top p-2.5">
+                        <div
+                          className={`p-2.5 rounded-lg border ${
+                            isMonCeremony
+                              ? 'bg-amber-50/60 border-amber-200/60'
+                              : 'bg-slate-50/60 border-slate-200/60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className={`h-3 w-14 rounded ${isMonCeremony ? 'bg-amber-200/70' : 'bg-gray-200'}`} />
+                            <div className="h-2.5 w-16 bg-gray-100 rounded" />
+                          </div>
+                          <div className={`h-3.5 w-28 rounded mb-1.5 ${isMonCeremony ? 'bg-amber-200/80' : 'bg-gray-200'}`} />
+                          <div className="h-2.5 w-32 bg-gray-100 rounded" />
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
 
                 {/* Slots Rows Skeleton */}
                 {Array.from({ length: rowsCount }).map((_, rIdx) => (
                   <tr key={`skeleton-slot-${rIdx}`}>
                     <td className="schedule-slot-cell whitespace-nowrap">
                       <div className="schedule-slot-header">
-                        <div className="h-3.5 w-14 bg-gray-200 rounded mb-1" />
-                        <div className="h-3 w-16 bg-gray-100 rounded" />
+                        <div className="h-3.5 w-14 bg-gray-200 rounded" />
                       </div>
                     </td>
 
@@ -93,11 +111,12 @@ export default function ScheduleTableSkeleton({
                           ) : isCard ? (
                             <div className="schedule-cell-content">
                               <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-md flex flex-col gap-2">
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-2">
                                   <div
                                     className="h-3.5 bg-gray-200 rounded"
-                                    style={{ width: `${55 + ((rIdx * 7 + dIdx * 13 + cIdx * 5) % 35)}%` }}
+                                    style={{ width: `${45 + ((rIdx * 7 + dIdx * 13 + cIdx * 5) % 25)}%` }}
                                   />
+                                  <div className="h-2.5 w-14 bg-gray-200/70 rounded shrink-0" />
                                 </div>
                                 <div
                                   className="h-3 bg-gray-100 rounded"

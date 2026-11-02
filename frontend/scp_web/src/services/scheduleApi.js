@@ -8,6 +8,7 @@ import api from './api';
 
 export const academicSettingApi = {
   getSettings: () => api.get('/academic-settings'),
+  getPeriodTemplates: () => api.get('/period-templates'),
   updateCycle: (data) => api.patch('/academic-settings', data), // { cycle_type: 1|2, password }
   updateMondayStatus: (data) => api.patch('/academic-settings/monday-status', data), // { is_upacara: boolean, password }
   getCycleHistory: (params) => api.get('/cycle-history', { params }),
