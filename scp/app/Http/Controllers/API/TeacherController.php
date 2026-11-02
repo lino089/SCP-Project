@@ -459,11 +459,13 @@ class TeacherController extends Controller
                 'success' => false,
                 'message' => 'Guru tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
                 'errors' => [
-                    'teacher' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.'],
+                    'teacher' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu, atau gunakan opsi Hapus Paksa.'],
                 ],
             ], 409);
         }
 
+        $teacher->tokens()->delete();
+        $teacher->update(['is_active' => false]);
         $teacher->delete();
 
         return response()->json([

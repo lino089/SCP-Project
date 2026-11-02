@@ -552,6 +552,9 @@ class StudentController extends Controller
         $student = User::where('role', 'student')->findOrFail($id);
 
         DB::transaction(function () use ($student) {
+            $student->tokens()->delete();
+            $student->update(['is_active' => false]);
+            User::where('linked_student_id', $student->id)->update(['is_active' => false]);
             User::where('linked_student_id', $student->id)->delete();
             $student->delete();
         });

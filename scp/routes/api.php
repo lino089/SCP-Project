@@ -8,6 +8,7 @@ use App\Http\Controllers\API\LeaveRequestController;
 use App\Http\Controllers\API\MasterDataSummaryController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\QuizController;
+use App\Http\Controllers\API\RecycleBinController;
 use App\Http\Controllers\API\RoomController;
 use App\Http\Controllers\API\ScheduleController;
 use App\Http\Controllers\API\ScheduleImportController;
@@ -117,10 +118,21 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/students/{id}', [StudentController::class, 'destroy']);
         Route::post('/students/{id}/hold-back', [StudentController::class, 'holdBack']);
 
+        // Keamanan Reset Master Data
+        Route::post('/master-data/reset', [MasterDataSummaryController::class, 'reset']);
+
+        // Smart Delete, Dependencies, Trash & Restore (Recycle Bin System)
+        Route::get('/master/trash', [RecycleBinController::class, 'trash']);
+        Route::get('/master/{entity}/trash', [RecycleBinController::class, 'trash']);
+        Route::get('/master/{entity}/{id}/dependencies', [RecycleBinController::class, 'checkDependencies']);
+        Route::post('/master/{entity}/{id}/restore', [RecycleBinController::class, 'restore']);
+        Route::delete('/master/{entity}/{id}/force', [RecycleBinController::class, 'forceDestroy']);
+
         // Schedules & Imports Waka
         Route::post('/schedules', [ScheduleController::class, 'store']);
         Route::put('/schedules/{id}', [ScheduleController::class, 'update']);
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
+        Route::post('/schedules/reset', [ScheduleController::class, 'reset']);
         Route::post('/schedule-imports', [ScheduleImportController::class, 'store']);
         Route::get('/schedule-imports/{id}', [ScheduleImportController::class, 'show']);
         Route::patch('/schedule-imports/{id}/rows/{row_id}', [ScheduleImportController::class, 'resolveRow']);

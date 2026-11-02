@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('scp:prune-failed-imports')->dailyAt('01:00');
 Schedule::command('scp:prune-graduated-students')->dailyAt('02:00');
 Schedule::command('scp:prune-expired-otps')->dailyAt('03:00');
+Schedule::command('scp:purge-soft-deleted-users')->dailyAt('04:00');

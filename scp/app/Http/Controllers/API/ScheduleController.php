@@ -424,4 +424,45 @@ class ScheduleController extends Controller
             'data' => null,
         ], 200);
     }
+
+    /**
+     * Reset seluruh data jadwal pelajaran aktif (Keamanan Reset Data / PRD 6.4).
+     * POST /api/schedules/reset
+     *
+     * Alur:
+     * 1. Verifikasi Password pengguna di Backend (Step-Up Auth)
+     * 2. Validasi Relasi Data: Reset Jadwal dapat dilanjutkan jika konfirmasi dan validasi berhasil
+     * 3. Eksekusi soft delete jadwal & bersihkan staging import via DB::transaction
+     */
+    public function reset(Request $request): JsonResponse
+    {
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        // 1. Verifikasi Password di Backend
+        if ($error = $this->passwordIsConfirmed($request)) {
+            return $error;
+        }
+
+        // 2. Validasi Relasi Data: Reset Data Jadwal dapat dilanjutkan jika konfirmasi dan validasi berhasil.
+        $deletedCount = DB::transaction(function () {
+            $count = Schedule::whereNull('deleted_at')->count();
+            Schedule::query()->delete();
+
+            // Bersihkan baris staging impor jadwal jika ada
+            DB::table('schedule_import_rows')->delete();
+            DB::table('schedule_imports')->delete();
+
+            return $count;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "Seluruh Data Jadwal berhasil di-reset ({$deletedCount} jadwal dihapus).",
+            'data' => [
+                'deleted_count' => $deletedCount,
+            ],
+        ], 200);
+    }
 }

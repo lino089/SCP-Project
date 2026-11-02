@@ -31,7 +31,9 @@ use Laravel\Sanctum\HasApiTokens;
     'phone_number',
     'graduation_date',
     'is_held_back',
-    'subject_id'
+    'subject_id',
+    'is_active',
+    'archived_at',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -51,7 +53,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'must_change_password' => 'boolean',
             'graduation_date' => 'date',
-            'is_held_back' => 'boolean'
+            'is_held_back' => 'boolean',
+            'is_active' => 'boolean',
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -190,6 +194,16 @@ class User extends Authenticatable
     public function teacherLeaveRequests(): HasMany
     {
         return $this->hasMany(TeacherLeaveRequest::class, 'teacher_id');
+    }
+
+    public function quizzes(): HasMany
+    {
+        return $this->hasMany(Quiz::class, 'teacher_id');
+    }
+
+    public function quizSubmissions(): HasMany
+    {
+        return $this->hasMany(QuizSubmission::class, 'student_id');
     }
 
     /**

@@ -21,8 +21,11 @@ class AuthController extends Controller
         $identifier = $request->input('username') ?? $request->input('nis_nip');
 
         // Memvalidasi kredensial pengguna berdasarkan nis_nip atau email
-        $user = User::where('nis_nip', $identifier)
-            ->orWhere('email', $identifier)
+        $user = User::withTrashed()
+            ->where(function ($q) use ($identifier) {
+                $q->where('nis_nip', $identifier)
+                    ->orWhere('email', $identifier);
+            })
             ->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
@@ -38,6 +41,16 @@ class AuthController extends Controller
                     ]
                 ]
             ], 401);
+        }
+
+        if ($user->trashed() || $user->is_active === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun Anda telah dinonaktifkan atau berada di tempat sampah. Silakan hubungi pihak Waka/Administrator sekolah.',
+                'errors' => [
+                    'account' => ['Akun telah dinonaktifkan atau berada di tempat sampah.'],
+                ],
+            ], 403);
         }
 
         $expiresAt = now()->addMinutes((int) (config('sanctum.expiration') ?? 43200));
@@ -108,6 +121,16 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Akun Google belum terhubung ke akun SCP mana pun. Silakan login menggunakan NIS/NIP dan tautkan akun Google di menu profil.',
             ], 404);
+        }
+
+        if ($user->is_active === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun Anda telah dinonaktifkan atau berada di tempat sampah. Silakan hubungi pihak Waka/Administrator sekolah.',
+                'errors' => [
+                    'account' => ['Akun telah dinonaktifkan atau berada di tempat sampah.'],
+                ],
+            ], 403);
         }
 
         $expiresAt = now()->addMinutes((int) (config('sanctum.expiration') ?? 43200));
