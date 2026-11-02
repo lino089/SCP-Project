@@ -50,7 +50,7 @@ class UserProvisioningTest extends TestCase
         $this->class = Classes::create(['name' => 'X PPLG 1', 'level' => 10]);
     }
 
-    public function test_creating_student_auto_provisions_student_and_parent_with_8_char_random_passwords(): void
+    public function test_creating_student_auto_provisions_student_and_parent_with_nisn_initial_passwords(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -58,6 +58,7 @@ class UserProvisioningTest extends TestCase
             'name' => 'Aditya Pratama',
             'nis' => '54321',
             'class_id' => $this->class->id,
+            'nisn' => '0054321001',
         ]);
 
         $response->assertStatus(201)
@@ -90,8 +91,8 @@ class UserProvisioningTest extends TestCase
         $parentId = $response->json('data.parent.id');
         $generatedPassword = $response->json('data.generate_password');
 
-        // Pastikan password acak digenerate sepanjang 8 karakter
-        $this->assertEquals(8, strlen($generatedPassword));
+        // Pastikan password awal sesuai NISN siswa
+        $this->assertEquals('0054321001', $generatedPassword);
 
         // Verifikasi akun siswa di database
         $studentUser = User::find($studentId);

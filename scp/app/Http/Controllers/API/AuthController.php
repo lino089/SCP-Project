@@ -18,13 +18,19 @@ class AuthController extends Controller
             'device_name' => 'required|string'
         ]);
 
-        $identifier = $request->input('username') ?? $request->input('nis_nip');
+        $identifier = trim((string) ($request->input('username') ?? $request->input('nis_nip')));
+        $normalizedPhone = User::normalizePhoneNumber($identifier);
 
-        // Memvalidasi kredensial pengguna berdasarkan nis_nip atau email
+        // Memvalidasi kredensial pengguna berdasarkan nis_nip, email, atau no. telepon (guru)
         $user = User::withTrashed()
-            ->where(function ($q) use ($identifier) {
+            ->where(function ($q) use ($identifier, $normalizedPhone) {
                 $q->where('nis_nip', $identifier)
                     ->orWhere('email', $identifier);
+
+                if (!empty($normalizedPhone)) {
+                    $q->orWhere('phone_number', $normalizedPhone)
+                        ->orWhere('phone_number', $identifier);
+                }
             })
             ->first();
 

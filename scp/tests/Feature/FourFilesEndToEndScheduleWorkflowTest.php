@@ -73,6 +73,7 @@ class FourFilesEndToEndScheduleWorkflowTest extends TestCase
             $teachersData[] = [
                 'nip' => $nip,
                 'name' => $name,
+                'no_telp' => '0812' . str_pad((string) $i, 8, '0', STR_PAD_LEFT),
                 'fet_staff_id' => $fetId,
                 'mata_pelajaran' => 'Mata Pelajaran ' . $i,
             ];

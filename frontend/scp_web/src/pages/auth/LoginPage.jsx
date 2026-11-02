@@ -45,7 +45,7 @@ export default function LoginPage() {
         setFieldErrors(err.errors);
       }
       setError(
-        err.message || 'Kredensial tidak valid. Silakan periksa kembali NIS/NIP dan kata sandi.'
+        err.message || 'Kredensial tidak valid. Silakan periksa kembali ID Pengguna dan kata sandi.'
       );
     } finally {
       setIsLoading(false);
@@ -74,16 +74,16 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="login-form">
           <Input
-            label="ID Pengguna (NIS / NIP / Username)"
-            placeholder="Masukkan NIS, NIP, atau username"
+            label="ID Pengguna"
+            placeholder="Masukkan NIS (Siswa), No. Telepon (Guru), atau NIP"
             value={username}
             autoComplete="username"
             onChange={(e) => {
               setUsername(e.target.value);
               if (error) setError('');
-              if (fieldErrors.username || fieldErrors.nis_nip) setFieldErrors({});
+              if (fieldErrors.username || fieldErrors.nis_nip || fieldErrors.phone_number) setFieldErrors({});
             }}
-            error={fieldErrors.username?.[0] || fieldErrors.nis_nip?.[0]}
+            error={fieldErrors.username?.[0] || fieldErrors.nis_nip?.[0] || fieldErrors.phone_number?.[0]}
             prefixIcon={User}
             required
           />

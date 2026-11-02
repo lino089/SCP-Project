@@ -101,7 +101,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $requiredHeaders = ['nis', 'name', 'class_name', 'gender'];
+        $requiredHeaders = ['nis', 'name', 'class_name', 'gender', 'nisn'];
         $missingHeaders = array_diff($requiredHeaders, $headers);
 
         if (!empty($missingHeaders)) {
@@ -214,29 +214,33 @@ class StudentController extends Controller
                 ];
             }
 
-            // 5. Validasi NISN (Opsional)
-            if ($rawNisn !== '') {
-                if (mb_strlen($rawNisn) > 20) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'nisn',
-                        'message' => 'NISN tidak boleh melebihi 20 karakter.',
-                    ];
-                } elseif (isset($seenNisns[$rawNisn])) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'nisn',
-                        'message' => "NISN '{$rawNisn}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNisns[$rawNisn]}).",
-                    ];
-                } elseif (isset($existingNisns[$rawNisn])) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'attribute' => 'nisn',
-                        'message' => "NISN '{$rawNisn}' sudah terdaftar di sistem.",
-                    ];
-                } else {
-                    $seenNisns[$rawNisn] = $rowNumber;
-                }
+            // 5. Validasi NISN (Wajib sebagai Password Awal)
+            if ($rawNisn === '') {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nisn',
+                    'message' => 'Kolom NISN wajib diisi sebagai kata sandi awal akun siswa.',
+                ];
+            } elseif (mb_strlen($rawNisn) > 20) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nisn',
+                    'message' => 'NISN tidak boleh melebihi 20 karakter.',
+                ];
+            } elseif (isset($seenNisns[$rawNisn])) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nisn',
+                    'message' => "NISN '{$rawNisn}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNisns[$rawNisn]}).",
+                ];
+            } elseif (isset($existingNisns[$rawNisn])) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'nisn',
+                    'message' => "NISN '{$rawNisn}' sudah terdaftar di sistem.",
+                ];
+            } else {
+                $seenNisns[$rawNisn] = $rowNumber;
             }
 
             $validRows[] = [
@@ -244,7 +248,7 @@ class StudentController extends Controller
                 'name' => $rawName,
                 'class_name' => trim(preg_replace('/\s+/', ' ', $rawClassName)),
                 'gender' => $rawGender,
-                'nisn' => $rawNisn !== '' ? $rawNisn : null,
+                'nisn' => $rawNisn,
             ];
         }
 
@@ -304,7 +308,7 @@ class StudentController extends Controller
 
             foreach ($validRows as $row) {
                 $classId = $classMap[$row['class_name']];
-                $passwordHash = Hash::make($row['nis'], ['rounds' => 4]);
+                $passwordHash = Hash::make($row['nisn'], ['rounds' => 4]);
 
                 $student = User::create([
                     'name' => $row['name'],
@@ -422,29 +426,30 @@ class StudentController extends Controller
             'class_id' => 'required|integer|exists:classes,id',
             'gender' => 'nullable|string|in:L,P,l,p',
             'nisn' => [
-                'nullable',
+                'required',
                 'string',
                 'max:20',
                 Rule::unique('users', 'nisn')->whereNull('deleted_at'),
             ],
         ], [
             'gender.in' => 'Jenis kelamin harus bernilai L atau P.',
+            'nisn.required' => 'NISN wajib diisi sebagai kata sandi awal akun siswa.',
             'nisn.unique' => 'NISN sudah terdaftar.',
             'nisn.max' => 'NISN tidak boleh melebihi 20 karakter.',
         ]);
 
         $result = DB::transaction(function () use ($request) {
-            $randomPassword = Str::random(8);
+            $initialPassword = trim($request->nisn);
 
             $student = User::create([
                 'name' => $request->name,
                 'role' => 'student',
                 'nis_nip' => $request->nis,
-                'password' => Hash::make($randomPassword),
+                'password' => Hash::make($initialPassword),
                 'must_change_password' => true,
                 'class_id' => $request->class_id,
                 'gender' => $request->filled('gender') ? strtoupper(trim($request->gender)) : null,
-                'nisn' => $request->filled('nisn') ? trim($request->nisn) : null,
+                'nisn' => $initialPassword,
             ]);
 
             $parent = User::create([
@@ -452,14 +457,14 @@ class StudentController extends Controller
                 'role' => 'parent',
                 'nis_nip' => 'P-' . $request->nis,
                 'linked_student_id' => $student->id,
-                'password' => Hash::make($randomPassword),
+                'password' => Hash::make($initialPassword),
                 'must_change_password' => true,
             ]);
 
             return [
                 'student' => $student->load('schoolClass'),
                 'parent' => $parent,
-                'generate_password' => $randomPassword,
+                'generate_password' => $initialPassword,
             ];
         });
 

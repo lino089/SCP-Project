@@ -87,6 +87,7 @@ class StudentManagementTest extends TestCase
             'name' => 'Citra Lestari',
             'nis' => '1003',
             'class_id' => $this->classX->id,
+            'nisn' => '0010030001',
         ]);
 
         $response->assertStatus(201)
@@ -318,7 +319,7 @@ class StudentManagementTest extends TestCase
             ->assertJsonValidationErrors(['nisn']);
     }
 
-    public function test_waka_can_create_student_without_gender_and_nisn_backward_compatible(): void
+    public function test_creating_student_without_nisn_fails_validation(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -328,13 +329,8 @@ class StudentManagementTest extends TestCase
             'class_id' => $this->classX->id,
         ]);
 
-        $response->assertStatus(201);
-
-        $this->assertDatabaseHas('users', [
-            'nis_nip' => '1013',
-            'gender' => null,
-            'nisn' => null,
-        ]);
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['nisn']);
     }
 
     public function test_waka_can_update_student_gender_and_nisn(): void

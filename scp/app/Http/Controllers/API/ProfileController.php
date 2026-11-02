@@ -155,9 +155,10 @@ class ProfileController extends Controller
 
         $user = $request->user();
         $normalizedPhone = WhatsAppService::normalizeNumber($request->phone_number);
+        $dbPhone = User::normalizePhoneNumber($request->phone_number);
 
         // Cek apakah nomor sudah digunakan user lain
-        if (User::where('phone_number', $normalizedPhone)->where('id', '!=', $user->id)->exists()) {
+        if (User::where('phone_number', $dbPhone)->where('id', '!=', $user->id)->exists()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Nomor WhatsApp sudah digunakan oleh pengguna lain.',
@@ -226,6 +227,7 @@ class ProfileController extends Controller
 
         $user = $request->user();
         $normalizedPhone = WhatsAppService::normalizeNumber($request->phone_number);
+        $dbPhone = User::normalizePhoneNumber($request->phone_number);
 
         $otp = OtpCode::where('user_id', $user->id)
             ->where('purpose', 'phone')
@@ -241,7 +243,7 @@ class ProfileController extends Controller
         }
 
         // Cek ulang ketersediaan nomor
-        if (User::where('phone_number', $normalizedPhone)->where('id', '!=', $user->id)->exists()) {
+        if (User::where('phone_number', $dbPhone)->where('id', '!=', $user->id)->exists()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Nomor WhatsApp sudah digunakan oleh pengguna lain.',

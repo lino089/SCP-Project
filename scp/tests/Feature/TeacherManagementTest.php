@@ -77,6 +77,7 @@ class TeacherManagementTest extends TestCase
         $response = $this->postJson('/api/teachers', [
             'name' => 'Dewi Lestari',
             'nip' => '198505052015022001',
+            'phone_number' => '081234567891',
             'fet_staff_id' => 'DL02',
         ]);
 
@@ -273,5 +274,106 @@ class TeacherManagementTest extends TestCase
         ])->assertStatus(403);
 
         $this->deleteJson('/api/teachers/' . $this->teacher->id)->assertStatus(403);
+    }
+
+    public function test_create_teacher_fails_without_phone_number(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/teachers', [
+            'name' => 'Guru Tanpa Telp',
+            'nip' => '198901012015011001',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['phone_number']);
+    }
+
+    public function test_create_teacher_fails_with_invalid_phone_format(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/teachers', [
+            'name' => 'Guru Telp Salah',
+            'nip' => '198901012015011002',
+            'phone_number' => '1234567', // Tidak sesuai format Indonesia 08...
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['phone_number']);
+    }
+
+    public function test_create_teacher_fails_with_duplicate_phone_number(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // Guru pertama terdaftar dengan nomor 081234567899
+        $this->postJson('/api/teachers', [
+            'name' => 'Guru Pertama',
+            'nip' => '198901012015011003',
+            'phone_number' => '081234567899',
+        ])->assertStatus(201);
+
+        // Guru kedua mencoba mendaftar dengan nomor yang sama
+        $response = $this->postJson('/api/teachers', [
+            'name' => 'Guru Kedua Duplikat',
+            'nip' => '198901012015011004',
+            'phone_number' => '081234567899',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['phone_number']);
+    }
+
+    public function test_create_teacher_auto_normalizes_phone_number(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // Input nomor menggunakan format internasional +62 812-3344-5566
+        $response = $this->postJson('/api/teachers', [
+            'name' => 'Guru Format Internasional',
+            'nip' => '198901012015011005',
+            'phone_number' => '+62 812-3344-5566',
+        ]);
+
+        $response->assertStatus(201);
+
+        // Memastikan tersimpan di database dalam format standar nasional 081233445566
+        $this->assertDatabaseHas('users', [
+            'nis_nip' => '198901012015011005',
+            'phone_number' => '081233445566',
+        ]);
+    }
+
+    public function test_update_teacher_fails_with_duplicate_phone_number(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // Guru 1 dengan nomor telepon
+        $teacher1 = User::create([
+            'name' => 'Guru Satu',
+            'nis_nip' => '198901012015011010',
+            'phone_number' => '081299990001',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+        ]);
+
+        // Guru 2 dengan nomor telepon lain
+        $teacher2 = User::create([
+            'name' => 'Guru Dua',
+            'nis_nip' => '198901012015011011',
+            'phone_number' => '081299990002',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+        ]);
+
+        // Guru 2 mengupdate nomor teleponnya menggunakan nomor milik Guru 1
+        $response = $this->putJson('/api/teachers/' . $teacher2->id, [
+            'name' => 'Guru Dua Update',
+            'phone_number' => '081299990001',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['phone_number']);
     }
 }

@@ -8,6 +8,7 @@ import api from './api';
 
 export const masterDataSummaryApi = {
   getSummary: () => api.get('/master-data/summary'),
+  resetMasterData: (data) => api.post('/master-data/reset', data), // { password, scope }
 };
 
 export const classApi = {
@@ -81,6 +82,13 @@ export const studentApi = {
     }),
 };
 
+export const recycleBinApi = {
+  checkDependencies: (entity, id) => api.get(`/master/${entity}/${id}/dependencies`),
+  getTrash: (params) => api.get('/master/trash', { params }),
+  restoreData: (entity, id) => api.post(`/master/${entity}/${id}/restore`),
+  forceDeleteData: (entity, id, data) => api.delete(`/master/${entity}/${id}/force`, { data }),
+};
+
 export default {
   summary: masterDataSummaryApi,
   classes: classApi,
@@ -88,4 +96,5 @@ export default {
   subjects: subjectApi,
   teachers: teacherApi,
   students: studentApi,
+  recycleBin: recycleBinApi,
 };

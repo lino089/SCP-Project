@@ -13,6 +13,8 @@ import {
   CheckSquare,
   XSquare,
   Eye,
+  RotateCcw,
+  Clock,
 } from 'lucide-react';
 import {
   Button,
@@ -36,10 +38,12 @@ import {
   subjectApi,
   teacherApi,
   studentApi,
+  recycleBinApi,
 } from '../../services/masterDataApi';
 import InitialCredentialModal from './components/InitialCredentialModal';
 import TeacherAssignmentModal from './components/TeacherAssignmentModal';
 import DeleteConflictDialog from './components/DeleteConflictDialog';
+import DeleteConfirmationModal from './components/DeleteConfirmationModal';
 import './MasterData.css';
 
 export default function MasterDataPage() {
@@ -53,7 +57,10 @@ export default function MasterDataPage() {
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
   const [studentList, setStudentList] = useState([]);
-  const [tabCounts, setTabCounts] = useState({ kelas: 0, ruang: 0, mapel: 0, guru: 0, siswa: 0 });
+  const [trashList, setTrashList] = useState([]);
+  const [trashEntityFilter, setTrashEntityFilter] = useState('all');
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [tabCounts, setTabCounts] = useState({ kelas: 0, ruang: 0, mapel: 0, guru: 0, siswa: 0, trash: 0 });
   const [loadedTabs, setLoadedTabs] = useState(new Set());
 
   // Teacher Import & Template states
@@ -86,7 +93,8 @@ export default function MasterDataPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Delete dialog states
-  const [deletingItem, setDeletingItem] = useState(null);
+  const [smartDeleteItem, setSmartDeleteItem] = useState(null);
+  const [smartDeleteError, setSmartDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [conflictError, setConflictError] = useState(null); // { entityName, entityType, message }
 
@@ -117,7 +125,10 @@ export default function MasterDataPage() {
   // Fetch summary counts for instant tab badges (~2ms)
   const refreshSummary = useCallback(async () => {
     try {
-      const res = await masterDataSummaryApi.getSummary();
+      const [res, trashRes] = await Promise.all([
+        masterDataSummaryApi.getSummary().catch(() => null),
+        recycleBinApi.getTrash({ per_page: 1 }).catch(() => null),
+      ]);
       if (res?.data) {
         setTabCounts({
           kelas: Number(res.data.classes || 0),
@@ -125,6 +136,7 @@ export default function MasterDataPage() {
           mapel: Number(res.data.subjects || 0),
           guru: Number(res.data.teachers || 0),
           siswa: Number(res.data.students || 0),
+          trash: Number(trashRes?.meta?.total ?? trashRes?.data?.meta?.total ?? 0),
         });
       }
     } catch {
@@ -182,6 +194,12 @@ export default function MasterDataPage() {
           setTabCounts((prev) => ({ ...prev, siswa: sRes.data.length }));
         }
         if (cRes?.data) setClassList(cRes.data);
+      } else if (tabId === 'trash') {
+        const res = await recycleBinApi.getTrash({ per_page: 200 });
+        if (res?.data) {
+          setTrashList(res.data);
+          setTabCounts((prev) => ({ ...prev, trash: res.meta?.total ?? res.data.length }));
+        }
       }
       setLoadedTabs((prev) => new Set(prev).add(tabId));
     } catch (err) {
@@ -191,6 +209,7 @@ export default function MasterDataPage() {
       else if (tabId === 'mapel') setSubjectList([]);
       else if (tabId === 'guru') { setTeacherList([]); setClassList([]); }
       else if (tabId === 'siswa') { setStudentList([]); setClassList([]); }
+      else if (tabId === 'trash') { setTrashList([]); }
     } finally {
       setIsLoading(false);
     }
@@ -198,11 +217,13 @@ export default function MasterDataPage() {
 
   // Load summary on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshSummary();
   }, [refreshSummary]);
 
   // Load active tab data on mount & tab change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTabData(activeTab);
   }, [activeTab, loadTabData]);
 
@@ -332,6 +353,7 @@ export default function MasterDataPage() {
       { id: 'mapel', label: 'Mata Pelajaran', count: tabCounts.mapel },
       { id: 'guru', label: 'Guru', count: tabCounts.guru },
       { id: 'siswa', label: 'Siswa', count: tabCounts.siswa },
+      { id: 'trash', label: 'Tempat Sampah', count: tabCounts.trash || 0 },
     ],
     [tabCounts]
   );
@@ -410,7 +432,7 @@ export default function MasterDataPage() {
         nip: item.nis_nip || item.nip || '',
         fet_staff_id: item.fet_staff_id || '',
         email: item.email || '',
-        phone_number: item.phone_number || '',
+        phone_number: item.phone_number || item.telp || '',
         subject_id: item.subject_id ? String(item.subject_id) : (item.subject?.id ? String(item.subject.id) : ''),
       });
     } else if (activeTab === 'siswa') {
@@ -480,12 +502,27 @@ export default function MasterDataPage() {
             setSubjectList((prev) => [...prev, { id: Date.now(), ...payload }]);
           }
         } else if (activeTab === 'guru') {
+          const errors = {};
+          if (!formData.name?.trim()) errors.name = ['Nama lengkap guru wajib diisi.'];
+          if (!formData.nip?.trim()) errors.nip = ['NIP / ID Guru wajib diisi.'];
+          if (!formData.phone_number?.trim()) {
+            errors.phone_number = ['Nomor telepon wajib diisi sebagai ID login guru.'];
+          } else if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
+            errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+          }
+
+          if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            setIsSubmitting(false);
+            return;
+          }
+
           const payload = {
-            name: formData.name,
-            nip: formData.nip,
-            fet_staff_id: formData.fet_staff_id || null,
-            email: formData.email || null,
-            phone_number: formData.phone_number || null,
+            name: formData.name.trim(),
+            nip: formData.nip.trim(),
+            fet_staff_id: formData.fet_staff_id ? formData.fet_staff_id.trim() : null,
+            email: formData.email ? formData.email.trim() : null,
+            phone_number: formData.phone_number.trim(),
             subject_id: formData.subject_id ? Number(formData.subject_id) : null,
           };
           try {
@@ -494,7 +531,7 @@ export default function MasterDataPage() {
             if (!createdTeacher.subject && payload.subject_id) {
               createdTeacher.subject = subjectList.find((s) => s.id === payload.subject_id);
             }
-            const password = res.data?.password || 'GURU' + Math.floor(100000 + Math.random() * 900000);
+            const password = res.data?.password || payload.nip;
             setTeacherList((prev) => [...prev, createdTeacher]);
             // Pop up the initial credential modal
             setCredentialModalData({
@@ -509,7 +546,7 @@ export default function MasterDataPage() {
               return;
             }
             // Offline fallback
-            const dummyPass = 'GURU' + Math.floor(1000 + Math.random() * 9000);
+            const dummyPass = payload.nip;
             const fallbackItem = { id: Date.now(), ...payload, nis_nip: payload.nip, assignments: [] };
             setTeacherList((prev) => [...prev, fallbackItem]);
             setCredentialModalData({
@@ -556,7 +593,7 @@ export default function MasterDataPage() {
               name: 'Wali Murid ' + payload.name,
               nis_nip: 'P-' + payload.nis,
             };
-            const password = res.data?.generate_password || 'SISWA' + Math.floor(1000 + Math.random() * 9000);
+            const password = res.data?.generate_password || payload.nisn;
 
             setStudentList((prev) => [...prev, student]);
             setCredentialModalData({
@@ -572,7 +609,7 @@ export default function MasterDataPage() {
               return;
             }
             // Offline fallback
-            const dummyPass = 'SISWA' + Math.floor(1000 + Math.random() * 9000);
+            const dummyPass = payload.nisn;
             const fallbackStudent = {
               id: Date.now(),
               name: payload.name,
@@ -639,6 +676,13 @@ export default function MasterDataPage() {
         } else if (activeTab === 'guru') {
           const errors = {};
           if (!formData.name?.trim()) errors.name = ['Nama lengkap guru wajib diisi.'];
+          if (!formData.nip?.trim()) errors.nip = ['NIP / ID Guru wajib diisi.'];
+          if (!formData.phone_number?.trim()) {
+            errors.phone_number = ['Nomor telepon wajib diisi sebagai ID login guru.'];
+          } else if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
+            errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+          }
+
           if (Object.keys(errors).length > 0) {
             setFormErrors(errors);
             setIsSubmitting(false);
@@ -650,7 +694,7 @@ export default function MasterDataPage() {
             nip: formData.nip?.trim() || null,
             fet_staff_id: formData.fet_staff_id?.trim() || null,
             email: formData.email?.trim() || null,
-            phone_number: formData.phone_number?.trim() || null,
+            phone_number: formData.phone_number.trim(),
             subject_id: formData.subject_id ? Number(formData.subject_id) : null,
           };
 
@@ -711,127 +755,126 @@ export default function MasterDataPage() {
     }
   };
 
-  // Delete Action Handler
+  // Smart Delete Handlers
   const handleOpenDelete = useCallback((item) => {
-    if (activeTab === 'guru' || activeTab === 'siswa') {
-      setPendingPasswordAction({
-        type: 'delete_single',
-        item,
-      });
-      setPasswordModalError('');
-      setIsPasswordModalOpen(true);
-    } else {
-      setDeletingItem(item);
-    }
-  }, [activeTab]);
+    setSmartDeleteItem(item);
+    setSmartDeleteError('');
+  }, []);
 
-  const handleConfirmDelete = async () => {
-    if (!deletingItem) return;
+  const handleSoftDelete = async (item) => {
+    if (!item) return;
     setIsDeleting(true);
-
-    const id = deletingItem.id;
-    const name = deletingItem.name || 'Item';
-
+    setSmartDeleteError('');
+    const id = item.id;
     try {
-      if (activeTab === 'kelas') {
-        try {
-          await classApi.deleteClass(id);
-          setClassList((prev) => prev.filter((c) => c.id !== id));
-        } catch (err) {
-          setDeletingItem(null);
-          refreshSummary();
-          if (err.status === 409 || err.message?.includes('jadwal')) {
-            setConflictError({
-              entityName: name,
-              entityType: 'Kelas',
-              errorMessage: err.message,
-            });
-            return;
-          }
-          alert(err.message || 'Gagal menghapus data kelas.');
-          return;
-        }
-      } else if (activeTab === 'ruang') {
-        try {
-          await roomApi.deleteRoom(id);
-          setRoomList((prev) => prev.filter((r) => r.id !== id));
-        } catch (err) {
-          setDeletingItem(null);
-          refreshSummary();
-          if (err.status === 409 || err.message?.includes('jadwal')) {
-            setConflictError({
-              entityName: name,
-              entityType: 'Ruangan',
-              errorMessage: err.message,
-            });
-            return;
-          }
-          alert(err.message || 'Gagal menghapus data ruangan.');
-          return;
-        }
-      } else if (activeTab === 'mapel') {
-        try {
-          await subjectApi.deleteSubject(id);
-          setSubjectList((prev) => prev.filter((s) => s.id !== id));
-        } catch (err) {
-          setDeletingItem(null);
-          refreshSummary();
-          if (err.status === 409 || err.message?.includes('jadwal')) {
-            setConflictError({
-              entityName: name,
-              entityType: 'Mata Pelajaran',
-              errorMessage: err.message,
-            });
-            return;
-          }
-          alert(err.message || 'Gagal menghapus data mata pelajaran.');
-          return;
-        }
-      } else if (activeTab === 'guru') {
-        try {
-          await teacherApi.deleteTeacher(id);
-          setTeacherList((prev) => prev.filter((t) => t.id !== id));
-          setSelectedTeacherIds((prev) => prev.filter((tId) => tId !== id));
-        } catch (err) {
-          setDeletingItem(null);
-          refreshSummary();
-          if (err.status === 409 || err.message?.includes('jadwal')) {
-            setConflictError({
-              entityName: name,
-              entityType: 'Guru',
-              errorMessage: err.message,
-            });
-            return;
-          }
-          alert(err.message || 'Gagal menghapus data guru.');
-          return;
-        }
+      if (activeTab === 'guru') {
+        await teacherApi.deleteTeacher(id);
+        setTeacherList((prev) => prev.filter((t) => t.id !== id));
+        setSelectedTeacherIds((prev) => prev.filter((tId) => tId !== id));
       } else if (activeTab === 'siswa') {
-        try {
-          await studentApi.deleteStudent(id);
-          setStudentList((prev) => prev.filter((s) => s.id !== id));
-          setSelectedStudentIds((prev) => prev.filter((sId) => sId !== id));
-        } catch (err) {
-          setDeletingItem(null);
-          refreshSummary();
-          if (err.status === 409) {
-            setConflictError({
-              entityName: name,
-              entityType: 'Siswa',
-              errorMessage: err.message,
-            });
-            return;
-          }
-          alert(err.message || 'Gagal menghapus data siswa.');
-          return;
-        }
+        await studentApi.deleteStudent(id);
+        setStudentList((prev) => prev.filter((s) => s.id !== id));
+        setSelectedStudentIds((prev) => prev.filter((sId) => sId !== id));
+      } else if (activeTab === 'kelas') {
+        await classApi.deleteClass(id);
+        setClassList((prev) => prev.filter((c) => c.id !== id));
+      } else if (activeTab === 'ruang') {
+        await roomApi.deleteRoom(id);
+        setRoomList((prev) => prev.filter((r) => r.id !== id));
+      } else if (activeTab === 'mapel') {
+        await subjectApi.deleteSubject(id);
+        setSubjectList((prev) => prev.filter((s) => s.id !== id));
       }
-      setDeletingItem(null);
+      setSmartDeleteItem(null);
+      // Invalidate trash cache so it reflects the new item
+      setLoadedTabs((prev) => {
+        const next = new Set(prev);
+        next.delete('trash');
+        return next;
+      });
       refreshSummary();
+    } catch (err) {
+      const isConflict =
+        err.status === 409 ||
+        err?.response?.status === 409 ||
+        err.message?.includes('jadwal') ||
+        err?.response?.data?.message?.includes('jadwal');
+      if (isConflict) {
+        setSmartDeleteItem(null);
+        setConflictError({
+          entityName: item.name,
+          entityType: tabs.find((t) => t.id === activeTab)?.label || 'Data',
+          errorMessage: err?.response?.data?.message || err?.message,
+        });
+        return;
+      }
+      setSmartDeleteError(err?.response?.data?.message || err?.message || 'Gagal memindahkan ke tempat sampah.');
+      throw err;
     } finally {
       setIsDeleting(false);
     }
   };
+
+  const handleForceDelete = async (item, password) => {
+    if (!item) return;
+    setIsDeleting(true);
+    setSmartDeleteError('');
+    const id = item.id;
+    try {
+      await recycleBinApi.forceDeleteData(activeTab, id, { password });
+      if (activeTab === 'guru') {
+        setTeacherList((prev) => prev.filter((t) => t.id !== id));
+        setSelectedTeacherIds((prev) => prev.filter((tId) => tId !== id));
+      } else if (activeTab === 'siswa') {
+        setStudentList((prev) => prev.filter((s) => s.id !== id));
+        setSelectedStudentIds((prev) => prev.filter((sId) => sId !== id));
+      } else if (activeTab === 'kelas') {
+        setClassList((prev) => prev.filter((c) => c.id !== id));
+      } else if (activeTab === 'ruang') {
+        setRoomList((prev) => prev.filter((r) => r.id !== id));
+      } else if (activeTab === 'mapel') {
+        setSubjectList((prev) => prev.filter((s) => s.id !== id));
+      }
+      setSmartDeleteItem(null);
+      refreshSummary();
+    } catch (err) {
+      setSmartDeleteError(err?.response?.data?.message || err?.message || 'Gagal menghapus permanen.');
+      throw err;
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Restore action for Trash tab
+  const handleRestoreTrash = useCallback(async (item) => {
+    if (!item) return;
+    setIsRestoring(true);
+    try {
+      await recycleBinApi.restoreData(item.entity_type, item.id);
+      setTrashList((prev) => prev.filter((t) => !(t.id === item.id && t.entity_type === item.entity_type)));
+      // Invalidate target entity tab cache
+      setLoadedTabs((prev) => {
+        const next = new Set(prev);
+        next.delete(item.entity_type);
+        return next;
+      });
+      refreshSummary();
+    } catch (err) {
+      alert(err?.response?.data?.message || err?.message || 'Gagal memulihkan data.');
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [refreshSummary]);
+
+  // Open permanent delete dialog for item in Trash tab
+  const handleOpenPermanentDeleteTrash = useCallback((item) => {
+    setPendingPasswordAction({
+      type: 'delete_trash_permanent',
+      item,
+    });
+    setPasswordModalError('');
+    setIsPasswordModalOpen(true);
+  }, []);
 
   // Teacher Assignment Handlers
   const handleOpenAssignment = useCallback((teacher) => {
@@ -943,8 +986,19 @@ export default function MasterDataPage() {
       });
     }
 
+    if (activeTab === 'trash') {
+      return trashList.filter((item) => {
+        if (trashEntityFilter !== 'all' && item.entity_type !== trashEntityFilter) return false;
+        if (!q) return true;
+        const name = String(item.name || '').toLowerCase();
+        const iden = String(item.identifier || '').toLowerCase();
+        const type = String(item.entity_type || '').toLowerCase();
+        return name.includes(q) || iden.includes(q) || type.includes(q);
+      });
+    }
+
     return [];
-  }, [activeTab, searchQuery, levelFilter, classList, roomList, subjectList, teacherList, studentList]);
+  }, [activeTab, searchQuery, levelFilter, trashEntityFilter, classList, roomList, subjectList, teacherList, studentList, trashList]);
 
   // Current active selection based on active tab
   const currentSelectedIds = useMemo(() => {
@@ -1074,6 +1128,15 @@ export default function MasterDataPage() {
     setIsBulkDeleteOpen(false);
     setPendingPasswordAction({
       type: 'delete_bulk',
+    });
+    setPasswordModalError('');
+    setIsPasswordModalOpen(true);
+  }, []);
+
+  // Request Reset Master Data - Opens Password Confirmation Modal
+  const handleOpenResetMasterModal = useCallback(() => {
+    setPendingPasswordAction({
+      type: 'reset_all',
     });
     setPasswordModalError('');
     setIsPasswordModalOpen(true);
@@ -1211,10 +1274,48 @@ export default function MasterDataPage() {
         setIsPasswordModalOpen(false);
         setPendingPasswordAction(null);
         refreshSummary();
+      } else if (pendingPasswordAction.type === 'delete_trash_permanent') {
+        const item = pendingPasswordAction.item;
+        try {
+          await recycleBinApi.forceDeleteData(item.entity_type, item.id, { password });
+          setTrashList((prev) => prev.filter((t) => !(t.id === item.id && t.entity_type === item.entity_type)));
+          setIsPasswordModalOpen(false);
+          setPendingPasswordAction(null);
+          refreshSummary();
+        } catch (err) {
+          setPasswordModalError(err?.response?.data?.message || err?.message || 'Gagal menghapus data secara permanen.');
+          return;
+        }
       } else if (pendingPasswordAction.type === 'delete_bulk') {
         setIsPasswordModalOpen(false);
         setPendingPasswordAction(null);
         await executeBulkDeleteWithPassword(password);
+      } else if (pendingPasswordAction.type === 'reset_all') {
+        try {
+          const res = await masterDataSummaryApi.resetMasterData({ password, scope: 'all' });
+          setIsPasswordModalOpen(false);
+          setPendingPasswordAction(null);
+          refreshSummary();
+          handleRefresh();
+          alert(res.message || 'Seluruh Master Data berhasil di-reset.');
+        } catch (apiErr) {
+          if (apiErr.status === 409) {
+            setPasswordModalError(
+              apiErr.message ||
+                'Reset Master Data ditolak: Masih terdapat Data Jadwal yang terhubung. Silakan reset Data Jadwal terlebih dahulu.'
+            );
+          } else if (apiErr.status === 422) {
+            setPasswordModalError(
+              apiErr.errors?.password?.[0] || 'Kata sandi yang Anda masukkan salah.'
+            );
+          } else {
+            setPasswordModalError(
+              apiErr.message || 'Terjadi kesalahan saat memproses reset Master Data.'
+            );
+          }
+          setPasswordModalLoading(false);
+          return;
+        }
       }
     } catch (actionErr) {
       setPasswordModalError(
@@ -1230,6 +1331,7 @@ export default function MasterDataPage() {
     classList,
     refreshSummary,
     executeBulkDeleteWithPassword,
+    handleRefresh,
   ]);
 
   // Dynamic columns definition
@@ -1421,6 +1523,15 @@ export default function MasterDataPage() {
             ),
           },
           {
+            key: 'phone_number',
+            label: 'No. Telepon (ID Login)',
+            renderCell: (r) => (
+              <span className="text-xs font-mono text-neutral-800">
+                {r.phone_number || r.telp || <span className="text-neutral-400 italic">Belum Diatur</span>}
+              </span>
+            ),
+          },
+          {
             key: 'subject',
             label: 'Mata Pelajaran',
             renderCell: (r) => (
@@ -1532,10 +1643,138 @@ export default function MasterDataPage() {
           baseActionCol,
         ];
 
+      case 'trash':
+        return [
+          {
+            key: 'no',
+            label: 'No',
+            renderCell: (_, idx) => (
+              <span className="font-mono text-xs text-neutral-400">
+                {String(idx + 1).padStart(2, '0')}
+              </span>
+            ),
+          },
+          {
+            key: 'name_identifier',
+            label: 'Nama & Identitas',
+            renderCell: (r) => (
+              <div className="flex flex-col gap-0.5">
+                <strong className="text-sm font-semibold text-neutral-900">{r.name}</strong>
+                {r.identifier && (
+                  <span className="font-mono text-xs text-neutral-500">ID: {r.identifier}</span>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: 'entity_type',
+            label: 'Kategori',
+            renderCell: (r) => {
+              const labels = {
+                guru: 'Guru',
+                siswa: 'Siswa',
+                kelas: 'Kelas',
+                ruang: 'Ruang',
+                mapel: 'Mapel',
+              };
+              const variants = {
+                guru: 'info',
+                siswa: 'secondary',
+                kelas: 'neutral',
+                ruang: 'neutral',
+                mapel: 'neutral',
+              };
+              return (
+                <Badge variant={variants[r.entity_type] || 'default'}>
+                  {labels[r.entity_type] || r.entity_type}
+                </Badge>
+              );
+            },
+          },
+          {
+            key: 'deleted_at',
+            label: 'Tanggal Dihapus',
+            renderCell: (r) => {
+              if (!r.deleted_at) return <span className="text-xs text-neutral-400">-</span>;
+              const date = new Date(r.deleted_at);
+              return (
+                <span className="text-xs text-neutral-600">
+                  {date.toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              );
+            },
+          },
+          {
+            key: 'days_remaining',
+            label: 'Masa Simpan',
+            renderCell: (r) => {
+              const days = r.days_remaining ?? 0;
+              let variant = 'info';
+              if (days <= 3) variant = 'danger';
+              else if (days <= 10) variant = 'warning';
+
+              return (
+                <div className="flex items-center gap-1.5">
+                  <Badge variant={variant}>
+                    <Clock size={12} className="mr-1 inline" />
+                    {days} hari tersisa
+                  </Badge>
+                </div>
+              );
+            },
+          },
+          {
+            key: 'legal_history',
+            label: 'Status Riwayat Legal',
+            renderCell: (r) =>
+              r.has_legal_history ? (
+                <Badge variant="warning" title="Memiliki riwayat jurnal/presensi/kuis. Jika dihapus permanen akan dianonimkan.">
+                  Arsip Legal Aktif
+                </Badge>
+              ) : (
+                <Badge variant="success">Bebas Riwayat</Badge>
+              ),
+          },
+          {
+            key: 'trash_actions',
+            label: 'Aksi',
+            align: 'right',
+            renderCell: (r) => (
+              <div className="flex items-center justify-end gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={RotateCcw}
+                  onClick={() => handleRestoreTrash(r)}
+                  disabled={isRestoring}
+                  title="Pulihkan data ini kembali ke sistem aktif"
+                >
+                  Pulihkan
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => handleOpenPermanentDeleteTrash(r)}
+                  title="Hapus permanen sekarang (Perlu Password)"
+                >
+                  Hapus Permanen
+                </Button>
+              </div>
+            ),
+          },
+        ];
+
       default:
         return [];
     }
-  }, [activeTab, classList, handleOpenEdit, handleOpenAssignment, handleOpenDelete, setDetailItem]);
+  }, [activeTab, classList, handleOpenEdit, handleOpenAssignment, handleOpenDelete, setDetailItem, isRestoring, handleRestoreTrash, handleOpenPermanentDeleteTrash]);
 
   return (
     <div className="master-data-page">
@@ -1549,6 +1788,15 @@ export default function MasterDataPage() {
         </div>
 
         <div className="master-data__header-actions">
+          <Button
+            variant="outline"
+            className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+            icon={RotateCcw}
+            onClick={handleOpenResetMasterModal}
+            title="Reset Seluruh Master Data"
+          >
+            Reset Master Data
+          </Button>
           <Button
             variant="secondary"
             icon={RefreshCw}
@@ -1615,9 +1863,11 @@ export default function MasterDataPage() {
             </>
           )}
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-            Tambah {tabs.find((t) => t.id === activeTab)?.label}
-          </Button>
+          {activeTab !== 'trash' && (
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+              Tambah {tabs.find((t) => t.id === activeTab)?.label}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1650,6 +1900,21 @@ export default function MasterDataPage() {
               <option value="10">Tingkat 10</option>
               <option value="11">Tingkat 11</option>
               <option value="12">Tingkat 12</option>
+            </select>
+          )}
+
+          {activeTab === 'trash' && (
+            <select
+              className="master-data__filter-select"
+              value={trashEntityFilter}
+              onChange={(e) => setTrashEntityFilter(e.target.value)}
+            >
+              <option value="all">Semua Kategori</option>
+              <option value="guru">Guru</option>
+              <option value="siswa">Siswa</option>
+              <option value="kelas">Kelas</option>
+              <option value="ruang">Ruangan</option>
+              <option value="mapel">Mata Pelajaran</option>
             </select>
           )}
 
@@ -1817,14 +2082,16 @@ export default function MasterDataPage() {
         />
       ) : filteredData.length === 0 ? (
         <EmptyState
-          title="Tidak Ada Data Ditemukan"
+          title={activeTab === 'trash' ? 'Tempat Sampah Kosong' : 'Tidak Ada Data Ditemukan'}
           message={
             searchQuery
               ? `Tidak ditemukan hasil yang cocok dengan kata kunci "${searchQuery}".`
+              : activeTab === 'trash'
+              ? 'Tidak ada data master yang berada di Tempat Sampah saat ini.'
               : `Belum ada data ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase()} yang terdaftar.`
           }
-          actionLabel={searchQuery ? 'Reset Pencarian' : `Tambah Data Baru`}
-          onAction={searchQuery ? () => setSearchQuery('') : handleOpenAdd}
+          actionLabel={searchQuery ? 'Reset Pencarian' : activeTab === 'trash' ? null : `Tambah Data Baru`}
+          onAction={searchQuery ? () => setSearchQuery('') : activeTab === 'trash' ? undefined : handleOpenAdd}
         />
       ) : (
         <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden shadow-2xs">
@@ -2008,19 +2275,21 @@ export default function MasterDataPage() {
               />
 
               <Input
-                label="Nomor Telepon / WhatsApp (Opsional)"
+                label="Nomor Telepon / WhatsApp (ID Login Guru)"
                 type="tel"
-                placeholder="081234567890"
+                placeholder="Contoh: 081234567890"
                 value={formData.phone_number || ''}
                 onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                 error={formErrors.phone_number?.[0]}
+                helperText="Wajib format Indonesia (08...), digunakan sebagai ID login guru"
+                required
               />
 
               {modalType === 'create' && (
                 <div className="master-data-form__hint">
                   <Info size={16} className="text-gray-500 shrink-0 mt-0.5" />
                   <span>
-                    Kata sandi acak 8 karakter akan dibuat secara otomatis oleh backend dan wajib disalin setelah data berhasil disimpan.
+                    ID Login Guru adalah <strong>Nomor Telepon</strong> dan Kata Sandi Awal adalah <strong>NIP</strong> guru (wajib ganti kata sandi pada login pertama).
                   </span>
                 </div>
               )}
@@ -2094,7 +2363,7 @@ export default function MasterDataPage() {
                 <div className="master-data-form__hint">
                   <Info size={16} className="text-gray-500 shrink-0 mt-0.5" />
                   <span>
-                    Sistem akan membuat 2 akun sekaligus: akun <strong>Siswa</strong> (NIS) dan akun <strong>Orang Tua</strong> (format <code>P-NIS</code>) dengan kredensial awal.
+                    Sistem akan membuat 2 akun sekaligus: akun <strong>Siswa</strong> (ID Login: <strong>NIS</strong>, Password Awal: <strong>NISN</strong>) dan akun <strong>Orang Tua</strong> (ID Login: <code>P-[NIS]</code>, Password Awal: <strong>NISN</strong>).
                   </span>
                 </div>
               )}
@@ -2103,17 +2372,16 @@ export default function MasterDataPage() {
         </form>
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={deletingItem !== null}
-        onClose={() => setDeletingItem(null)}
-        onConfirm={handleConfirmDelete}
-        title="Hapus Data Master"
-        message={`Apakah Anda yakin ingin menghapus "${deletingItem?.name}"? Tindakan ini tidak dapat dibatalkan.`}
-        confirmLabel="Ya, Hapus Data"
-        cancelLabel="Batal"
-        confirmVariant="danger"
+      {/* Smart Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={smartDeleteItem !== null}
+        onClose={() => setSmartDeleteItem(null)}
+        entityType={activeTab}
+        item={smartDeleteItem}
+        onSoftDelete={handleSoftDelete}
+        onForceDelete={handleForceDelete}
         loading={isDeleting}
+        serverError={smartDeleteError}
       />
 
       {/* HTTP 409 Conflict Dialog */}
@@ -2189,8 +2457,8 @@ export default function MasterDataPage() {
               <span>Ketentuan Format Berkas Excel Guru:</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
-              <li>Header wajib: <strong>nip</strong> (wajib format teks), <strong>name</strong>, <strong>fet_staff_id</strong> (kode staf pada FET), <strong>mata_pelajaran</strong> (mata pelajaran yang diampu).</li>
-              <li>Akun login guru akan dibuat otomatis dengan username &amp; kata sandi default NIP (wajib ganti kata sandi pada login pertama). Email dan nomor telepon dapat dilengkapi secara manual setelah akun terdaftar.</li>
+              <li>Header wajib: <strong>nip</strong> (wajib format teks/angka), <strong>name</strong>, <strong>no_telp</strong> (format 08...), <strong>fet_staff_id</strong> (kode staf pada FET), <strong>mata_pelajaran</strong> (mata pelajaran yang diampu).</li>
+              <li>Akun login guru menggunakan <strong>Nomor Telepon</strong> sebagai ID Login dan <strong>NIP</strong> sebagai kata sandi awal (wajib ganti kata sandi pada login pertama).</li>
             </ul>
           </div>
 
@@ -2321,8 +2589,8 @@ export default function MasterDataPage() {
               <span>Fitur Otomatisasi Zero-Manual (SCP v4.5):</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
-              <li>Header wajib: <strong>nis</strong>, <strong>name</strong>, <strong>class_name</strong>, <strong>gender</strong> (L atau P).</li>
-              <li>Header opsional: <strong>nisn</strong> (10 digit numerik).</li>
+              <li>Header wajib: <strong>nis</strong>, <strong>name</strong>, <strong>class_name</strong>, <strong>gender</strong> (L atau P), <strong>nisn</strong> (10 digit numerik).</li>
+              <li><strong>Kredensial Login</strong>: Siswa menggunakan ID Login <strong>NIS</strong> dan kata sandi awal <strong>NISN</strong>. Orang tua menggunakan ID Login <code>P-[NIS]</code> dan kata sandi awal <strong>NISN</strong> (keduanya wajib ganti sandi pada login pertama).</li>
               <li><strong>Auto-Create Kelas</strong>: Rombel baru pada kolom <code>class_name</code> akan didaftarkan otomatis dengan deteksi tingkat (10, 11, 12).</li>
               <li><strong>Auto-Provisioning Akun Orang Tua</strong>: Akun orang tua otomatis dibuat dengan format nama <strong>"Wali Murid [Nama Siswa]"</strong> dan username <code>P-[NIS]</code>. Nomor kontak orang tua dapat diinput secara manual setelah akun terdaftar.</li>
             </ul>
@@ -2635,24 +2903,45 @@ export default function MasterDataPage() {
         }}
         onConfirm={handlePasswordConfirm}
         title={
-          pendingPasswordAction?.type === 'edit'
+          pendingPasswordAction?.type === 'reset_all'
+            ? 'Konfirmasi Reset Master Data'
+            : pendingPasswordAction?.type === 'edit'
             ? `Konfirmasi Pembaruan Data ${activeTab === 'guru' ? 'Guru' : 'Siswa'}`
+            : pendingPasswordAction?.type === 'delete_trash_permanent'
+            ? `Konfirmasi Hapus Permanen "${pendingPasswordAction?.item?.name}"`
             : pendingPasswordAction?.type === 'delete_bulk'
             ? `Konfirmasi Hapus Massal (${selectedItems.length} Data)`
             : `Konfirmasi Hapus Data ${activeTab === 'guru' ? 'Guru' : 'Siswa'}`
         }
         description={
-          pendingPasswordAction?.type === 'edit'
+          pendingPasswordAction?.type === 'reset_all'
+            ? 'Tindakan ini akan menghapus seluruh Master Data sekolah (kelas rombel, ruang belajar, mata pelajaran, profil guru, dan peserta didik).'
+            : pendingPasswordAction?.type === 'edit'
             ? `Masukkan kata sandi akun Anda untuk memvalidasi dan menyimpan pembaruan data "${pendingPasswordAction?.name}".`
+            : pendingPasswordAction?.type === 'delete_trash_permanent'
+            ? `Masukkan kata sandi akun Anda untuk memvalidasi penghapusan data "${pendingPasswordAction?.item?.name}" secara permanen dari Tempat Sampah.`
             : pendingPasswordAction?.type === 'delete_bulk'
             ? `Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk mengonfirmasi penghapusan ${selectedItems.length} data ${
                 activeTab === 'guru' ? 'guru' : 'siswa'
               } terpilih secara permanen.`
             : `Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk menghapus data "${pendingPasswordAction?.item?.name}".`
         }
+        consequence={
+          pendingPasswordAction?.type === 'reset_all'
+            ? 'PERINGATAN: Tindakan ini akan mengosongkan seluruh data master sekolah. Reset Master Data AKAN DITOLAK secara otomatis oleh sistem apabila masih terdapat Data Jadwal yang terhubung. Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk mengonfirmasi.'
+            : pendingPasswordAction?.type === 'delete_trash_permanent'
+            ? pendingPasswordAction?.item?.has_legal_history
+              ? 'Data ini memiliki riwayat KBM / Presensi legal. Sistem akan mengarsipkan dan menganonimkan identitas data agar dokumen sekolah masa lalu tetap valid.'
+              : 'Data ini tidak memiliki riwayat keterikatan dan akan dihapus secara fisik dan permanen dari database.'
+            : ''
+        }
         confirmText={
-          pendingPasswordAction?.type === 'edit'
+          pendingPasswordAction?.type === 'reset_all'
+            ? 'Reset Master Data'
+            : pendingPasswordAction?.type === 'edit'
             ? 'Konfirmasi & Simpan'
+            : pendingPasswordAction?.type === 'delete_trash_permanent'
+            ? 'Hapus Permanen'
             : pendingPasswordAction?.type === 'delete_bulk'
             ? `Konfirmasi & Hapus (${selectedItems.length})`
             : 'Konfirmasi & Hapus'

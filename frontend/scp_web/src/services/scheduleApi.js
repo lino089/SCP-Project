@@ -20,6 +20,7 @@ export const scheduleApi = {
   createSchedule: (data) => api.post('/schedules', data), // { cycle_type, day_of_week, period_number, duration_periods, class_id, teacher_id, room_id, subject_id, password }
   updateSchedule: (id, data) => api.put(`/schedules/${id}`, data),
   deleteSchedule: (id, data) => api.delete(`/schedules/${id}`, { data }), // { password }
+  resetSchedules: (data) => api.post('/schedules/reset', data), // { password }
 };
 
 export default {

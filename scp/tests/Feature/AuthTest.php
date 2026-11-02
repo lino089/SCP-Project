@@ -240,4 +240,173 @@ class AuthTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_teacher_can_login_using_phone_number_and_nip_as_initial_password(): void
+    {
+        $teacher = User::create([
+            'name' => 'Guru IPA',
+            'email' => 'guruipa@example.com',
+            'nis_nip' => '198501012011011005',
+            'phone_number' => '081234567890',
+            'role' => 'teacher',
+            'password' => Hash::make('198501012011011005'), // Password awal = NIP
+            'must_change_password' => true,
+        ]);
+
+        // Login dengan nomor telepon format 08...
+        $response1 = $this->postJson('/api/login', [
+            'nis_nip' => '081234567890',
+            'password' => '198501012011011005',
+            'device_name' => 'Web-Browser',
+        ]);
+
+        $response1->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'must_change_password' => true,
+                ],
+            ]);
+
+        // Login dengan format +628...
+        $response2 = $this->postJson('/api/login', [
+            'nis_nip' => '+6281234567890',
+            'password' => '198501012011011005',
+            'device_name' => 'Web-Browser',
+        ]);
+
+        $response2->assertStatus(200);
+
+        // Login dengan format 628...
+        $response3 = $this->postJson('/api/login', [
+            'nis_nip' => '6281234567890',
+            'password' => '198501012011011005',
+            'device_name' => 'Web-Browser',
+        ]);
+
+        $response3->assertStatus(200);
+    }
+
+    public function test_student_and_parent_can_login_with_nisn_initial_password(): void
+    {
+        $student = User::create([
+            'name' => 'Siswa Baru',
+            'nis_nip' => '2024001',
+            'nisn' => '0071234567',
+            'role' => 'student',
+            'password' => Hash::make('0071234567'), // Password awal = NISN
+            'must_change_password' => true,
+        ]);
+
+        $parent = User::create([
+            'name' => 'Wali Murid Siswa Baru',
+            'nis_nip' => 'P-2024001',
+            'role' => 'parent',
+            'linked_student_id' => $student->id,
+            'password' => Hash::make('0071234567'), // Password awal = NISN
+            'must_change_password' => true,
+        ]);
+
+        // Siswa login dengan NIS dan NISN password
+        $resStudent = $this->postJson('/api/login', [
+            'nis_nip' => '2024001',
+            'password' => '0071234567',
+            'device_name' => 'Flutter-App',
+        ]);
+
+        $resStudent->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'must_change_password' => true,
+                ],
+            ]);
+
+        // Orang tua login dengan P-NIS dan NISN password
+        $resParent = $this->postJson('/api/login', [
+            'nis_nip' => 'P-2024001',
+            'password' => '0071234567',
+            'device_name' => 'Flutter-App',
+        ]);
+
+        $resParent->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'must_change_password' => true,
+                ],
+            ]);
+    }
+
+    public function test_teacher_and_student_login_fails_with_incorrect_initial_password(): void
+    {
+        // Setup Teacher
+        User::create([
+            'name' => 'Guru Biologi',
+            'nis_nip' => '198701012015011006',
+            'phone_number' => '081299887766',
+            'role' => 'teacher',
+            'password' => Hash::make('198701012015011006'),
+            'must_change_password' => true,
+        ]);
+
+        // Login guru dengan password salah
+        $resTeacher = $this->postJson('/api/login', [
+            'nis_nip' => '081299887766',
+            'password' => 'wrong_nip_password',
+            'device_name' => 'Web-Browser',
+        ]);
+
+        $resTeacher->assertStatus(401)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Kredensial tidak valid',
+            ]);
+
+        // Setup Student
+        User::create([
+            'name' => 'Siswa XI',
+            'nis_nip' => '2024002',
+            'nisn' => '0081234568',
+            'role' => 'student',
+            'password' => Hash::make('0081234568'),
+            'must_change_password' => true,
+        ]);
+
+        // Login siswa dengan password salah
+        $resStudent = $this->postJson('/api/login', [
+            'nis_nip' => '2024002',
+            'password' => 'wrong_nisn_password',
+            'device_name' => 'Flutter-App',
+        ]);
+
+        $resStudent->assertStatus(401)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Kredensial tidak valid',
+            ]);
+    }
+
+    public function test_inactive_or_trashed_user_cannot_login(): void
+    {
+        $inactiveTeacher = User::create([
+            'name' => 'Guru Nonaktif',
+            'nis_nip' => '198801012015011007',
+            'phone_number' => '081288776655',
+            'role' => 'teacher',
+            'password' => Hash::make('198801012015011007'),
+            'is_active' => false,
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'nis_nip' => '081288776655',
+            'password' => '198801012015011007',
+            'device_name' => 'Web-Browser',
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJson([
+                'success' => false,
+            ]);
+    }
 }

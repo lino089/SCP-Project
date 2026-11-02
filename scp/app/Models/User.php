@@ -60,6 +60,48 @@ class User extends Authenticatable
     }
 
     /**
+     * Normalisasi nomor telepon ke format standar nasional Indonesia (08...)
+     */
+    public static function normalizePhoneNumber(?string $number): ?string
+    {
+        if ($number === null || trim($number) === '') {
+            return null;
+        }
+
+        // Hapus karakter selain angka
+        $digits = preg_replace('/[^0-9]/', '', $number);
+
+        if (empty($digits)) {
+            return null;
+        }
+
+        // Konversi awalan 628... -> 08...
+        if (str_starts_with($digits, '628')) {
+            $digits = '0' . substr($digits, 2);
+        } elseif (str_starts_with($digits, '8')) {
+            // Konversi awalan 8... -> 08...
+            $digits = '0' . $digits;
+        }
+
+        return $digits;
+    }
+
+    public function setPhoneNumberAttribute($value): void
+    {
+        $this->attributes['phone_number'] = static::normalizePhoneNumber($value);
+    }
+
+    public function getTelpAttribute(): ?string
+    {
+        return $this->phone_number;
+    }
+
+    public function setTelpAttribute($value): void
+    {
+        $this->attributes['phone_number'] = static::normalizePhoneNumber($value);
+    }
+
+    /**
      * Relasi ke penugasan tambahan guru (Kesiswaan / Wali Kelas)
      */
     public function assignments(): HasMany

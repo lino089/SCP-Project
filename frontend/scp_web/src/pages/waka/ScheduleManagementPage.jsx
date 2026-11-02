@@ -12,6 +12,7 @@ import {
   Flag,
   AlertCircle,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import {
   Button,
@@ -64,7 +65,6 @@ export default function ScheduleManagementPage() {
   const [selectedDay, setSelectedDay] = useState('Semua Hari');
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState('ALL');
-  const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL');
 
   // Search & Pagination States
   const [searchQuery, setSearchQuery] = useState('');
@@ -230,6 +230,7 @@ export default function ScheduleManagementPage() {
 
   // Trigger fetch on mount or cycle switch
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -336,7 +337,6 @@ export default function ScheduleManagementPage() {
     setSelectedLevelFilter('ALL');
     setSelectedClassFilter('all');
     setSelectedDay('Semua Hari');
-    setSelectedRoomTypeFilter('ALL');
     setSearchQuery('');
     setClassPage(1);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -406,6 +406,15 @@ export default function ScheduleManagementPage() {
       type: 'delete',
       id: editingSchedule.id,
       data: editingSchedule,
+    });
+    setPasswordModalError('');
+    setIsPasswordModalOpen(true);
+  };
+
+  // Reset trigger - requests password modal
+  const handleOpenResetScheduleModal = () => {
+    setPendingAction({
+      type: 'reset',
     });
     setPasswordModalError('');
     setIsPasswordModalOpen(true);
@@ -535,6 +544,27 @@ export default function ScheduleManagementPage() {
         setIsPasswordModalOpen(false);
         setIsFormModalOpen(false);
         showToast('Jadwal pelajaran berhasil dihapus.');
+      } else if (pendingAction.type === 'reset') {
+        try {
+          const res = await scheduleApi.resetSchedules({ password });
+          setScheduleList([]);
+          setIsPasswordModalOpen(false);
+          setPendingAction(null);
+          showToast(res.data?.message || res.message || 'Seluruh Data Jadwal berhasil di-reset.');
+          await fetchData();
+        } catch (apiErr) {
+          if (apiErr.status === 422) {
+            setPasswordModalError(
+              apiErr.errors?.password?.[0] || 'Kata sandi verifikasi tidak valid.'
+            );
+          } else {
+            setPasswordModalError(
+              apiErr.message || 'Gagal mereset data jadwal pelajaran.'
+            );
+          }
+          setPasswordModalLoading(false);
+          return;
+        }
       }
     } catch {
       setPasswordModalError('Terjadi kesalahan saat memproses jadwal.');
@@ -569,6 +599,15 @@ export default function ScheduleManagementPage() {
           </p>
         </div>
         <div className="schedule-header__actions">
+          <Button
+            variant="outline"
+            className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+            icon={RotateCcw}
+            onClick={handleOpenResetScheduleModal}
+            title="Reset Seluruh Data Jadwal"
+          >
+            Reset Jadwal
+          </Button>
           <Button
             variant="outline"
             icon={ExternalLink}
@@ -717,21 +756,6 @@ export default function ScheduleManagementPage() {
                   .map((c) => ({ value: String(c.id), label: c.name })),
               ]}
               onChange={(e) => handleFilterChange(setSelectedClassFilter, e.target.value, true)}
-            />
-          </div>
-
-          {/* Room Type Filter */}
-          <div className="schedule-filter-item">
-            <Select
-              label="Tipe Ruang"
-              value={selectedRoomTypeFilter}
-              options={[
-                { value: 'ALL', label: 'Semua Tipe Ruang' },
-                { value: 'kelas', label: 'Ruang Teori' },
-                { value: 'lab', label: 'Laboratorium Komputer' },
-                { value: 'bengkel', label: 'Bengkel / Praktik' },
-              ]}
-              onChange={(e) => handleFilterChange(setSelectedRoomTypeFilter, e.target.value, false)}
             />
           </div>
         </div>
@@ -948,19 +972,12 @@ export default function ScheduleManagementPage() {
                             const cellSchedules = classSchedules.filter((s) => {
                               const matchSlot = Number(s.slot || s.period_number) === Number(slotObj.slot);
                               if (!matchSlot) return false;
-                              if (s.day !== dayName) return false;
-                              if (selectedRoomTypeFilter !== 'ALL' && s.roomType !== selectedRoomTypeFilter) {
-                                return false;
-                              }
-                              return true;
+                              return s.day === dayName;
                             });
 
                             // Find schedule continuing into this slot from an earlier period
                             const continuationSchedule = classSchedules.find((s) => {
                               if (s.day !== dayName) return false;
-                              if (selectedRoomTypeFilter !== 'ALL' && s.roomType !== selectedRoomTypeFilter) {
-                                return false;
-                              }
                               const start = Number(s.slot || s.period_number);
                               const dur = Number(s.duration || s.duration_periods || 1);
                               return start < slotObj.slot && slotObj.slot < start + dur;
@@ -1209,17 +1226,39 @@ export default function ScheduleManagementPage() {
         onClose={() => {
           setIsPasswordModalOpen(false);
           setPasswordModalError('');
+          setPendingAction(null);
         }}
         onConfirm={handlePasswordConfirm}
         title={
-          pendingAction?.type === 'delete'
+          pendingAction?.type === 'reset'
+            ? 'Konfirmasi Reset Data Jadwal'
+            : pendingAction?.type === 'delete'
             ? 'Konfirmasi Penghapusan Jadwal'
             : 'Konfirmasi Penyimpanan Jadwal'
         }
         description={
-          pendingAction?.type === 'delete'
-            ? 'Tindakan ini akan menghapus jadwal KBM secara permanen. Jadwal yang telah memiliki jurnal KBM tidak dapat dihapus. Masukkan kata sandi akun Waka untuk konfirmasi.'
-            : 'Perubahan jadwal memengaruhi jadwal KBM aktif sekolah. Masukkan kata sandi akun Waka untuk verifikasi otoritas.'
+          pendingAction?.type === 'reset'
+            ? 'Tindakan ini akan menghapus seluruh data jadwal pelajaran yang aktif di sistem sekolah.'
+            : pendingAction?.type === 'delete'
+            ? 'Tindakan ini akan menghapus jadwal KBM secara permanen. Jadwal yang telah memiliki jurnal KBM tidak dapat dihapus. Masukkan kata sandi akun Anda untuk konfirmasi.'
+            : 'Perubahan jadwal memengaruhi jadwal KBM aktif sekolah. Masukkan kata sandi akun Anda untuk verifikasi otoritas.'
+        }
+        consequence={
+          pendingAction?.type === 'reset'
+            ? 'PERINGATAN: Seluruh jadwal pelajaran akan dihapus dari sistem. Data riwayat catatan jurnal KBM masa lalu tetap aman. Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi akun Anda untuk mengonfirmasi.'
+            : ''
+        }
+        confirmText={
+          pendingAction?.type === 'reset'
+            ? 'Reset Semua Jadwal'
+            : pendingAction?.type === 'delete'
+            ? 'Hapus Jadwal'
+            : 'Simpan'
+        }
+        confirmVariant={
+          pendingAction?.type === 'reset' || pendingAction?.type === 'delete'
+            ? 'danger'
+            : 'primary'
         }
         loading={passwordModalLoading}
         error={passwordModalError}

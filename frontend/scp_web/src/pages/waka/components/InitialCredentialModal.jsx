@@ -29,22 +29,24 @@ export default function InitialCredentialModal({
     if (isTeacher) {
       return `[Kredensial Akun - Guru Baru]
 Nama: ${teacher.name || '-'}
-NIP / Username: ${teacher.nis_nip || teacher.nip || '-'}
+ID Login (No. Telepon): ${teacher.phone_number || teacher.telp || '-'}
+NIP: ${teacher.nis_nip || teacher.nip || '-'}
 FET Staff ID: ${teacher.fet_staff_id || '-'}
-Kata Sandi Awal: ${password}
+Kata Sandi Awal: ${password} (NIP Guru)
 Status: Wajib Ganti Password saat login perdana.`;
     }
     return `[Kredensial Akun - Siswa & Orang Tua]
 --- AKUN SISWA ---
 Nama: ${student.name || '-'}
-NIS: ${student.nis_nip || student.nis || '-'}
+ID Login (NIS): ${student.nis_nip || student.nis || '-'}
+NISN: ${student.nisn || '-'}
 Kelas: ${student.schoolClass?.name || student.className || '-'}
-Kata Sandi Awal: ${password}
+Kata Sandi Awal: ${password} (NISN Siswa)
 
 --- AKUN ORANG TUA / WALI ---
 Nama: ${parent.name || `Wali Murid ${student.name}`}
-Username: ${parent.nis_nip || `P-${student.nis_nip || student.nis}`}
-Kata Sandi Awal: ${password}
+ID Login: ${parent.nis_nip || `P-${student.nis_nip || student.nis}`}
+Kata Sandi Awal: ${password} (NISN Siswa)
 Status: Wajib Ganti Password saat login perdana.`;
   };
 
@@ -111,7 +113,13 @@ Status: Wajib Ganti Password saat login perdana.`;
             </div>
             <div className="credential-card__grid">
               <div className="credential-field">
-                <span className="credential-field__label">NIP / ID Login</span>
+                <span className="credential-field__label">ID Login (No. Telepon)</span>
+                <span className="credential-field__value font-mono">
+                  {teacher.phone_number || teacher.telp || '-'}
+                </span>
+              </div>
+              <div className="credential-field">
+                <span className="credential-field__label">NIP</span>
                 <span className="credential-field__value font-mono">
                   {teacher.nis_nip || teacher.nip || '-'}
                 </span>
@@ -122,8 +130,8 @@ Status: Wajib Ganti Password saat login perdana.`;
                   {teacher.fet_staff_id || '-'}
                 </span>
               </div>
-              <div className="credential-field credential-field--full credential-field--highlight">
-                <span className="credential-field__label">Kata Sandi Awal</span>
+              <div className="credential-field credential-field--highlight">
+                <span className="credential-field__label">Kata Sandi Awal (NIP)</span>
                 <div className="credential-field__password-box">
                   <span className="font-mono text-lg font-bold">{password}</span>
                 </div>
@@ -140,9 +148,15 @@ Status: Wajib Ganti Password saat login perdana.`;
               </div>
               <div className="credential-card__grid">
                 <div className="credential-field">
-                  <span className="credential-field__label">NIS / Username</span>
+                  <span className="credential-field__label">ID Login (NIS)</span>
                   <span className="credential-field__value font-mono">
                     {student.nis_nip || student.nis || '-'}
+                  </span>
+                </div>
+                <div className="credential-field">
+                  <span className="credential-field__label">NISN</span>
+                  <span className="credential-field__value font-mono">
+                    {student.nisn || '-'}
                   </span>
                 </div>
                 <div className="credential-field">
@@ -151,8 +165,8 @@ Status: Wajib Ganti Password saat login perdana.`;
                     {student.schoolClass?.name || student.className || '-'}
                   </span>
                 </div>
-                <div className="credential-field credential-field--full credential-field--highlight">
-                  <span className="credential-field__label">Kata Sandi Siswa</span>
+                <div className="credential-field credential-field--highlight">
+                  <span className="credential-field__label">Kata Sandi Awal (NISN)</span>
                   <div className="credential-field__password-box">
                     <span className="font-mono text-lg font-bold">{password}</span>
                   </div>
@@ -175,8 +189,8 @@ Status: Wajib Ganti Password saat login perdana.`;
                     {parent.nis_nip || `P-${student.nis_nip || student.nis}`}
                   </span>
                 </div>
-                <div className="credential-field credential-field--full credential-field--highlight">
-                  <span className="credential-field__label">Kata Sandi Orang Tua</span>
+                <div className="credential-field credential-field--highlight">
+                  <span className="credential-field__label">Kata Sandi Awal (NISN)</span>
                   <div className="credential-field__password-box">
                     <span className="font-mono text-lg font-bold">{password}</span>
                   </div>

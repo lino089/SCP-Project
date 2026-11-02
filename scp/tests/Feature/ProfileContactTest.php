@@ -220,7 +220,7 @@ class ProfileContactTest extends TestCase
             ->assertJsonPath('success', true);
 
         $this->user->refresh();
-        $this->assertSame('6281234567890', $this->user->phone_number);
+        $this->assertSame('081234567890', $this->user->phone_number);
 
         $this->assertDatabaseMissing('otp_codes', [
             'user_id' => $this->user->id,

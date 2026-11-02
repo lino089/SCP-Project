@@ -177,7 +177,7 @@ class StudentImportTest extends TestCase
         $this->assertSame('0081234567', $student1->nisn);
         $this->assertTrue($student1->must_change_password);
         $this->assertFalse($student1->is_held_back);
-        $this->assertTrue(Hash::check('12045', $student1->password));
+        $this->assertTrue(Hash::check('0081234567', $student1->password));
 
         // Verifikasi Orang Tua Siswa 1
         $parent1 = User::where('nis_nip', 'P-12045')->first();
@@ -187,7 +187,7 @@ class StudentImportTest extends TestCase
         $this->assertEquals($student1->id, $parent1->linked_student_id);
         $this->assertNull($parent1->phone_number);
         $this->assertTrue($parent1->must_change_password);
-        $this->assertTrue(Hash::check('12045', $parent1->password));
+        $this->assertTrue(Hash::check('0081234567', $parent1->password));
 
         // Verifikasi Siswa 2 (Gender Perempuan)
         $student2 = User::where('nis_nip', '12046')->first();
@@ -217,12 +217,14 @@ class StudentImportTest extends TestCase
                 'name' => 'Citra Dewi',
                 'class_name' => 'XII RPL 1', // Kelas sudah ada di DB
                 'gender' => 'P',
+                'nisn' => '0081300001',
             ],
             [
                 'nis' => '13002',
                 'name' => 'Dedi Setiawan',
                 'class_name' => 'XII RPL 1', // Kelas sama
                 'gender' => 'L',
+                'nisn' => '0081300002',
             ],
         ]);
 
@@ -259,13 +261,13 @@ class StudentImportTest extends TestCase
         Sanctum::actingAs($this->waka);
 
         $filePath = $this->createTempExcel([
-            ['nis' => '2001', 'name' => 'Siswa 1', 'class_name' => 'X-A', 'gender' => 'L'],
-            ['nis' => '2002', 'name' => 'Siswa 2', 'class_name' => 'XI-B', 'gender' => 'P'],
-            ['nis' => '2003', 'name' => 'Siswa 3', 'class_name' => 'XII-C', 'gender' => 'L'],
-            ['nis' => '2004', 'name' => 'Siswa 4', 'class_name' => '10 AK 1', 'gender' => 'P'],
-            ['nis' => '2005', 'name' => 'Siswa 5', 'class_name' => '11 AK 2', 'gender' => 'L'],
-            ['nis' => '2006', 'name' => 'Siswa 6', 'class_name' => '12 AK 3', 'gender' => 'P'],
-            ['nis' => '2007', 'name' => 'Siswa 7', 'class_name' => 'Kelas Khusus', 'gender' => 'L'], // Fallback 10
+            ['nis' => '2001', 'name' => 'Siswa 1', 'class_name' => 'X-A', 'gender' => 'L', 'nisn' => '0082001001'],
+            ['nis' => '2002', 'name' => 'Siswa 2', 'class_name' => 'XI-B', 'gender' => 'P', 'nisn' => '0082002002'],
+            ['nis' => '2003', 'name' => 'Siswa 3', 'class_name' => 'XII-C', 'gender' => 'L', 'nisn' => '0082003003'],
+            ['nis' => '2004', 'name' => 'Siswa 4', 'class_name' => '10 AK 1', 'gender' => 'P', 'nisn' => '0082004004'],
+            ['nis' => '2005', 'name' => 'Siswa 5', 'class_name' => '11 AK 2', 'gender' => 'L', 'nisn' => '0082005005'],
+            ['nis' => '2006', 'name' => 'Siswa 6', 'class_name' => '12 AK 3', 'gender' => 'P', 'nisn' => '0082006006'],
+            ['nis' => '2007', 'name' => 'Siswa 7', 'class_name' => 'Kelas Khusus', 'gender' => 'L', 'nisn' => '0082007007'], // Fallback 10
         ]);
 
         $file = new UploadedFile($filePath, 'siswa_levels.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
@@ -353,7 +355,7 @@ class StudentImportTest extends TestCase
     {
         Sanctum::actingAs($this->waka);
 
-        $filePath = $this->createTempExcel([], ['nis', 'name', 'class_name', 'gender']);
+        $filePath = $this->createTempExcel([], ['nis', 'name', 'class_name', 'gender', 'nisn']);
 
         $file = new UploadedFile($filePath, 'siswa_empty_rows.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
@@ -382,12 +384,14 @@ class StudentImportTest extends TestCase
                 'name' => 'Siswa Tanpa NIS',
                 'class_name' => '',
                 'gender' => '',
+                'nisn' => '',
             ],
             [
                 'nis' => '5001',
                 'name' => '',
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
+                'nisn' => '0085001001',
             ],
         ]);
 
@@ -411,6 +415,7 @@ class StudentImportTest extends TestCase
         $this->assertContains('class_name', $attributes);
         $this->assertContains('gender', $attributes);
         $this->assertContains('name', $attributes);
+        $this->assertContains('nisn', $attributes);
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -427,6 +432,7 @@ class StudentImportTest extends TestCase
                 'name' => 'Siswa Salah Gender',
                 'class_name' => 'X RPL 1',
                 'gender' => 'X', // Invalid
+                'nisn' => '0086001001',
             ],
         ]);
 
@@ -459,12 +465,14 @@ class StudentImportTest extends TestCase
                 'name' => 'Siswa Satu',
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
+                'nisn' => '0087001001',
             ],
             [
                 'nis' => '7001', // Duplicate NIS in row 3
                 'name' => 'Siswa Dua',
                 'class_name' => 'X RPL 2',
                 'gender' => 'P',
+                'nisn' => '0087001002',
             ],
         ]);
 
@@ -548,12 +556,14 @@ class StudentImportTest extends TestCase
                 'name' => 'Siswa Baru',
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
+                'nisn' => '0089001001',
             ],
             [
                 'nis' => '1001', // Collides with DB
                 'name' => 'Siswa Tabrakan',
                 'class_name' => 'X RPL 1',
                 'gender' => 'P',
+                'nisn' => '0089001002',
             ],
         ]);
 
@@ -591,12 +601,14 @@ class StudentImportTest extends TestCase
                 'name' => 'Kakak Pratama',
                 'class_name' => 'XII RPL 1',
                 'gender' => 'L',
+                'nisn' => '0089501001',
             ],
             [
                 'nis' => '9502',
                 'name' => 'Adik Pratama',
                 'class_name' => 'X RPL 1',
                 'gender' => 'P',
+                'nisn' => '0089502002',
             ],
         ]);
 

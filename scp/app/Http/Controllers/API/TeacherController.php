@@ -46,18 +46,21 @@ class TeacherController extends Controller
                 [
                     'nip' => '198001012010011002',
                     'name' => 'Budi Santoso, S.Pd.',
+                    'no_telp' => '081234567801',
                     'fet_staff_id' => '1',
                     'mata_pelajaran' => 'Matematika',
                 ],
                 [
                     'nip' => '198502022015022003',
                     'name' => 'Dewi Lestari, M.Pd.',
+                    'no_telp' => '081234567802',
                     'fet_staff_id' => '14',
                     'mata_pelajaran' => 'Bahasa Indonesia',
                 ],
                 [
                     'nip' => '199003032020031004',
                     'name' => 'Ahmad Fauzi, S.Kom.',
+                    'no_telp' => '081234567803',
                     'fet_staff_id' => '25',
                     'mata_pelajaran' => 'Pemrograman Web',
                 ],
@@ -100,10 +103,16 @@ class TeacherController extends Controller
         }
 
         $hasSubjectHeader = in_array('mata_pelajaran', $headers) || in_array('mapel', $headers) || in_array('subject', $headers);
+        $hasPhoneHeader = in_array('no_telp', $headers) || in_array('no_telepon', $headers) || in_array('telp', $headers) || in_array('phone_number', $headers);
+
         $requiredHeaders = ['nip', 'name', 'fet_staff_id'];
         if (!$hasSubjectHeader) {
             $requiredHeaders[] = 'mata_pelajaran';
         }
+        if (!$hasPhoneHeader) {
+            $requiredHeaders[] = 'no_telp';
+        }
+
         $missingHeaders = array_diff($requiredHeaders, $headers);
 
         if (!empty($missingHeaders)) {
@@ -127,11 +136,13 @@ class TeacherController extends Controller
         $errors = [];
         $seenNips = [];
         $seenFetStaffIds = [];
+        $seenPhones = [];
         $validTeachers = [];
 
-        // Preload active NIPs and FET Staff IDs to prevent N+1 queries
+        // Preload active NIPs, FET Staff IDs, and Phone Numbers to prevent N+1 queries
         $existingNips = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
         $existingFetStaffIds = User::whereNotNull('fet_staff_id')->whereNull('deleted_at')->pluck('fet_staff_id')->flip()->toArray();
+        $existingPhones = User::whereNotNull('phone_number')->whereNull('deleted_at')->pluck('phone_number')->flip()->toArray();
 
         foreach ($rows as $row) {
             $rowNumber++;
@@ -139,6 +150,14 @@ class TeacherController extends Controller
             $rawNip = isset($row['nip']) ? trim((string) $row['nip']) : '';
             $rawName = isset($row['name']) ? trim((string) $row['name']) : '';
             $rawFetId = isset($row['fet_staff_id']) ? trim((string) $row['fet_staff_id']) : '';
+            $rawPhone = isset($row['no_telp'])
+                ? trim((string) $row['no_telp'])
+                : (isset($row['no_telepon'])
+                    ? trim((string) $row['no_telepon'])
+                    : (isset($row['telp'])
+                        ? trim((string) $row['telp'])
+                        : (isset($row['phone_number']) ? trim((string) $row['phone_number']) : '')));
+            $normPhone = User::normalizePhoneNumber($rawPhone);
             $rawSubject = isset($row['mata_pelajaran'])
                 ? trim((string) $row['mata_pelajaran'])
                 : (isset($row['mapel']) ? trim((string) $row['mapel']) : (isset($row['subject']) ? trim((string) $row['subject']) : ''));
@@ -179,6 +198,35 @@ class TeacherController extends Controller
                     'attribute' => 'name',
                     'message' => 'Nama guru tidak boleh melebihi 100 karakter.',
                 ];
+            }
+
+            // Validasi Nomor Telepon
+            if ($rawPhone === '' || $normPhone === null) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'no_telp',
+                    'message' => 'Kolom nomor telepon (no_telp) wajib diisi sebagai ID login guru.',
+                ];
+            } elseif (!preg_match('/^08[0-9]{8,13}$/', $normPhone)) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'no_telp',
+                    'message' => "Format nomor telepon '{$rawPhone}' tidak valid (wajib nomor seluler Indonesia yang valid, contoh: 081234567890).",
+                ];
+            } elseif (isset($seenPhones[$normPhone])) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'no_telp',
+                    'message' => "Nomor telepon '{$normPhone}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenPhones[$normPhone]}).",
+                ];
+            } elseif (isset($existingPhones[$normPhone])) {
+                $errors[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'no_telp',
+                    'message' => "Nomor telepon '{$normPhone}' sudah terdaftar di sistem.",
+                ];
+            } else {
+                $seenPhones[$normPhone] = $rowNumber;
             }
 
             // Validasi fet_staff_id
@@ -228,7 +276,7 @@ class TeacherController extends Controller
                     'password' => Hash::make($rawNip, ['rounds' => 4]),
                     'fet_staff_id' => $rawFetId,
                     'email' => null,
-                    'phone_number' => null,
+                    'phone_number' => $normPhone,
                     'must_change_password' => true,
                 ],
             ];
@@ -311,10 +359,15 @@ class TeacherController extends Controller
     }
 
     /**
-     * Menambahkan akun guru baru (Auto-provisioning password).
+     * Menambahkan akun guru baru (Kredensial Login: No. Telepon, Password Awal: NIP).
      */
     public function store(Request $request): JsonResponse
     {
+        if ($request->filled('phone_number') || $request->filled('no_telp') || $request->filled('telp')) {
+            $rawPhone = $request->input('phone_number') ?? $request->input('no_telp') ?? $request->input('telp');
+            $request->merge(['phone_number' => User::normalizePhoneNumber($rawPhone)]);
+        }
+
         $request->validate([
             'name' => 'required|string|max:100',
             'nip' => [
@@ -331,6 +384,12 @@ class TeacherController extends Controller
                 'max:50',
                 Rule::unique('users', 'nis_nip')->whereNull('deleted_at'),
             ],
+            'phone_number' => [
+                'required',
+                'string',
+                'regex:/^08[0-9]{8,13}$/',
+                Rule::unique('users', 'phone_number')->whereNull('deleted_at'),
+            ],
             'fet_staff_id' => [
                 'nullable',
                 'string',
@@ -339,11 +398,13 @@ class TeacherController extends Controller
             ],
             'email' => 'nullable|email|unique:users,email',
             'subject_id' => 'nullable|exists:subjects,id',
-            'phone_number' => 'nullable|string|max:30',
+        ], [
+            'phone_number.required' => 'Nomor telepon guru wajib diisi sebagai ID login.',
+            'phone_number.regex' => 'Format nomor telepon harus berupa nomor seluler Indonesia yang valid (contoh: 081234567890).',
+            'phone_number.unique' => 'Nomor telepon sudah terdaftar di sistem.',
         ]);
 
         $nip = $request->input('nip') ?? $request->input('nis_nip');
-        $randomPassword = Str::random(8);
 
         $teacher = User::create([
             'name' => $request->name,
@@ -353,7 +414,7 @@ class TeacherController extends Controller
             'phone_number' => $request->input('phone_number'),
             'subject_id' => $request->input('subject_id'),
             'fet_staff_id' => $request->fet_staff_id,
-            'password' => Hash::make($randomPassword),
+            'password' => Hash::make($nip),
             'must_change_password' => true,
         ]);
 
@@ -364,7 +425,7 @@ class TeacherController extends Controller
             'message' => 'Akun guru berhasil dibuat.',
             'data' => [
                 'teacher' => $teacher,
-                'password' => $randomPassword,
+                'password' => $nip,
             ],
         ], 201);
     }
@@ -382,6 +443,11 @@ class TeacherController extends Controller
 
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
+        if ($request->filled('phone_number') || $request->filled('no_telp') || $request->filled('telp')) {
+            $rawPhone = $request->input('phone_number') ?? $request->input('no_telp') ?? $request->input('telp');
+            $request->merge(['phone_number' => User::normalizePhoneNumber($rawPhone)]);
+        }
+
         $request->validate([
             'name' => 'sometimes|required|string|max:100',
             'nip' => [
@@ -396,6 +462,13 @@ class TeacherController extends Controller
                 'max:50',
                 Rule::unique('users', 'nis_nip')->ignore($teacher->id)->whereNull('deleted_at'),
             ],
+            'phone_number' => [
+                'sometimes',
+                'required',
+                'string',
+                'regex:/^08[0-9]{8,13}$/',
+                Rule::unique('users', 'phone_number')->ignore($teacher->id)->whereNull('deleted_at'),
+            ],
             'fet_staff_id' => [
                 'nullable',
                 'string',
@@ -408,7 +481,10 @@ class TeacherController extends Controller
                 Rule::unique('users', 'email')->ignore($teacher->id),
             ],
             'subject_id' => 'nullable|exists:subjects,id',
-            'phone_number' => 'nullable|string|max:30',
+        ], [
+            'phone_number.required' => 'Nomor telepon guru wajib diisi.',
+            'phone_number.regex' => 'Format nomor telepon harus berupa nomor seluler Indonesia yang valid (contoh: 081234567890).',
+            'phone_number.unique' => 'Nomor telepon sudah terdaftar di sistem.',
         ]);
 
         $data = [];
