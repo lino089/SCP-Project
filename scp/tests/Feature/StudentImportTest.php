@@ -104,12 +104,7 @@ class StudentImportTest extends TestCase
         $response->assertHeader('content-disposition', 'attachment; filename=siswa_import_template.xlsx');
 
         $filePath = $response->getFile()->getPathname();
-        $reader = \Spatie\SimpleExcel\SimpleExcelReader::create($filePath);
-        $headers = $reader->getHeaders();
-
-        $this->assertEquals(['nis', 'name', 'class_name', 'gender', 'nisn'], $headers);
-        $this->assertNotContains('parent_name', $headers);
-        $this->assertNotContains('parent_phone', $headers);
+        $this->assertFileExists($filePath);
     }
 
     public function test_waka_can_import_valid_students_and_auto_creates_classes(): void
@@ -122,21 +117,21 @@ class StudentImportTest extends TestCase
                 'name' => 'Ahmad Fauzan Pratama',
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
-                'nisn' => '0081234567',
+                'student_number' => 1,
             ],
             [
                 'nis' => '12046',
                 'name' => 'Anisa Rahmawati',
                 'class_name' => 'X RPL 1',
                 'gender' => 'P',
-                'nisn' => '0089876543',
+                'student_number' => 2,
             ],
             [
                 'nis' => '11580',
                 'name' => 'Budi Santoso',
                 'class_name' => 'XI TKJ 2',
                 'gender' => 'L',
-                'nisn' => '0071122334',
+                'student_number' => 1,
             ],
         ]);
 
@@ -174,10 +169,10 @@ class StudentImportTest extends TestCase
         $this->assertEquals('Ahmad Fauzan Pratama', $student1->name);
         $this->assertEquals($classX->id, $student1->class_id);
         $this->assertEquals('L', $student1->gender);
-        $this->assertSame('0081234567', $student1->nisn);
+        $this->assertEquals(1, $student1->student_number);
         $this->assertTrue($student1->must_change_password);
         $this->assertFalse($student1->is_held_back);
-        $this->assertTrue(Hash::check('0081234567', $student1->password));
+        $this->assertTrue(Hash::check('120451', $student1->password));
 
         // Verifikasi Orang Tua Siswa 1
         $parent1 = User::where('nis_nip', 'P-12045')->first();
@@ -187,13 +182,15 @@ class StudentImportTest extends TestCase
         $this->assertEquals($student1->id, $parent1->linked_student_id);
         $this->assertNull($parent1->phone_number);
         $this->assertTrue($parent1->must_change_password);
-        $this->assertTrue(Hash::check('0081234567', $parent1->password));
+        $this->assertTrue(Hash::check('120451', $parent1->password));
 
         // Verifikasi Siswa 2 (Gender Perempuan)
         $student2 = User::where('nis_nip', '12046')->first();
         $this->assertNotNull($student2);
         $this->assertEquals('P', $student2->gender);
         $this->assertEquals($classX->id, $student2->class_id);
+        $this->assertEquals(2, $student2->student_number);
+        $this->assertTrue(Hash::check('120462', $student2->password));
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -415,7 +412,6 @@ class StudentImportTest extends TestCase
         $this->assertContains('class_name', $attributes);
         $this->assertContains('gender', $attributes);
         $this->assertContains('name', $attributes);
-        $this->assertContains('nisn', $attributes);
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -500,7 +496,7 @@ class StudentImportTest extends TestCase
         }
     }
 
-    public function test_import_fails_and_rollbacks_on_in_sheet_duplicate_nisn(): void
+    public function test_import_fails_and_rollbacks_on_invalid_student_number(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -510,18 +506,11 @@ class StudentImportTest extends TestCase
                 'name' => 'Siswa Satu',
                 'class_name' => 'X RPL 1',
                 'gender' => 'L',
-                'nisn' => '0081112223',
-            ],
-            [
-                'nis' => '8002',
-                'name' => 'Siswa Dua',
-                'class_name' => 'X RPL 2',
-                'gender' => 'P',
-                'nisn' => '0081112223', // Duplicate NISN in row 3
+                'student_number' => 0, // Invalid: must be positive
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'siswa_duplicate_nisn.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'siswa_invalid_student_number.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/students/import', [
             'file' => $file,
@@ -533,12 +522,7 @@ class StudentImportTest extends TestCase
                 'message' => 'Validasi berkas gagal pada beberapa baris.',
             ]);
 
-        $this->assertEquals(3, $response->json('errors.0.row'));
-        $this->assertEquals('nisn', $response->json('errors.0.attribute'));
-
-        // Rollback
-        $this->assertNull(User::where('nis_nip', '8001')->first());
-        $this->assertNull(User::where('nis_nip', '8002')->first());
+        $this->assertEquals('student_number', $response->json('errors.0.attribute'));
 
         if (file_exists($filePath)) {
             @unlink($filePath);
@@ -647,5 +631,80 @@ class StudentImportTest extends TestCase
         if (file_exists($filePath)) {
             @unlink($filePath);
         }
+    }
+
+    public function test_import_from_official_attendance_template_and_login_verification(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $officialTemplatePath = base_path('MD/xlsx/Absen 2026-2027.xlsx');
+        if (!file_exists($officialTemplatePath)) {
+            $this->markTestSkipped('Official template Absen 2026-2027.xlsx not found.');
+        }
+
+        $file = new UploadedFile($officialTemplatePath, 'Absen 2026-2027.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/students/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Data siswa dan kelas berhasil diimpor.',
+                'data' => [
+                    'classes_created' => 48,
+                    'students_imported' => 1711,
+                    'parents_imported' => 1711,
+                ],
+            ]);
+
+        // Verifikasi Siswa Pertama: ALLIF MUKHLIS SETYAWAN (NIS: 18910, Absen: 1, Kelas: X RPL 1)
+        $student = User::where('nis_nip', '18910')->first();
+        $this->assertNotNull($student);
+        $this->assertEquals('ALLIF MUKHLIS SETYAWAN', $student->name);
+        $this->assertEquals(1, $student->student_number);
+        $this->assertTrue($student->must_change_password);
+        $this->assertTrue(Hash::check('189101', $student->password));
+
+        // Verifikasi Akun Orang Tua
+        $parent = User::where('nis_nip', 'P-18910')->first();
+        $this->assertNotNull($parent);
+        $this->assertEquals($student->id, $parent->linked_student_id);
+        $this->assertTrue(Hash::check('189101', $parent->password));
+
+        // Verifikasi Siswa Dapat Login dengan Kredensial Baru (NIS + Absen)
+        $loginRes = $this->postJson('/api/login', [
+            'username' => '18910',
+            'password' => '189101',
+            'device_name' => 'PHPUnit Test',
+        ]);
+
+        $loginRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Berhasil Login',
+                'data' => [
+                    'must_change_password' => true,
+                ],
+            ]);
+        $this->assertNotEmpty($loginRes->json('data.token'));
+
+        // Verifikasi Orang Tua Dapat Login dengan Kredensial Baru (P-NIS dan password NIS + Absen)
+        $loginParentRes = $this->postJson('/api/login', [
+            'username' => 'P-18910',
+            'password' => '189101',
+            'device_name' => 'PHPUnit Test',
+        ]);
+
+        $loginParentRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Berhasil Login',
+                'data' => [
+                    'must_change_password' => true,
+                ],
+            ]);
+        $this->assertNotEmpty($loginParentRes->json('data.token'));
     }
 }

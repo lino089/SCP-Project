@@ -16,6 +16,8 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ScheduleController extends Controller
@@ -426,13 +428,18 @@ class ScheduleController extends Controller
     }
 
     /**
-     * Reset seluruh data jadwal pelajaran aktif (Keamanan Reset Data / PRD 6.4).
+     * Reset seluruh data jadwal pelajaran secara permanen (Hard Delete) (Keamanan Reset Data / PRD 6.4).
      * POST /api/schedules/reset
      *
      * Alur:
      * 1. Verifikasi Password pengguna di Backend (Step-Up Auth)
-     * 2. Validasi Relasi Data: Reset Jadwal dapat dilanjutkan jika konfirmasi dan validasi berhasil
-     * 3. Eksekusi soft delete jadwal & bersihkan staging import via DB::transaction
+     * 2. Eksekusi penghapusan permanen berjenjang via DB::transaction:
+     *    - Hapus attendances terikat journals
+     *    - Hapus file fisik foto journals dari storage
+     *    - Hapus journals yang merujuk ke schedules
+     *    - Bersihkan schedule_ids pada teacher_leave_requests
+     *    - Hapus staging schedule_import_rows dan schedule_imports
+     *    - Force delete / hard delete seluruh baris schedules
      */
     public function reset(Request $request): JsonResponse
     {
@@ -445,21 +452,56 @@ class ScheduleController extends Controller
             return $error;
         }
 
-        // 2. Validasi Relasi Data: Reset Data Jadwal dapat dilanjutkan jika konfirmasi dan validasi berhasil.
+        // 2. Eksekusi penghapusan permanen berjenjang via DB::transaction
         $deletedCount = DB::transaction(function () {
-            $count = Schedule::whereNull('deleted_at')->count();
-            Schedule::query()->delete();
+            $count = Schedule::withTrashed()->count();
 
-            // Bersihkan baris staging impor jadwal jika ada
-            DB::table('schedule_import_rows')->delete();
-            DB::table('schedule_imports')->delete();
+            // a. Ambil jurnal terikat dan bersihkan foto fisik di storage
+            if (Schema::hasTable('journals')) {
+                $journals = DB::table('journals')->get(['id', 'photo_path']);
+                $journalIds = $journals->pluck('id')->all();
+
+                if (!empty($journalIds)) {
+                    // Hapus data presensi terikat jurnal
+                    if (Schema::hasTable('attendances')) {
+                        DB::table('attendances')->whereIn('journal_id', $journalIds)->delete();
+                    }
+
+                    // Hapus berkas fisik foto jurnal dari storage
+                    $disk = config('filesystems.default', 'public');
+                    foreach ($journals as $journal) {
+                        if (!empty($journal->photo_path) && Storage::disk($disk)->exists($journal->photo_path)) {
+                            Storage::disk($disk)->delete($journal->photo_path);
+                        }
+                    }
+
+                    // Hapus baris jurnal
+                    DB::table('journals')->whereIn('id', $journalIds)->delete();
+                }
+            }
+
+            // b. Bersihkan referensi schedule_ids di teacher_leave_requests
+            if (Schema::hasTable('teacher_leave_requests')) {
+                DB::table('teacher_leave_requests')->whereNotNull('schedule_ids')->update(['schedule_ids' => null]);
+            }
+
+            // c. Bersihkan baris staging impor jadwal jika ada
+            if (Schema::hasTable('schedule_import_rows')) {
+                DB::table('schedule_import_rows')->delete();
+            }
+            if (Schema::hasTable('schedule_imports')) {
+                DB::table('schedule_imports')->delete();
+            }
+
+            // d. Hapus permanen seluruh jadwal (termasuk yang berstatus soft-deleted)
+            Schedule::withTrashed()->forceDelete();
 
             return $count;
         });
 
         return response()->json([
             'success' => true,
-            'message' => "Seluruh Data Jadwal berhasil di-reset ({$deletedCount} jadwal dihapus).",
+            'message' => "Seluruh Data Jadwal berhasil di-reset secara permanen ({$deletedCount} jadwal dihapus).",
             'data' => [
                 'deleted_count' => $deletedCount,
             ],

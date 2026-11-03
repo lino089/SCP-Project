@@ -27,6 +27,7 @@ const getBreadcrumb = (pathname) => {
     '/teacher/quiz': { category: 'Menu Guru', page: 'Manajemen Kuis AI' },
     '/teacher/permissions': { category: 'Menu Guru', page: 'Verifikasi Perizinan' },
     '/student/home': { category: 'Menu Siswa', page: 'Beranda & Presensi' },
+    '/student/schedule': { category: 'Menu Siswa', page: 'Jadwal Pelajaran' },
     '/student/permissions': { category: 'Menu Siswa', page: 'Pengajuan Perizinan' },
     '/student/quiz': { category: 'Menu Siswa', page: 'Pengerjaan Kuis AI' },
     '/parent/monitoring': { category: 'Menu Orang Tua', page: 'Monitoring Anak' },

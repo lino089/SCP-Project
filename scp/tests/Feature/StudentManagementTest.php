@@ -319,18 +319,17 @@ class StudentManagementTest extends TestCase
             ->assertJsonValidationErrors(['nisn']);
     }
 
-    public function test_creating_student_without_nisn_fails_validation(): void
+    public function test_creating_student_without_nis_fails_validation(): void
     {
         Sanctum::actingAs($this->waka);
 
         $response = $this->postJson('/api/students', [
             'name' => 'Siswa Polos',
-            'nis' => '1013',
             'class_id' => $this->classX->id,
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['nisn']);
+            ->assertJsonValidationErrors(['nis']);
     }
 
     public function test_waka_can_update_student_gender_and_nisn(): void

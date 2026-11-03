@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attendance;
 use App\Models\Classes;
+use App\Models\Journal;
 use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\Subject;
@@ -163,8 +165,9 @@ class ResetDataSecurityTest extends TestCase
                 ],
             ]);
 
-        // Verifikasi seluruh jadwal aktif telah di-reset (0 jadwal aktif)
+        // Verifikasi seluruh jadwal aktif dan riwayat telah di-reset secara permanen (0 jadwal di DB)
         $this->assertEquals(0, Schedule::whereNull('deleted_at')->count());
+        $this->assertEquals(0, Schedule::withTrashed()->count());
     }
 
     public function test_reset_master_data_requires_auth(): void
@@ -266,12 +269,12 @@ class ResetDataSecurityTest extends TestCase
                 'success' => true,
             ]);
 
-        // Verifikasi seluruh master data sekolah ter-reset
-        $this->assertEquals(0, Classes::count());
-        $this->assertEquals(0, Room::count());
-        $this->assertEquals(0, Subject::count());
-        $this->assertEquals(0, User::where('role', 'teacher')->count());
-        $this->assertEquals(0, User::where('role', 'student')->count());
+        // Verifikasi seluruh master data sekolah ter-reset secara permanen (0 data di DB)
+        $this->assertEquals(0, Classes::withTrashed()->count());
+        $this->assertEquals(0, Room::withTrashed()->count());
+        $this->assertEquals(0, Subject::withTrashed()->count());
+        $this->assertEquals(0, User::where('role', 'teacher')->withTrashed()->count());
+        $this->assertEquals(0, User::where('role', 'student')->withTrashed()->count());
 
         // Akun Waka Kurikulum tetap utuh dan aktif
         $this->assertDatabaseHas('users', [
@@ -279,5 +282,46 @@ class ResetDataSecurityTest extends TestCase
             'role' => 'vice_principal',
             'email' => 'waka@example.com',
         ]);
+    }
+
+    public function test_reset_schedules_permanently_removes_journals_and_attendances(): void
+    {
+        $sched = Schedule::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'room_id' => $this->room->id,
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+            'cycle_type' => 1,
+            'source' => 'manual',
+        ]);
+
+        $journal = Journal::create([
+            'schedule_id' => $sched->id,
+            'date' => '2026-11-03',
+            'status' => 'ongoing',
+        ]);
+
+        Attendance::create([
+            'journal_id' => $journal->id,
+            'student_id' => $this->student->id,
+            'status' => 'Hadir',
+            'date' => '2026-11-03',
+        ]);
+
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->postJson('/api/schedules/reset', [
+            'password' => 'wakaPassword123',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Verifikasi seluruh schedules, journals, dan attendances benar-benar terhapus fisik dari DB
+        $this->assertEquals(0, Schedule::withTrashed()->count());
+        $this->assertEquals(0, Journal::count());
+        $this->assertEquals(0, Attendance::count());
     }
 }

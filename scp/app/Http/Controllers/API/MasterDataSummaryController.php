@@ -56,14 +56,14 @@ class MasterDataSummaryController extends Controller
             return $error;
         }
 
-        // 2. Validasi Relasi Data: Reset Master Data tetap ditolak apabila masih terdapat Data Jadwal yang terhubung
-        $activeSchedulesCount = Schedule::whereNull('deleted_at')->count();
-        if ($activeSchedulesCount > 0) {
+        // 2. Validasi Relasi Data: Reset Master Data ditolak jika masih terdapat data Jadwal di sistem
+        $existingSchedulesCount = Schedule::withTrashed()->count();
+        if ($existingSchedulesCount > 0) {
             return response()->json([
                 'success' => false,
-                'message' => "Reset Master Data ditolak: Masih terdapat {$activeSchedulesCount} data jadwal yang terhubung. Silakan reset Data Jadwal terlebih dahulu sebelum melakukan reset Master Data.",
+                'message' => "Reset Master Data ditolak: Masih terdapat {$existingSchedulesCount} data jadwal yang terhubung. Silakan reset Data Jadwal terlebih dahulu sebelum melakukan reset Master Data.",
                 'errors' => [
-                    'schedules' => ["Masih terdapat {$activeSchedulesCount} data jadwal aktif yang terhubung dengan master data."],
+                    'schedules' => ["Masih terdapat {$existingSchedulesCount} data jadwal (aktif/riwayat) yang terhubung dengan master data."],
                 ],
             ], 409);
         }
@@ -71,34 +71,117 @@ class MasterDataSummaryController extends Controller
         $scope = $request->input('scope', 'all');
 
         DB::transaction(function () use ($scope) {
+            // A. Siswa & Orang Tua (Hard Delete)
             if ($scope === 'all' || $scope === 'students') {
-                if (Schema::hasTable('attendances')) DB::table('attendances')->delete();
-                if (Schema::hasTable('leave_requests')) DB::table('leave_requests')->delete();
-                if (Schema::hasTable('quiz_submissions')) DB::table('quiz_submissions')->delete();
-                User::where('role', 'parent')->delete();
-                User::where('role', 'student')->delete();
+                $studentUserIds = User::whereIn('role', ['student', 'parent'])->withTrashed()->pluck('id')->all();
+
+                if (!empty($studentUserIds)) {
+                    if (Schema::hasTable('attendances')) {
+                        DB::table('attendances')->whereIn('student_id', $studentUserIds)->delete();
+                    }
+                    if (Schema::hasTable('leave_requests')) {
+                        DB::table('leave_requests')
+                            ->whereIn('student_id', $studentUserIds)
+                            ->orWhereIn('applicant_id', $studentUserIds)
+                            ->delete();
+                    }
+                    if (Schema::hasTable('quiz_submissions')) {
+                        DB::table('quiz_submissions')->whereIn('student_id', $studentUserIds)->delete();
+                    }
+                    if (Schema::hasTable('otp_codes')) {
+                        DB::table('otp_codes')->whereIn('user_id', $studentUserIds)->delete();
+                    }
+                    if (Schema::hasTable('personal_access_tokens')) {
+                        DB::table('personal_access_tokens')
+                            ->where('tokenable_type', User::class)
+                            ->whereIn('tokenable_id', $studentUserIds)
+                            ->delete();
+                    }
+
+                    // Hapus permanen orang tua & siswa dari database
+                    User::where('role', 'parent')->withTrashed()->forceDelete();
+                    User::where('role', 'student')->withTrashed()->forceDelete();
+                }
             }
 
+            // B. Guru (Hard Delete, kecuali Waka vice_principal)
             if ($scope === 'all' || $scope === 'teachers') {
-                if (Schema::hasTable('teacher_leave_requests')) DB::table('teacher_leave_requests')->delete();
-                if (Schema::hasTable('teacher_assignments')) DB::table('teacher_assignments')->delete();
-                if (Schema::hasTable('quiz_questions')) DB::table('quiz_questions')->delete();
-                if (Schema::hasTable('ai_quizzes')) DB::table('ai_quizzes')->delete();
-                if (Schema::hasTable('quizzes')) DB::table('quizzes')->delete();
-                User::where('role', 'teacher')->delete();
+                $teacherUserIds = User::where('role', 'teacher')->withTrashed()->pluck('id')->all();
+
+                if (!empty($teacherUserIds)) {
+                    if (Schema::hasTable('teacher_leave_requests')) {
+                        DB::table('teacher_leave_requests')
+                            ->whereIn('teacher_id', $teacherUserIds)
+                            ->orWhereIn('approved_by', $teacherUserIds)
+                            ->delete();
+                    }
+                    if (Schema::hasTable('teacher_assignments')) {
+                        DB::table('teacher_assignments')->whereIn('user_id', $teacherUserIds)->delete();
+                    }
+                    if (Schema::hasTable('ai_quizzes')) {
+                        $quizIds = DB::table('ai_quizzes')->whereIn('teacher_id', $teacherUserIds)->pluck('id')->all();
+                        if (!empty($quizIds)) {
+                            if (Schema::hasTable('quiz_questions')) {
+                                DB::table('quiz_questions')->whereIn('quiz_id', $quizIds)->delete();
+                            }
+                            if (Schema::hasTable('quiz_submissions')) {
+                                DB::table('quiz_submissions')->whereIn('quiz_id', $quizIds)->delete();
+                            }
+                            DB::table('ai_quizzes')->whereIn('id', $quizIds)->delete();
+                        }
+                    }
+                    if (Schema::hasTable('quizzes')) {
+                        DB::table('quizzes')->whereIn('teacher_id', $teacherUserIds)->delete();
+                    }
+                    if (Schema::hasTable('journals')) {
+                        DB::table('journals')->whereIn('substitute_teacher_id', $teacherUserIds)->update(['substitute_teacher_id' => null]);
+                    }
+                    if (Schema::hasTable('otp_codes')) {
+                        DB::table('otp_codes')->whereIn('user_id', $teacherUserIds)->delete();
+                    }
+                    if (Schema::hasTable('personal_access_tokens')) {
+                        DB::table('personal_access_tokens')
+                            ->where('tokenable_type', User::class)
+                            ->whereIn('tokenable_id', $teacherUserIds)
+                            ->delete();
+                    }
+
+                    User::where('role', 'teacher')->update(['subject_id' => null]);
+                    User::where('role', 'teacher')->withTrashed()->forceDelete();
+                }
             }
 
+            // C. Kelas Rombel (Hard Delete)
             if ($scope === 'all' || $scope === 'classes') {
                 Classes::query()->update(['next_class_id' => null]);
-                Classes::query()->delete();
+                User::whereNotNull('class_id')->update(['class_id' => null]);
+
+                if (Schema::hasTable('teacher_assignments')) {
+                    DB::table('teacher_assignments')->whereNotNull('class_id')->delete();
+                }
+                if (Schema::hasTable('schedule_import_rows')) {
+                    DB::table('schedule_import_rows')->whereNotNull('matched_class_id')->update(['matched_class_id' => null]);
+                }
+
+                Classes::withTrashed()->forceDelete();
             }
 
+            // D. Ruangan (Hard Delete)
             if ($scope === 'all' || $scope === 'rooms') {
-                Room::query()->delete();
+                if (Schema::hasTable('schedule_import_rows')) {
+                    DB::table('schedule_import_rows')->whereNotNull('matched_room_id')->update(['matched_room_id' => null]);
+                }
+                Room::withTrashed()->forceDelete();
             }
 
+            // E. Mata Pelajaran (Hard Delete)
             if ($scope === 'all' || $scope === 'subjects') {
-                Subject::query()->delete();
+                User::whereNotNull('subject_id')->update(['subject_id' => null]);
+
+                if (Schema::hasTable('schedule_import_rows')) {
+                    DB::table('schedule_import_rows')->whereNotNull('matched_subject_id')->update(['matched_subject_id' => null]);
+                }
+                Subject::withTrashed()->forceDelete();
             }
         });
 

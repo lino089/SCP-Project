@@ -21,6 +21,7 @@ const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPag
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
 const StudentHomePage = lazy(() => import('../pages/student/StudentHomePage'));
+const StudentSchedulePage = lazy(() => import('../pages/student/StudentSchedulePage'));
 const StudentPermissionPage = lazy(() => import('../pages/student/StudentPermissionPage'));
 const StudentQuizPage = lazy(() => import('../pages/student/StudentQuizPage'));
 const ParentMonitoringPage = lazy(() => import('../pages/parent/ParentMonitoringPage'));
@@ -86,6 +87,7 @@ export default function AppRouter() {
             {/* Student Routes */}
             <Route element={<RoleRoute allowedRoles={['student']} />}>
               <Route path="/student/home" element={<StudentHomePage />} />
+              <Route path="/student/schedule" element={<StudentSchedulePage />} />
               <Route path="/student/permissions" element={<StudentPermissionPage />} />
               <Route path="/student/quiz" element={<StudentQuizPage />} />
             </Route>

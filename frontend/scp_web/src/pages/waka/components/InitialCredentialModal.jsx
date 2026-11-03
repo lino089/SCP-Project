@@ -39,14 +39,14 @@ Status: Wajib Ganti Password saat login perdana.`;
 --- AKUN SISWA ---
 Nama: ${student.name || '-'}
 ID Login (NIS): ${student.nis_nip || student.nis || '-'}
-NISN: ${student.nisn || '-'}
+No. Absen: ${student.student_number || student.absen || '-'}
 Kelas: ${student.schoolClass?.name || student.className || '-'}
-Kata Sandi Awal: ${password} (NISN Siswa)
+Kata Sandi Awal: ${password} (NIS + No. Absen)
 
 --- AKUN ORANG TUA / WALI ---
 Nama: ${parent.name || `Wali Murid ${student.name}`}
 ID Login: ${parent.nis_nip || `P-${student.nis_nip || student.nis}`}
-Kata Sandi Awal: ${password} (NISN Siswa)
+Kata Sandi Awal: ${password} (NIS + No. Absen)
 Status: Wajib Ganti Password saat login perdana.`;
   };
 
@@ -166,7 +166,7 @@ Status: Wajib Ganti Password saat login perdana.`;
                   </span>
                 </div>
                 <div className="credential-field credential-field--highlight">
-                  <span className="credential-field__label">Kata Sandi Awal (NISN)</span>
+                  <span className="credential-field__label">Kata Sandi Awal (NIS + No. Absen)</span>
                   <div className="credential-field__password-box">
                     <span className="font-mono text-lg font-bold">{password}</span>
                   </div>
@@ -190,7 +190,7 @@ Status: Wajib Ganti Password saat login perdana.`;
                   </span>
                 </div>
                 <div className="credential-field credential-field--highlight">
-                  <span className="credential-field__label">Kata Sandi Awal (NISN)</span>
+                  <span className="credential-field__label">Kata Sandi Awal (NIS + No. Absen)</span>
                   <div className="credential-field__password-box">
                     <span className="font-mono text-lg font-bold">{password}</span>
                   </div>

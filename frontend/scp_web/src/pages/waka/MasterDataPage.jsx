@@ -392,6 +392,7 @@ export default function MasterDataPage() {
         setFormData({
           name: '',
           nis: '',
+          student_number: '',
           gender: '',
           nisn: '',
           class_id: classList[0]?.id ? String(classList[0].id) : '',
@@ -436,6 +437,7 @@ export default function MasterDataPage() {
       setFormData({
         name: item.name || '',
         nis: item.nis_nip || item.nis || '',
+        student_number: item.student_number ? String(item.student_number) : '',
         gender: item.gender || '',
         nisn: item.nisn || '',
         class_id: item.class_id ? String(item.class_id) : (item.school_class?.id ? String(item.school_class.id) : (item.schoolClass?.id ? String(item.schoolClass.id) : '')),
@@ -539,8 +541,8 @@ export default function MasterDataPage() {
           if (!formData.nis?.trim()) errors.nis = ['Nomor Induk Siswa (NIS) wajib diisi.'];
           if (!formData.class_id) errors.class_id = ['Rombel kelas wajib dipilih.'];
           if (!formData.gender) errors.gender = ['Jenis kelamin wajib dipilih (L atau P).'];
-          if (!formData.nisn || !/^\d{10}$/.test(formData.nisn.trim())) {
-            errors.nisn = ['NISN wajib diisi tepat 10 digit angka.'];
+          if (formData.nisn?.trim() && !/^\d{10}$/.test(formData.nisn.trim())) {
+            errors.nisn = ['Jika diisi, NISN harus tepat 10 digit angka.'];
           }
 
           if (Object.keys(errors).length > 0) {
@@ -554,20 +556,21 @@ export default function MasterDataPage() {
             nis: formData.nis.trim(),
             class_id: Number(formData.class_id),
             gender: formData.gender,
-            nisn: formData.nisn.trim(),
+            student_number: formData.student_number ? Number(formData.student_number) : null,
+            nisn: formData.nisn?.trim() || null,
           };
           try {
             const res = await studentApi.createStudent(payload);
             const student = res.data?.student;
             const parent = res.data?.parent;
-            const password = res.data?.generate_password || payload.nisn;
+            const password = res.data?.generate_password || (payload.student_number ? `${payload.nis}${payload.student_number}` : payload.nis);
 
             if (student) {
               setStudentList((prev) => [...prev, student]);
             }
             setCredentialModalData({
               type: 'student',
-              student: student || { name: payload.name, nis_nip: payload.nis },
+              student: student || { name: payload.name, nis_nip: payload.nis, student_number: payload.student_number },
               parent: parent || { name: 'Wali Murid ' + payload.name, nis_nip: 'P-' + payload.nis },
               password,
             });
@@ -664,8 +667,8 @@ export default function MasterDataPage() {
           if (!formData.nis?.trim()) errors.nis = ['Nomor Induk Siswa (NIS) wajib diisi.'];
           if (!formData.class_id) errors.class_id = ['Rombel kelas wajib dipilih.'];
           if (!formData.gender) errors.gender = ['Jenis kelamin wajib dipilih (L atau P).'];
-          if (!formData.nisn || !/^\d{10}$/.test(formData.nisn.trim())) {
-            errors.nisn = ['NISN wajib diisi tepat 10 digit angka.'];
+          if (formData.nisn?.trim() && !/^\d{10}$/.test(formData.nisn.trim())) {
+            errors.nisn = ['Jika diisi, NISN harus tepat 10 digit angka.'];
           }
 
           if (Object.keys(errors).length > 0) {
@@ -679,7 +682,8 @@ export default function MasterDataPage() {
             nis: formData.nis.trim(),
             class_id: Number(formData.class_id),
             gender: formData.gender,
-            nisn: formData.nisn.trim(),
+            student_number: formData.student_number ? Number(formData.student_number) : null,
+            nisn: formData.nisn?.trim() || null,
           };
 
           // Step-Up Auth password confirmation for Siswa edit
@@ -1560,6 +1564,15 @@ export default function MasterDataPage() {
             ),
           },
           {
+            key: 'student_number',
+            label: 'No. Absen',
+            renderCell: (r) => (
+              <span className="font-mono text-xs font-semibold text-neutral-800">
+                {r.student_number ? `${r.student_number}` : '-'}
+              </span>
+            ),
+          },
+          {
             key: 'nisn',
             label: 'NISN',
             renderCell: (r) => (
@@ -2258,6 +2271,18 @@ export default function MasterDataPage() {
                 required
               />
 
+              <Input
+                label="Nomor Absen"
+                type="number"
+                placeholder="Contoh: 1"
+                min="1"
+                max="100"
+                value={formData.student_number || ''}
+                onChange={(e) => setFormData({ ...formData, student_number: e.target.value })}
+                error={formErrors.student_number?.[0]}
+                helperText="Nomor urut presensi siswa di kelas"
+              />
+
               <Select
                 label="Rombel Kelas"
                 value={formData.class_id || ''}
@@ -2288,7 +2313,7 @@ export default function MasterDataPage() {
 
               <Input
                 label="Nomor Induk Siswa Nasional (NISN)"
-                placeholder="10 digit angka resmi Kemendikbud"
+                placeholder="10 digit angka resmi Kemendikbud (Opsional)"
                 value={formData.nisn || ''}
                 onChange={(e) => {
                   const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -2296,15 +2321,14 @@ export default function MasterDataPage() {
                 }}
                 maxLength={10}
                 error={formErrors.nisn?.[0]}
-                helperText="Wajib, tepat 10 digit angka resmi NISN siswa"
-                required
+                helperText="Opsional, 10 digit angka resmi NISN siswa"
               />
 
               {modalType === 'create' && (
                 <div className="master-data-form__hint">
                   <Info size={16} className="text-gray-500 shrink-0 mt-0.5" />
                   <span>
-                    Sistem akan membuat 2 akun sekaligus: akun <strong>Siswa</strong> (ID Login: <strong>NIS</strong>, Password Awal: <strong>NISN</strong>) dan akun <strong>Orang Tua</strong> (ID Login: <code>P-[NIS]</code>, Password Awal: <strong>NISN</strong>).
+                    Sistem akan membuat 2 akun sekaligus: akun <strong>Siswa</strong> (ID Login: <strong>NIS</strong>, Password Awal: <strong>NIS + No. Absen</strong>) dan akun <strong>Orang Tua</strong> (ID Login: <code>P-[NIS]</code>, Password Awal: <strong>NIS + No. Absen</strong>).
                   </span>
                 </div>
               )}
@@ -2530,10 +2554,10 @@ export default function MasterDataPage() {
               <span>Fitur Otomatisasi Zero-Manual (SCP v4.5):</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
-              <li>Header wajib: <strong>nis</strong>, <strong>name</strong>, <strong>class_name</strong>, <strong>gender</strong> (L atau P), <strong>nisn</strong> (10 digit numerik).</li>
-              <li><strong>Kredensial Login</strong>: Siswa menggunakan ID Login <strong>NIS</strong> dan kata sandi awal <strong>NISN</strong>. Orang tua menggunakan ID Login <code>P-[NIS]</code> dan kata sandi awal <strong>NISN</strong> (keduanya wajib ganti sandi pada login pertama).</li>
-              <li><strong>Auto-Create Kelas</strong>: Rombel baru pada kolom <code>class_name</code> akan didaftarkan otomatis dengan deteksi tingkat (10, 11, 12).</li>
-              <li><strong>Auto-Provisioning Akun Orang Tua</strong>: Akun orang tua otomatis dibuat dengan format nama <strong>"Wali Murid [Nama Siswa]"</strong> dan username <code>P-[NIS]</code>. Nomor kontak orang tua dapat diinput secara manual setelah akun terdaftar.</li>
+              <li><strong>Format Berkas</strong>: Template buku presensi resmi per tingkatan (Sheet X, XI, XII) memuat kolom <strong>Urt</strong> (No. Absen), <strong>NIS</strong>, <strong>NAMA SISWA</strong>, dan <strong>L / P</strong>.</li>
+              <li><strong>Kredensial Login</strong>: Siswa menggunakan ID Login <strong>NIS</strong> dan kata sandi awal <strong>NIS + Nomor Absen</strong> (Contoh: NIS <code>18260</code>, Absen <code>1</code> &rarr; Password <code>182601</code>). Orang tua menggunakan ID Login <code>P-[NIS]</code> dengan kata sandi awal yang sama.</li>
+              <li><strong>Auto-Create Kelas</strong>: Rombel kelas pada berkas didaftarkan otomatis sesuai tingkatannya (10, 11, 12).</li>
+              <li><strong>Auto-Provisioning Akun Orang Tua</strong>: Akun orang tua otomatis dibuat dengan format nama <strong>"Wali Murid [Nama Siswa]"</strong> dan username <code>P-[NIS]</code> (keduanya wajib ganti sandi pada login pertama).</li>
             </ul>
           </div>
 

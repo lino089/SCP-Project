@@ -1,0 +1,116 @@
+/* ==========================================================================
+   StudentSchedule.css — Styling Halaman Jadwal Pelajaran Siswa
+   Konsisten dengan Exness Precision Fintech Palette & Waka/Guru Schedule
+   ========================================================================== */
+
+.student-schedule-page {
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 640px) {
+  .student-schedule-page {
+    padding: 24px 32px;
+  }
+}
+
+/* Header Halaman */
+.student-schedule__header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .student-schedule__header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.student-schedule__title-group h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.student-schedule__subtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+
+.student-schedule__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Modal Detail Info KBM */
+.schedule-detail-box {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.schedule-detail-hero {
+  padding: 14px 16px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.schedule-detail-subject {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.schedule-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .schedule-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.schedule-detail-item {
+  padding: 10px 14px;
+  background-color: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.schedule-detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.schedule-detail-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}

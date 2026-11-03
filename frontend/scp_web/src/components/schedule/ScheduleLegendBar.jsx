@@ -21,7 +21,7 @@ export default function ScheduleLegendBar({
             <span className="legend-swatch legend-swatch--conflict" />
             <span>Bentrok (Guru / Ruang / Kelas)</span>
           </div>
-        ) : (
+        ) : mode === 'student' ? null : (
           <>
             <div className="schedule-legend-item">
               <span className="legend-swatch legend-swatch--completed" />

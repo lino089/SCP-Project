@@ -63,6 +63,15 @@ export function formatPercent(num, decimals = 1) {
 export function getStorageUrl(path) {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+  // Jika ada custom storage URL (misal: Supabase Storage public bucket)
+  const customStorageUrl = import.meta.env.VITE_STORAGE_BASE_URL;
+  if (customStorageUrl) {
+    const cleanBase = customStorageUrl.replace(/\/+$/, '');
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    return `${cleanBase}/${cleanPath}`;
+  }
+
   const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const backendBase = apiBase.replace(/\/api\/?$/, '');
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;

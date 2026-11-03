@@ -16,7 +16,6 @@ import leaveApi from '../../services/leaveApi';
 import { scheduleApi } from '../../services/scheduleApi';
 import { quizApi } from '../../services/quizApi';
 import { Badge, Button, Modal, Table } from '../../components/shared';
-import { ScheduleTimetableMatrix } from '../../components/schedule';
 import './StudentHome.css';
 
 export default function StudentHomePage() {
@@ -29,9 +28,6 @@ export default function StudentHomePage() {
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [activeQuizzes, setActiveQuizzes] = useState([]);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-  const [isWeeklyModalOpen, setIsWeeklyModalOpen] = useState(false);
-  const [weeklySchedules, setWeeklySchedules] = useState([]);
-  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
 
   // Student Profile Data (Data Riil dari Auth State)
   const student = useMemo(() => {
@@ -102,25 +98,9 @@ export default function StudentHomePage() {
   }, [student.classId, dateInfo.dayOfWeek]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPortalData();
   }, [loadPortalData]);
-
-  // Ambil jadwal mingguan lengkap saat modal dibuka
-  const handleOpenWeeklySchedule = async () => {
-    setIsWeeklyModalOpen(true);
-    if (weeklySchedules.length === 0 && student.classId) {
-      setIsWeeklyLoading(true);
-      try {
-        const res = await scheduleApi.getSchedules({ class_id: student.classId, all: 1 });
-        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        setWeeklySchedules(list);
-      } catch (err) {
-        console.warn('Gagal memuat jadwal mingguan kelas:', err);
-      } finally {
-        setIsWeeklyLoading(false);
-      }
-    }
-  };
 
   // Kalkulasi 4 Metrik Kehadiran Mandiri (Data Murni Database)
   const attendanceStats = useMemo(() => {
@@ -360,9 +340,9 @@ export default function StudentHomePage() {
               <button
                 type="button"
                 className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline cursor-pointer"
-                onClick={handleOpenWeeklySchedule}
+                onClick={() => navigate('/student/schedule')}
               >
-                Matriks Mingguan &rarr;
+                Lihat Jadwal Lengkap &rarr;
               </button>
             </div>
           </div>
@@ -504,37 +484,6 @@ export default function StudentHomePage() {
           />
           <div className="flex justify-end pt-2">
             <Button variant="secondary" onClick={() => setIsAttendanceModalOpen(false)}>
-              Tutup
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* =========================================================================
-          MODAL MATRIKS JADWAL MINGGUAN SISWA
-         ========================================================================= */}
-      <Modal
-        isOpen={isWeeklyModalOpen}
-        onClose={() => setIsWeeklyModalOpen(false)}
-        title={`Matriks Jadwal Belajar Mingguan (${student.className})`}
-        size="xl"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-gray-500">
-            Alokasi lengkap mata pelajaran dan ruang kelas untuk <strong>{student.className}</strong> (Senin s/d Jumat).
-          </p>
-          {isWeeklyLoading ? (
-            <div className="p-8 text-center text-xs text-gray-500">Memuat matriks jadwal mingguan...</div>
-          ) : (
-            <ScheduleTimetableMatrix
-              schedules={weeklySchedules}
-              matrixDays={['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat']}
-              mondayIsUpacara={true}
-              role="student"
-            />
-          )}
-          <div className="flex justify-end pt-3 border-t border-gray-100">
-            <Button variant="secondary" size="sm" onClick={() => setIsWeeklyModalOpen(false)}>
               Tutup
             </Button>
           </div>

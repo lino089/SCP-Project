@@ -12,7 +12,7 @@ class ScheduleConflictService
      * Determine if a room or room code/name is a shared facility (e.g. Lapangan Olahraga / OR)
      * where multiple classes and teachers can be scheduled simultaneously without room collision.
      */
-    public static function isSharedRoom(Room|int|string|null $room): bool
+    public static function isSharedRoom(mixed $room): bool
     {
         if (!$room) {
             return false;
@@ -21,6 +21,10 @@ class ScheduleConflictService
         $name = '';
         if ($room instanceof Room) {
             $name = $room->name;
+        } elseif (is_object($room) && isset($room->name)) {
+            $name = (string) $room->name;
+        } elseif (is_array($room) && isset($room['name'])) {
+            $name = (string) $room['name'];
         } elseif (is_numeric($room)) {
             $roomModel = Room::find($room);
             $name = $roomModel ? $roomModel->name : '';

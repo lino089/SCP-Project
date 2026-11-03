@@ -249,6 +249,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           </NavLink>
 
           <NavLink
+            to="/student/schedule"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <Calendar size={16} strokeWidth={1.5} />
+            <span>Jadwal Pelajaran</span>
+          </NavLink>
+
+          <NavLink
             to="/student/permissions"
             className={({ isActive }) =>
               `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`

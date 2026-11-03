@@ -240,8 +240,8 @@ export default function ScheduleManagementPage() {
     const cycleSchedules = scheduleList.filter(
       (s) => Number(s.cycle || s.cycle_type) === Number(selectedCycle)
     );
-    return detectScheduleConflicts(cycleSchedules);
-  }, [scheduleList, selectedCycle]);
+    return detectScheduleConflicts(cycleSchedules, roomList);
+  }, [scheduleList, selectedCycle, roomList]);
 
   // Filtered Classes based on Level, Specific Class, and Search Query
   const filteredClasses = useMemo(() => {

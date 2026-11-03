@@ -277,10 +277,72 @@ export const resolveSlotTime = (dayName, startSlot, duration = 1, mondayIsUpacar
 };
 
 /**
+ * Menentukan apakah sebuah ruangan atau identifier ruangan merupakan fasilitas bersama (shared facility)
+ * seperti Lapangan Olahraga / OR di mana beberapa kelas dapat menggunakan fasilitas tersebut secara
+ * bersamaan tanpa memicu penandaan bentrok ruangan.
+ *
+ * @param {Object|string|number|null} room - Objek room, nama ruangan, atau ID ruangan
+ * @param {Array} roomList - Kumpulan master data ruangan (opsional, untuk resolusi jika hanya ID)
+ * @returns {boolean}
+ */
+export const isSharedRoom = (room, roomList = []) => {
+  if (!room) return false;
+
+  let name = '';
+  if (typeof room === 'object') {
+    name = room.name || room.code || room.room_name || room.roomName || '';
+  } else if (typeof room === 'string') {
+    if (/^\d+$/.test(room.trim()) && Array.isArray(roomList) && roomList.length > 0) {
+      const found = roomList.find((r) => Number(r.id) === Number(room));
+      if (found) {
+        name = found.name || found.code || '';
+      }
+    }
+    if (!name) {
+      name = room;
+    }
+  } else if (typeof room === 'number') {
+    if (Array.isArray(roomList) && roomList.length > 0) {
+      const found = roomList.find((r) => Number(r.id) === Number(room));
+      if (found) {
+        name = found.name || found.code || '';
+      }
+    }
+  }
+
+  const upper = String(name).trim().toUpperCase();
+  if (!upper) return false;
+
+  if (['OR', 'OR1', 'OR2', 'OR3', 'LAPANGAN', 'LAPANGAN OLAHRAGA'].includes(upper)) {
+    return true;
+  }
+
+  if (/\b(OR|LAPANGAN)\b/i.test(upper)) {
+    return true;
+  }
+
+  if (/^OR\d*$/i.test(upper)) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Deteksi bentrok jadwal lokal dalam satu siklus putaran
  * Mengembalikan Set berisi ID jadwal yang saling bertabrakan
+ *
+ * Catatan penting:
+ * - Ruangan fasilitas bersama (shared room seperti OR / Lapangan) dapat digunakan bersamaan oleh
+ *   banyak kelas/guru sehingga TIDAK memicu bentrok ruangan.
+ * - Namun, jika guru yang sama atau rombel kelas yang sama terjadwal di jam bersamaan,
+ *   jadwal tersebut tetap ditandai sebagai bentrok sah.
+ *
+ * @param {Array} schedules - Kumpulan objek jadwal
+ * @param {Array} roomList - Kumpulan data ruangan untuk pencarian ID (opsional)
+ * @returns {Set<number|string>}
  */
-export const detectScheduleConflicts = (schedules) => {
+export const detectScheduleConflicts = (schedules, roomList = []) => {
   const conflicts = new Set();
   const list = schedules || [];
 
@@ -311,9 +373,16 @@ export const detectScheduleConflicts = (schedules) => {
       const classA = a.class_id || a.school_class?.id;
       const classB = b.class_id || b.school_class?.id;
 
-      const isTeacherConflict = teacherA && teacherB && Number(teacherA) === Number(teacherB);
-      const isRoomConflict = roomA && roomB && Number(roomA) === Number(roomB);
-      const isClassConflict = classA && classB && Number(classA) === Number(classB);
+      // Evaluasi fasilitas bersama (shared room seperti OR / Lapangan)
+      const roomValA = a.room || a.roomName || a.room_name || roomA;
+      const roomValB = b.room || b.roomName || b.room_name || roomB;
+      const isSharedA = isSharedRoom(roomValA, roomList);
+      const isSharedB = isSharedRoom(roomValB, roomList);
+      const isSharedFacility = isSharedA || isSharedB;
+
+      const isTeacherConflict = Boolean(teacherA && teacherB && Number(teacherA) === Number(teacherB));
+      const isRoomConflict = Boolean(!isSharedFacility && roomA && roomB && Number(roomA) === Number(roomB));
+      const isClassConflict = Boolean(classA && classB && Number(classA) === Number(classB));
 
       if (isTeacherConflict || isRoomConflict || isClassConflict) {
         conflicts.add(a.id);

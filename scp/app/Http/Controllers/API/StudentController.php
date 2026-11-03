@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use OpenSpout\Reader\XLSX\Options as OpenSpoutOptions;
+use OpenSpout\Reader\XLSX\Reader as OpenSpoutReader;
 use Spatie\SimpleExcel\SimpleExcelReader;
 use Spatie\SimpleExcel\SimpleExcelWriter;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,6 +27,9 @@ class StudentController extends Controller
         $templatePath = storage_path('app/templates/template_import_siswa.xlsx');
         if (!file_exists($templatePath)) {
             $templatePath = storage_path('app/templates/siswa_import_template.xlsx');
+        }
+        if (!file_exists($templatePath)) {
+            $templatePath = base_path('MD/xlsx/Absen 2026-2027.xlsx');
         }
 
         $headers = [
@@ -90,30 +95,131 @@ class StudentController extends Controller
         ]);
 
         $uploadedFile = $request->file('file');
-        $reader = SimpleExcelReader::create($uploadedFile->getRealPath(), 'xlsx')->trimHeaderRow()->headersToSnakeCase();
-        $headers = $reader->getHeaders();
+        $filePath = $uploadedFile->getRealPath();
 
-        if (empty($headers)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Berkas Excel tidak memuat data siswa atau header kosong.',
-                'errors' => null,
-            ], 422);
+        $extractedRows = [];
+
+        try {
+            $options = new OpenSpoutOptions();
+            $reader = new OpenSpoutReader($options);
+            $reader->open($filePath);
+
+            foreach ($reader->getSheetIterator() as $sheet) {
+                $sheetName = $sheet->getName();
+                $currentClass = null;
+                $inStudentTable = false;
+
+                foreach ($sheet->getRowIterator() as $rowIndex => $row) {
+                    $cells = $row->toArray();
+                    $c0 = isset($cells[0]) ? trim((string)$cells[0]) : '';
+                    $c1 = isset($cells[1]) ? trim((string)$cells[1]) : '';
+                    $c2 = isset($cells[2]) ? trim((string)$cells[2]) : '';
+                    $c3 = isset($cells[3]) ? trim((string)$cells[3]) : '';
+
+                    // 1. Deteksi baris kelas rombel (contoh: "KELAS : X RPL 1")
+                    if (stripos($c0, 'KELAS :') !== false || stripos($c0, 'KELAS:') !== false) {
+                        $currentClass = trim(preg_replace('/^KELAS\s*:\s*/i', '', $c0));
+                        $inStudentTable = false;
+                        continue;
+                    }
+
+                    // 2. Deteksi header kolom tabel siswa ("Urt" dan "NIS")
+                    if (strcasecmp($c0, 'Urt') === 0 && strcasecmp($c1, 'NIS') === 0) {
+                        $inStudentTable = true;
+                        continue;
+                    }
+
+                    // 3. Baris data siswa
+                    if ($inStudentTable && is_numeric($c0) && is_numeric($c1)) {
+                        $extractedRows[] = [
+                            'sheet' => $sheetName,
+                            'file_row' => $rowIndex + 1,
+                            'class_name' => $currentClass,
+                            'student_number' => (int) $c0,
+                            'nis' => (string) $c1,
+                            'name' => $c2,
+                            'gender' => strtoupper($c3),
+                            'nisn' => null,
+                        ];
+                        continue;
+                    }
+
+                    // 4. Deteksi akhir tabel (footer tanda tangan guru atau judul daftar hadir berikutnya)
+                    if (stripos($cells[11] ?? '', 'Guru Mata Pelajaran') !== false || stripos($c0, 'DAFTAR HADIR') !== false) {
+                        $inStudentTable = false;
+                    }
+                }
+            }
+            $reader->close();
+        } catch (\Throwable $e) {
+            // Lanjut ke fallback jika parsing OpenSpout gagal
         }
 
-        $requiredHeaders = ['nis', 'name', 'class_name', 'gender', 'nisn'];
-        $missingHeaders = array_diff($requiredHeaders, $headers);
+        // Fallback: Jika tidak terdeteksi struktur buku absen, coba deteksi tabel flat (format kolom nis, name, dll.)
+        if (empty($extractedRows)) {
+            try {
+                $flatReader = SimpleExcelReader::create($filePath, 'xlsx')->trimHeaderRow()->headersToSnakeCase();
+                $headers = $flatReader->getHeaders();
 
-        if (!empty($missingHeaders)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Format berkas tidak valid. Kolom header ' . implode(', ', $missingHeaders) . ' wajib tersedia.',
-                'errors' => null,
-            ], 422);
+                if (!empty($headers)) {
+                    $requiredFlatHeaders = ['nis', 'name', 'class_name', 'gender'];
+                    $hasAnyKeyHeader = in_array('nis', $headers, true) || in_array('name', $headers, true);
+                    if ($hasAnyKeyHeader) {
+                        $missingHeaders = array_diff($requiredFlatHeaders, $headers);
+                        if (!empty($missingHeaders)) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Format berkas tidak valid. Kolom header ' . implode(', ', $missingHeaders) . ' wajib tersedia.',
+                                'errors' => null,
+                            ], 422);
+                        }
+
+                        $flatRows = $flatReader->getRows();
+                        if ($flatRows->isEmpty()) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Berkas Excel tidak memuat data siswa.',
+                                'errors' => null,
+                            ], 422);
+                        }
+
+                        $flatRowIndex = 1;
+                        $classSequence = [];
+
+                        foreach ($flatRows as $row) {
+                            $flatRowIndex++;
+                            $cName = isset($row['class_name']) ? trim((string) $row['class_name']) : '';
+                            $num = null;
+                            if (isset($row['student_number']) && is_numeric($row['student_number'])) {
+                                $num = (int) $row['student_number'];
+                            } elseif (isset($row['absen']) && is_numeric($row['absen'])) {
+                                $num = (int) $row['absen'];
+                            } elseif (isset($row['urt']) && is_numeric($row['urt'])) {
+                                $num = (int) $row['urt'];
+                            } else {
+                                $classSequence[$cName] = ($classSequence[$cName] ?? 0) + 1;
+                                $num = $classSequence[$cName];
+                            }
+
+                            $extractedRows[] = [
+                                'sheet' => 'Sheet1',
+                                'file_row' => $flatRowIndex,
+                                'class_name' => $cName,
+                                'student_number' => $num,
+                                'nis' => isset($row['nis']) ? trim((string) $row['nis']) : '',
+                                'name' => isset($row['name']) ? trim((string) $row['name']) : '',
+                                'gender' => isset($row['gender']) ? strtoupper(trim((string) $row['gender'])) : '',
+                                'nisn' => isset($row['nisn']) ? trim((string) $row['nisn']) : null,
+                            ];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Abaikan error fallback
+            }
         }
 
-        $rows = $reader->getRows();
-        if ($rows->isEmpty()) {
+        if (empty($extractedRows)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Berkas Excel tidak memuat data siswa.',
@@ -121,134 +227,105 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $rowNumber = 1;
         $errors = [];
         $seenNis = [];
-        $seenNisns = [];
         $validRows = [];
 
-        // Preload active NIS and NISNs to prevent N+1 queries on large datasets
+        // Preload active NIS to prevent N+1 queries on large datasets
         $existingNis = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
-        $existingNisns = User::whereNotNull('nisn')->whereNull('deleted_at')->pluck('nisn')->flip()->toArray();
 
-        foreach ($rows as $row) {
-            $rowNumber++;
+        foreach ($extractedRows as $item) {
+            $rowDesc = "Sheet {$item['sheet']}, Baris {$item['file_row']}";
+            $rawNis = $item['nis'];
+            $rawName = $item['name'];
+            $rawClassName = $item['class_name'];
+            $rawGender = $item['gender'];
+            $studentNumber = $item['student_number'];
 
-            $rawNis = isset($row['nis']) ? trim((string) $row['nis']) : '';
-            $rawName = isset($row['name']) ? trim((string) $row['name']) : '';
-            $rawClassName = isset($row['class_name']) ? trim((string) $row['class_name']) : '';
-            $rawGender = isset($row['gender']) ? strtoupper(trim((string) $row['gender'])) : '';
-            $rawNisn = isset($row['nisn']) ? trim((string) $row['nisn']) : '';
+            // 1. Validasi Kelas
+            if (empty($rawClassName)) {
+                $errors[] = [
+                    'row' => $item['file_row'],
+                    'attribute' => 'class_name',
+                    'message' => "Kelas siswa '{$rawName}' ({$rawNis}) pada {$rowDesc} tidak teridentifikasi.",
+                ];
+            }
 
-            // 1. Validasi NIS
+            // 2. Validasi NIS
             if ($rawNis === '') {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'nis',
-                    'message' => 'Kolom NIS wajib diisi.',
+                    'message' => "Kolom NIS pada {$rowDesc} wajib diisi.",
                 ];
             } elseif (isset($seenNis[$rawNis])) {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'nis',
-                    'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNis[$rawNis]}).",
+                    'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di {$seenNis[$rawNis]}).",
                 ];
             } elseif (isset($existingNis[$rawNis])) {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'nis',
                     'message' => "NIS '{$rawNis}' sudah terdaftar di sistem.",
                 ];
             } elseif (isset($existingNis['P-' . $rawNis])) {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'nis',
                     'message' => "Akun orang tua untuk NIS '{$rawNis}' sudah terdaftar di sistem.",
                 ];
             } else {
-                $seenNis[$rawNis] = $rowNumber;
+                $seenNis[$rawNis] = $rowDesc;
             }
 
-            // 2. Validasi Nama
+            // 3. Validasi Nama Siswa
             if ($rawName === '') {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'name',
-                    'message' => 'Kolom nama siswa wajib diisi.',
+                    'message' => "Kolom nama siswa pada {$rowDesc} wajib diisi.",
                 ];
             } elseif (mb_strlen($rawName) > 100) {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'name',
-                    'message' => 'Nama siswa tidak boleh melebihi 100 karakter.',
+                    'message' => "Nama siswa pada {$rowDesc} tidak boleh melebihi 100 karakter.",
                 ];
             }
 
-            // 3. Validasi Nama Kelas
-            if ($rawClassName === '') {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'class_name',
-                    'message' => 'Kolom kelas wajib diisi.',
-                ];
-            } elseif (mb_strlen($rawClassName) > 50) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'class_name',
-                    'message' => 'Nama kelas tidak boleh melebihi 50 karakter.',
-                ];
-            }
-
-            // 4. Validasi Gender
+            // 4. Validasi Jenis Kelamin
             if ($rawGender === '') {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'gender',
-                    'message' => 'Kolom jenis kelamin wajib diisi.',
+                    'message' => "Kolom jenis kelamin pada {$rowDesc} wajib diisi.",
                 ];
             } elseif (!in_array($rawGender, ['L', 'P'], true)) {
                 $errors[] = [
-                    'row' => $rowNumber,
+                    'row' => $item['file_row'],
                     'attribute' => 'gender',
-                    'message' => 'Jenis kelamin harus bernilai L atau P.',
+                    'message' => "Jenis kelamin pada {$rowDesc} harus bernilai L atau P.",
                 ];
             }
 
-            // 5. Validasi NISN (Wajib sebagai Password Awal)
-            if ($rawNisn === '') {
+            // 5. Validasi Nomor Absen
+            if ($studentNumber !== null && $studentNumber <= 0) {
                 $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'nisn',
-                    'message' => 'Kolom NISN wajib diisi sebagai kata sandi awal akun siswa.',
+                    'row' => $item['file_row'],
+                    'attribute' => 'student_number',
+                    'message' => "Nomor absen pada {$rowDesc} harus berupa angka positif.",
                 ];
-            } elseif (mb_strlen($rawNisn) > 20) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'nisn',
-                    'message' => 'NISN tidak boleh melebihi 20 karakter.',
-                ];
-            } elseif (isset($seenNisns[$rawNisn])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'nisn',
-                    'message' => "NISN '{$rawNisn}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNisns[$rawNisn]}).",
-                ];
-            } elseif (isset($existingNisns[$rawNisn])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'nisn',
-                    'message' => "NISN '{$rawNisn}' sudah terdaftar di sistem.",
-                ];
-            } else {
-                $seenNisns[$rawNisn] = $rowNumber;
             }
 
             $validRows[] = [
                 'nis' => $rawNis,
                 'name' => $rawName,
-                'class_name' => trim(preg_replace('/\s+/', ' ', $rawClassName)),
+                'class_name' => trim(preg_replace('/\s+/', ' ', (string) $rawClassName)),
                 'gender' => $rawGender,
-                'nisn' => $rawNisn,
+                'student_number' => $studentNumber,
+                'nisn' => $item['nisn'],
             ];
         }
 
@@ -275,7 +352,7 @@ class StudentController extends Controller
                     $classMap[$className] = $existingClass->id;
                     $classesExisting++;
                 } else {
-                    // Deteksi level kelas
+                    // Deteksi level kelas (XII -> 12, XI -> 11, X -> 10)
                     if (preg_match('/^XII(\s|-|_|$)/i', $className)) {
                         $level = '12';
                     } elseif (preg_match('/^XI(\s|-|_|$)/i', $className)) {
@@ -308,16 +385,20 @@ class StudentController extends Controller
 
             foreach ($validRows as $row) {
                 $classId = $classMap[$row['class_name']];
-                $passwordHash = Hash::make($row['nisn'], ['rounds' => 4]);
+                $studentNumber = $row['student_number'] ?? null;
+                // Password awal: NIS + Nomor Absen (Contoh: NIS 18260, Absen 1 -> 182601)
+                $passwordInitial = $studentNumber !== null ? (string) $row['nis'] . (string) $studentNumber : (string) $row['nis'];
+                $passwordHash = Hash::make($passwordInitial, ['rounds' => 4]);
 
                 $student = User::create([
                     'name' => $row['name'],
                     'role' => 'student',
                     'nis_nip' => $row['nis'],
+                    'student_number' => $studentNumber,
                     'password' => $passwordHash,
                     'class_id' => $classId,
                     'gender' => $row['gender'],
-                    'nisn' => $row['nisn'],
+                    'nisn' => $row['nisn'] ?? null,
                     'is_held_back' => false,
                     'must_change_password' => true,
                 ]);
@@ -349,6 +430,7 @@ class StudentController extends Controller
             'data' => $summary,
         ], 201);
     }
+
     /**
      * Menampilkan daftar siswa (berpaginasi).
      */
@@ -380,7 +462,7 @@ class StudentController extends Controller
         }
 
         if ($request->boolean('all')) {
-            $students = $query->orderBy('name')->get();
+            $students = $query->orderByRaw('student_number IS NULL, student_number ASC')->orderBy('name')->get();
 
             return response()->json([
                 'success' => true,
@@ -395,7 +477,7 @@ class StudentController extends Controller
             ], 200);
         }
 
-        $students = $query->orderBy('name')->paginate($perPage);
+        $students = $query->orderByRaw('student_number IS NULL, student_number ASC')->orderBy('name')->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -425,31 +507,36 @@ class StudentController extends Controller
             ],
             'class_id' => 'required|integer|exists:classes,id',
             'gender' => 'nullable|string|in:L,P,l,p',
+            'student_number' => 'nullable|integer|min:1|max:100',
             'nisn' => [
-                'required',
+                'nullable',
                 'string',
                 'max:20',
                 Rule::unique('users', 'nisn')->whereNull('deleted_at'),
             ],
         ], [
             'gender.in' => 'Jenis kelamin harus bernilai L atau P.',
-            'nisn.required' => 'NISN wajib diisi sebagai kata sandi awal akun siswa.',
+            'student_number.integer' => 'Nomor absen harus berupa angka.',
             'nisn.unique' => 'NISN sudah terdaftar.',
             'nisn.max' => 'NISN tidak boleh melebihi 20 karakter.',
         ]);
 
         $result = DB::transaction(function () use ($request) {
-            $initialPassword = trim($request->nisn);
+            $studentNumber = $request->filled('student_number') ? (int) $request->student_number : null;
+            $initialPassword = $studentNumber !== null
+                ? trim($request->nis) . $studentNumber
+                : ($request->filled('nisn') ? trim($request->nisn) : trim($request->nis));
 
             $student = User::create([
                 'name' => $request->name,
                 'role' => 'student',
                 'nis_nip' => $request->nis,
+                'student_number' => $studentNumber,
                 'password' => Hash::make($initialPassword),
                 'must_change_password' => true,
                 'class_id' => $request->class_id,
                 'gender' => $request->filled('gender') ? strtoupper(trim($request->gender)) : null,
-                'nisn' => $initialPassword,
+                'nisn' => $request->filled('nisn') ? trim($request->nisn) : null,
             ]);
 
             $parent = User::create([
@@ -498,6 +585,7 @@ class StudentController extends Controller
             ],
             'class_id' => 'required|integer|exists:classes,id',
             'gender' => 'nullable|string|in:L,P,l,p',
+            'student_number' => 'nullable|integer|min:1|max:100',
             'nisn' => [
                 'nullable',
                 'string',
@@ -506,6 +594,7 @@ class StudentController extends Controller
             ],
         ], [
             'gender.in' => 'Jenis kelamin harus bernilai L atau P.',
+            'student_number.integer' => 'Nomor absen harus berupa angka.',
             'nisn.unique' => 'NISN sudah terdaftar.',
             'nisn.max' => 'NISN tidak boleh melebihi 20 karakter.',
         ]);
@@ -519,6 +608,10 @@ class StudentController extends Controller
 
             if ($request->has('gender')) {
                 $updateData['gender'] = $request->filled('gender') ? strtoupper(trim($request->gender)) : null;
+            }
+
+            if ($request->has('student_number')) {
+                $updateData['student_number'] = $request->filled('student_number') ? (int) $request->student_number : null;
             }
 
             if ($request->has('nisn')) {
