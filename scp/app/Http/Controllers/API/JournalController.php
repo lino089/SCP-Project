@@ -343,7 +343,8 @@ class JournalController extends Controller
         $encoded = $img->encodeUsingFileExtension('jpg', quality: 35);
 
         $filename = 'journals/' . Str::uuid() . '.jpg';
-        Storage::disk('public')->put($filename, (string) $encoded);
+        $disk = config('filesystems.default', 'public');
+        Storage::disk($disk)->put($filename, (string) $encoded);
 
         // Eksekusi atomik: Presensi Exception-Based + Update Status Jurnal
         $insertedCount = 0;

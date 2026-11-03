@@ -45,9 +45,9 @@ class ScheduleImportController extends Controller
             'file_ruangan' => 'required|file|mimes:pdf|max:10240',
         ]);
 
-        // Simpan file fisik di storage private
-        $pathKelas = $request->file('file_kelas')->store('imports/schedules');
-        $pathRuangan = $request->file('file_ruangan')->store('imports/schedules');
+        // Simpan file fisik di storage private lokal untuk diparsing Python
+        $pathKelas = $request->file('file_kelas')->store('imports/schedules', 'local');
+        $pathRuangan = $request->file('file_ruangan')->store('imports/schedules', 'local');
 
         $import = ScheduleImport::create([
             'waka_id' => $request->user()->id,

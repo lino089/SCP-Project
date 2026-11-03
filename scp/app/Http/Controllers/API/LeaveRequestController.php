@@ -196,8 +196,9 @@ class LeaveRequestController extends Controller
 
         // 3. Simpan berkas lampiran jika diunggah
         $documentPath = null;
+        $disk = config('filesystems.default', 'public');
         if ($request->hasFile('document')) {
-            $documentPath = $request->file('document')->store('leaves', 'public');
+            $documentPath = $request->file('document')->store('leaves', $disk);
         }
 
         // 4. Penataan Tanggal & Jam
@@ -337,10 +338,11 @@ class LeaveRequestController extends Controller
 
             // Ganti berkas dokumen jika ada upload baru
             if ($request->hasFile('document')) {
+                $disk = config('filesystems.default', 'public');
                 if ($leaveRequest->document_path) {
-                    Storage::disk('public')->delete($leaveRequest->document_path);
+                    Storage::disk($disk)->delete($leaveRequest->document_path);
                 }
-                $dataToUpdate['document_path'] = $request->file('document')->store('leaves', 'public');
+                $dataToUpdate['document_path'] = $request->file('document')->store('leaves', $disk);
             }
 
             $leaveRequest->update($dataToUpdate);
@@ -389,7 +391,8 @@ class LeaveRequestController extends Controller
         }
 
         if ($leaveRequest->document_path) {
-            Storage::disk('public')->delete($leaveRequest->document_path);
+            $disk = config('filesystems.default', 'public');
+            Storage::disk($disk)->delete($leaveRequest->document_path);
         }
 
         $leaveRequest->delete();

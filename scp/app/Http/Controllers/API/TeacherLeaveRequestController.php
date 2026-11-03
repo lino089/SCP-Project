@@ -165,14 +165,15 @@ class TeacherLeaveRequestController extends Controller
         }
 
         // 3. Penyimpanan Berkas Lampiran
+        $disk = config('filesystems.default', 'public');
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('teacher_leaves/letters', 'public');
+            $attachmentPath = $request->file('attachment')->store('teacher_leaves/letters', $disk);
         }
 
         $taskAttachmentPath = null;
         if ($request->hasFile('task_attachment')) {
-            $taskAttachmentPath = $request->file('task_attachment')->store('teacher_leaves/tasks', 'public');
+            $taskAttachmentPath = $request->file('task_attachment')->store('teacher_leaves/tasks', $disk);
         }
 
         // 4. Penyimpanan Record Perizinan
