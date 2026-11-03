@@ -4,16 +4,13 @@ import {
   Pencil,
   Trash2,
   UserCheck,
-  RefreshCw,
   Info,
-  Download,
   Upload,
   CheckCircle2,
   AlertCircle,
   CheckSquare,
   XSquare,
   Eye,
-  RotateCcw,
   Clock,
 } from 'lucide-react';
 import {
@@ -462,15 +459,11 @@ export default function MasterDataPage() {
           };
           try {
             const res = await classApi.createClass(payload);
-            setClassList((prev) => [...prev, res.data || { id: Date.now(), ...payload }]);
+            setClassList((prev) => [...prev, res.data || res]);
           } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-            // Offline fallback
-            setClassList((prev) => [...prev, { id: Date.now(), ...payload }]);
+            setFormErrors(apiErr.errors || { general: [apiErr.message || 'Gagal menambahkan kelas.'] });
+            setIsSubmitting(false);
+            return;
           }
         } else if (activeTab === 'ruang') {
           const payload = {
@@ -479,27 +472,21 @@ export default function MasterDataPage() {
           };
           try {
             const res = await roomApi.createRoom(payload);
-            setRoomList((prev) => [...prev, res.data || { id: Date.now(), ...payload }]);
+            setRoomList((prev) => [...prev, res.data || res]);
           } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-            setRoomList((prev) => [...prev, { id: Date.now(), ...payload }]);
+            setFormErrors(apiErr.errors || { general: [apiErr.message || 'Gagal menambahkan ruang.'] });
+            setIsSubmitting(false);
+            return;
           }
         } else if (activeTab === 'mapel') {
           const payload = { name: formData.name };
           try {
             const res = await subjectApi.createSubject(payload);
-            setSubjectList((prev) => [...prev, res.data || { id: Date.now(), ...payload }]);
+            setSubjectList((prev) => [...prev, res.data || res]);
           } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-            setSubjectList((prev) => [...prev, { id: Date.now(), ...payload }]);
+            setFormErrors(apiErr.errors || { general: [apiErr.message || 'Gagal menambahkan mata pelajaran.'] });
+            setIsSubmitting(false);
+            return;
           }
         } else if (activeTab === 'guru') {
           const errors = {};
@@ -527,12 +514,14 @@ export default function MasterDataPage() {
           };
           try {
             const res = await teacherApi.createTeacher(payload);
-            const createdTeacher = res.data?.teacher || { id: Date.now(), ...payload, assignments: [] };
-            if (!createdTeacher.subject && payload.subject_id) {
+            const createdTeacher = res.data?.teacher || res.data;
+            if (createdTeacher && !createdTeacher.subject && payload.subject_id) {
               createdTeacher.subject = subjectList.find((s) => s.id === payload.subject_id);
             }
             const password = res.data?.password || payload.nip;
-            setTeacherList((prev) => [...prev, createdTeacher]);
+            if (createdTeacher) {
+              setTeacherList((prev) => [...prev, createdTeacher]);
+            }
             // Pop up the initial credential modal
             setCredentialModalData({
               type: 'teacher',
@@ -540,20 +529,9 @@ export default function MasterDataPage() {
               password,
             });
           } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-            // Offline fallback
-            const dummyPass = payload.nip;
-            const fallbackItem = { id: Date.now(), ...payload, nis_nip: payload.nip, assignments: [] };
-            setTeacherList((prev) => [...prev, fallbackItem]);
-            setCredentialModalData({
-              type: 'teacher',
-              teacher: fallbackItem,
-              password: dummyPass,
-            });
+            setFormErrors(apiErr.errors || { general: [apiErr.message || 'Gagal menambahkan guru.'] });
+            setIsSubmitting(false);
+            return;
           }
         } else if (activeTab === 'siswa') {
           const errors = {};
@@ -580,52 +558,23 @@ export default function MasterDataPage() {
           };
           try {
             const res = await studentApi.createStudent(payload);
-            const student = res.data?.student || {
-              id: Date.now(),
-              ...payload,
-              nis_nip: payload.nis,
-              gender: payload.gender,
-              nisn: payload.nisn,
-              schoolClass: classList.find((c) => c.id === payload.class_id),
-              school_class: classList.find((c) => c.id === payload.class_id),
-            };
-            const parent = res.data?.parent || {
-              name: 'Wali Murid ' + payload.name,
-              nis_nip: 'P-' + payload.nis,
-            };
+            const student = res.data?.student;
+            const parent = res.data?.parent;
             const password = res.data?.generate_password || payload.nisn;
 
-            setStudentList((prev) => [...prev, student]);
+            if (student) {
+              setStudentList((prev) => [...prev, student]);
+            }
             setCredentialModalData({
               type: 'student',
-              student,
-              parent,
+              student: student || { name: payload.name, nis_nip: payload.nis },
+              parent: parent || { name: 'Wali Murid ' + payload.name, nis_nip: 'P-' + payload.nis },
               password,
             });
           } catch (apiErr) {
-            if (apiErr.errors) {
-              setFormErrors(apiErr.errors);
-              setIsSubmitting(false);
-              return;
-            }
-            // Offline fallback
-            const dummyPass = payload.nisn;
-            const fallbackStudent = {
-              id: Date.now(),
-              name: payload.name,
-              nis_nip: payload.nis,
-              gender: payload.gender,
-              nisn: payload.nisn,
-              class_id: payload.class_id,
-              schoolClass: classList.find((c) => c.id === payload.class_id),
-            };
-            setStudentList((prev) => [...prev, fallbackStudent]);
-            setCredentialModalData({
-              type: 'student',
-              student: fallbackStudent,
-              parent: { name: 'Wali Murid ' + payload.name, nis_nip: 'P-' + payload.nis },
-              password: dummyPass,
-            });
+            setFormErrors(apiErr.errors || { general: [apiErr.message || 'Gagal menambahkan siswa.'] });
+            setIsSubmitting(false);
+            return;
           }
         }
       } else if (modalType === 'edit') {
@@ -882,28 +831,28 @@ export default function MasterDataPage() {
   }, []);
 
   const handleAssignRole = async (teacherId, payload) => {
-    const res = await teacherApi.assignRole(teacherId, payload);
-    const newAssignment = res?.data || {
-      id: Date.now(),
-      type: payload.type,
-      class_id: payload.class_id,
-      school_class: classList.find((c) => c.id === payload.class_id),
-    };
+    try {
+      const res = await teacherApi.assignRole(teacherId, payload);
+      const newAssignment = res?.data;
+      if (!newAssignment) return;
 
-    setTeacherList((prev) =>
-      prev.map((t) =>
-        t.id === teacherId
-          ? { ...t, assignments: [...(t.assignments || []), newAssignment] }
-          : t
-      )
-    );
+      setTeacherList((prev) =>
+        prev.map((t) =>
+          t.id === teacherId
+            ? { ...t, assignments: [...(t.assignments || []), newAssignment] }
+            : t
+        )
+      );
 
-    // Update current modal teacher object
-    setAssignmentTeacher((prev) =>
-      prev && prev.id === teacherId
-        ? { ...prev, assignments: [...(prev.assignments || []), newAssignment] }
-        : prev
-    );
+      // Update current modal teacher object
+      setAssignmentTeacher((prev) =>
+        prev && prev.id === teacherId
+          ? { ...prev, assignments: [...(prev.assignments || []), newAssignment] }
+          : prev
+      );
+    } catch (err) {
+      alert(err.message || err.response?.data?.message || 'Gagal menambahkan penugasan guru.');
+    }
   };
 
   const handleRevokeRole = async (teacherId, assignmentId) => {
@@ -1750,7 +1699,6 @@ export default function MasterDataPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  icon={RotateCcw}
                   onClick={() => handleRestoreTrash(r)}
                   disabled={isRestoring}
                   title="Pulihkan data ini kembali ke sistem aktif"
@@ -1760,7 +1708,6 @@ export default function MasterDataPage() {
                 <Button
                   variant="danger"
                   size="sm"
-                  icon={Trash2}
                   onClick={() => handleOpenPermanentDeleteTrash(r)}
                   title="Hapus permanen sekarang (Perlu Password)"
                 >
@@ -1791,7 +1738,6 @@ export default function MasterDataPage() {
           <Button
             variant="outline"
             className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
-            icon={RotateCcw}
             onClick={handleOpenResetMasterModal}
             title="Reset Seluruh Master Data"
           >
@@ -1799,7 +1745,6 @@ export default function MasterDataPage() {
           </Button>
           <Button
             variant="secondary"
-            icon={RefreshCw}
             onClick={handleRefresh}
             loading={isLoading}
             title="Muat Ulang Data"
@@ -1811,7 +1756,6 @@ export default function MasterDataPage() {
             <>
               <Button
                 variant="outline"
-                icon={Download}
                 onClick={handleDownloadTeacherTemplate}
                 loading={teacherDownloadingTemplate}
                 title="Unduh format spreadsheet impor guru (.xlsx)"
@@ -1820,7 +1764,6 @@ export default function MasterDataPage() {
               </Button>
               <Button
                 variant="secondary"
-                icon={Upload}
                 onClick={() => {
                   setTeacherImportFile(null);
                   setTeacherImportErrors(null);
@@ -1839,7 +1782,6 @@ export default function MasterDataPage() {
             <>
               <Button
                 variant="outline"
-                icon={Download}
                 onClick={handleDownloadStudentTemplate}
                 loading={studentDownloadingTemplate}
                 title="Unduh format spreadsheet impor siswa (.xlsx)"
@@ -1848,7 +1790,6 @@ export default function MasterDataPage() {
               </Button>
               <Button
                 variant="secondary"
-                icon={Upload}
                 onClick={() => {
                   setStudentImportFile(null);
                   setStudentImportErrors(null);
@@ -1864,7 +1805,7 @@ export default function MasterDataPage() {
           )}
 
           {activeTab !== 'trash' && (
-            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+            <Button variant="primary" onClick={handleOpenAdd}>
               Tambah {tabs.find((t) => t.id === activeTab)?.label}
             </Button>
           )}

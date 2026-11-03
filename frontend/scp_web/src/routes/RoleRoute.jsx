@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { ForbiddenState } from '../components/feedback';
 
@@ -9,6 +9,8 @@ export default function RoleRoute({
   allowedRoles = [],
   requireKesiswaan = false,
   requireWaliKelas = false,
+  requireKesiswaanOrWaliKelas = false,
+  redirectTo = null,
 }) {
   const { hasRole, isKesiswaan, isWaliKelas } = useAuth();
 
@@ -22,22 +24,28 @@ export default function RoleRoute({
 
   // Handle special teacher assignments
   if (requireKesiswaan) {
-    if (isKesiswaan()) {
-      isAuthorized = true;
-    } else {
+    if (!isKesiswaan()) {
       isAuthorized = false;
     }
   }
 
   if (requireWaliKelas) {
-    if (isWaliKelas()) {
-      isAuthorized = true;
-    } else {
+    if (!isWaliKelas()) {
+      isAuthorized = false;
+    }
+  }
+
+  if (requireKesiswaanOrWaliKelas) {
+    if (!isKesiswaan() && !isWaliKelas() && !hasRole('waka')) {
       isAuthorized = false;
     }
   }
 
   if (!isAuthorized) {
+    if (redirectTo) {
+      return <Navigate to={redirectTo} replace />;
+    }
+
     return (
       <div className="p-6 md:p-10 max-w-4xl mx-auto">
         <ForbiddenState

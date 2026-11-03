@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -6,15 +6,17 @@ import {
   Sparkles,
   FileText,
   CheckCircle2,
-  BookOpen,
   ArrowRight,
   GraduationCap,
+  AlertCircle,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import { scheduleApi } from '../../services/scheduleApi';
 import { quizApi } from '../../services/quizApi';
 import { Badge, Button, Modal, Table } from '../../components/shared';
+import { ScheduleTimetableMatrix } from '../../components/schedule';
 import './StudentHome.css';
 
 export default function StudentHomePage() {
@@ -22,20 +24,24 @@ export default function StudentHomePage() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [attendances, setAttendances] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [activeQuizzes, setActiveQuizzes] = useState([]);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isWeeklyModalOpen, setIsWeeklyModalOpen] = useState(false);
+  const [weeklySchedules, setWeeklySchedules] = useState([]);
+  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
 
-  // Student Profile Data
+  // Student Profile Data (Data Riil dari Auth State)
   const student = useMemo(() => {
     return {
-      name: user?.name || 'Aisyah Putri Ramadhani',
-      nis: user?.nis_nip || '2024001',
-      nisn: user?.nisn || '0068492011',
-      className: user?.schoolClass?.name || user?.className || 'X-RPL-1',
-      classId: user?.class_id || 1,
-      academicYear: '2025/2026 Ganjil',
+      name: user?.name || 'Peserta Didik',
+      nis: user?.nis_nip || '-',
+      nisn: user?.nisn || '-',
+      className: user?.school_class?.name || user?.schoolClass?.name || user?.className || 'Belum Ada Rombel',
+      classId: user?.class_id || null,
+      academicYear: user?.academic_year || '2025/2026 Ganjil',
     };
   }, [user]);
 
@@ -57,57 +63,67 @@ export default function StudentHomePage() {
   }, []);
 
   // Fetch Portal Data on Mount
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadPortalData() {
-      setLoading(true);
-      try {
-        const [attRes, schedRes, quizRes] = await Promise.all([
-          leaveApi.getAttendances({ per_page: 50 }),
-          scheduleApi.getSchedules({
+  const loadPortalData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const schedPromise = student.classId
+        ? scheduleApi.getSchedules({
             class_id: student.classId,
             day: dateInfo.dayOfWeek,
-            per_page: 20,
-          }),
-          quizApi.getQuizzes({ per_page: 20 }),
-        ]);
+            per_page: 50,
+          })
+        : Promise.resolve({ data: [] });
 
-        if (!isMounted) return;
+      const [attRes, schedRes, quizRes] = await Promise.all([
+        leaveApi.getAttendances({ per_page: 50 }),
+        schedPromise,
+        quizApi.getQuizzes({ per_page: 20 }),
+      ]);
 
-        // 1. Rekapitulasi Presensi
-        const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
-        setAttendances(attList);
+      // 1. Rekapitulasi Presensi
+      const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
+      setAttendances(attList);
 
-        // 2. Jadwal Hari Ini
-        const schedList = Array.isArray(schedRes) ? schedRes : Array.isArray(schedRes?.data) ? schedRes.data : [];
-        setTodaySchedules(schedList);
+      // 2. Jadwal Hari Ini
+      const schedList = Array.isArray(schedRes) ? schedRes : Array.isArray(schedRes?.data) ? schedRes.data : [];
+      setTodaySchedules(schedList);
 
-        // 3. Kuis Aktif (Status published)
-        const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
-        const filteredQuizzes = quizList.filter((q) => q.status === 'published');
-        setActiveQuizzes(filteredQuizzes);
-      } catch (err) {
-        console.warn('Gagal memuat data portal beranda siswa:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+      // 3. Kuis Aktif (Status published)
+      const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
+      const filteredQuizzes = quizList.filter((q) => q.status === 'published');
+      setActiveQuizzes(filteredQuizzes);
+    } catch (err) {
+      console.warn('Gagal memuat data portal beranda siswa:', err);
+      setLoadError(err.message || 'Gagal memuat data portal beranda siswa.');
+    } finally {
+      setLoading(false);
     }
-
-    loadPortalData();
-
-    return () => {
-      isMounted = false;
-    };
   }, [student.classId, dateInfo.dayOfWeek]);
 
-  // Kalkulasi 4 Metrik Kehadiran Mandiri
-  const attendanceStats = useMemo(() => {
-    if (attendances.length === 0) {
-      // Fallback realistis jika belum ada log presensi pada environment offline
-      return { hadir: 42, sakit: 3, izin: 2, alpa: 1 };
-    }
+  useEffect(() => {
+    loadPortalData();
+  }, [loadPortalData]);
 
+  // Ambil jadwal mingguan lengkap saat modal dibuka
+  const handleOpenWeeklySchedule = async () => {
+    setIsWeeklyModalOpen(true);
+    if (weeklySchedules.length === 0 && student.classId) {
+      setIsWeeklyLoading(true);
+      try {
+        const res = await scheduleApi.getSchedules({ class_id: student.classId, all: 1 });
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        setWeeklySchedules(list);
+      } catch (err) {
+        console.warn('Gagal memuat jadwal mingguan kelas:', err);
+      } finally {
+        setIsWeeklyLoading(false);
+      }
+    }
+  };
+
+  // Kalkulasi 4 Metrik Kehadiran Mandiri (Data Murni Database)
+  const attendanceStats = useMemo(() => {
     return attendances.reduce(
       (acc, item) => {
         const st = (item.status || '').toLowerCase();
@@ -152,7 +168,7 @@ export default function StudentHomePage() {
       label: 'Tanggal KBM',
       renderCell: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-800">
-          {row.date || '2026-10-23'}
+          {row.date || (row.created_at ? row.created_at.split('T')[0] : '-')}
         </span>
       ),
     },
@@ -180,6 +196,19 @@ export default function StudentHomePage() {
 
   return (
     <div className="student-home">
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadPortalData}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
+
       {/* =========================================================================
           1. HEADER IDENTITAS PROFIL SISWA
          ========================================================================= */}
@@ -207,7 +236,6 @@ export default function StudentHomePage() {
           </div>
 
           <div className="student-home__period-badge">
-            <Calendar size={15} className="text-slate-500" />
             <span>
               Tahun Ajaran: <strong className="font-mono text-slate-800">{student.academicYear}</strong>
             </span>
@@ -323,12 +351,20 @@ export default function StudentHomePage() {
         <div className="student-home__section-card">
           <div className="student-home__section-header">
             <h2 className="student-home__section-title">
-              <BookOpen size={18} className="text-slate-800" />
               <span>Jadwal Pembelajaran Hari Ini</span>
             </h2>
-            <span className="student-home__section-badge font-mono">
-              {dateInfo.dayName}, {dateInfo.formattedDate}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="student-home__section-badge font-mono">
+                {dateInfo.dayName}, {dateInfo.formattedDate}
+              </span>
+              <button
+                type="button"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                onClick={handleOpenWeeklySchedule}
+              >
+                Matriks Mingguan &rarr;
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -360,13 +396,13 @@ export default function StudentHomePage() {
 
                   <div className="student-home__sched-details">
                     <h3 className="student-home__subject-name">
-                      {item.subject?.name || 'Mata Pelajaran KBM'}
+                      {item.subject?.name || '-'}
                     </h3>
                     <p className="student-home__teacher-name">
-                      Guru: {item.teacher?.name || 'Guru Pengampu'}
+                      Guru: {item.teacher?.name || '-'}
                     </p>
                     <span className="student-home__room-badge font-mono">
-                      Ruang: {item.room?.name || 'Lab Komputer'}
+                      Ruang: {item.room?.name || '-'}
                     </span>
                   </div>
                 </div>
@@ -379,10 +415,9 @@ export default function StudentHomePage() {
         <div className="student-home__section-card">
           <div className="student-home__section-header">
             <h2 className="student-home__section-title">
-              <Sparkles size={18} className="text-amber-500" />
               <span>Kuis Aktif Kelas</span>
             </h2>
-            <Badge variant="warning">{activeQuizzes.length} Kuis</Badge>
+            <Badge variant="warning" dot>{activeQuizzes.length} Kuis</Badge>
           </div>
 
           {loading ? (
@@ -404,18 +439,20 @@ export default function StudentHomePage() {
                   <div className="student-home__quiz-head">
                     <h3 className="student-home__quiz-title">{quiz.title}</h3>
                     <Badge variant="neutral">
-                      {quiz.questions_count || 5} Soal
+                      {quiz.questions_count ?? (quiz.questions?.length ?? '-')} Soal
                     </Badge>
                   </div>
 
                   <div className="student-home__quiz-meta">
-                    <span>Mata Pelajaran: {quiz.subject?.name || 'Pemrograman RPL'}</span>
+                    <span>Mata Pelajaran: {quiz.subject?.name || 'KBM Kelas'}</span>
                   </div>
 
                   <div className="student-home__quiz-footer">
                     <div className="student-home__quiz-due">
                       <Clock size={12} />
-                      <span className="font-mono">Tenggat: {quiz.due_date || '31 Okt 2026'}</span>
+                      <span className="font-mono">
+                        Tenggat: {quiz.due_date ? String(quiz.due_date).split('T')[0] : 'Sesuai Jadwal'}
+                      </span>
                     </div>
 
                     <Button
@@ -467,6 +504,37 @@ export default function StudentHomePage() {
           />
           <div className="flex justify-end pt-2">
             <Button variant="secondary" onClick={() => setIsAttendanceModalOpen(false)}>
+              Tutup
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* =========================================================================
+          MODAL MATRIKS JADWAL MINGGUAN SISWA
+         ========================================================================= */}
+      <Modal
+        isOpen={isWeeklyModalOpen}
+        onClose={() => setIsWeeklyModalOpen(false)}
+        title={`Matriks Jadwal Belajar Mingguan (${student.className})`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Alokasi lengkap mata pelajaran dan ruang kelas untuk <strong>{student.className}</strong> (Senin s/d Jumat).
+          </p>
+          {isWeeklyLoading ? (
+            <div className="p-8 text-center text-xs text-gray-500">Memuat matriks jadwal mingguan...</div>
+          ) : (
+            <ScheduleTimetableMatrix
+              schedules={weeklySchedules}
+              matrixDays={['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat']}
+              mondayIsUpacara={true}
+              role="student"
+            />
+          )}
+          <div className="flex justify-end pt-3 border-t border-gray-100">
+            <Button variant="secondary" size="sm" onClick={() => setIsWeeklyModalOpen(false)}>
               Tutup
             </Button>
           </div>

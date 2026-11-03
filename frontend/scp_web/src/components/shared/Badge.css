@@ -1,10 +1,10 @@
-/* Badge.css - Exness Clean Precision Style */
+/* Badge.css - Enterprise Precision Fintech Style (Linear / Vercel) */
 
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
+  gap: 5px;
+  padding: 2px 7px;
   border-radius: 4px;
   font-family: var(--font-family);
   font-size: 11px;
@@ -13,34 +13,60 @@
   white-space: nowrap;
   letter-spacing: 0.01em;
   box-sizing: border-box;
-  border: 0;
 }
 
-/* Variants - Exness Fintech Style: Soft background, crisp readable text, border-0 */
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.badge-dot--default,
+.badge-dot--neutral,
+.badge-dot--primary,
+.badge-dot--info {
+  background-color: #64748B;
+}
+
+.badge-dot--success {
+  background-color: #10B981;
+}
+
+.badge-dot--error,
+.badge-dot--danger {
+  background-color: #EF4444;
+}
+
+.badge-dot--warning {
+  background-color: #F59E0B;
+}
+
+/* Variants: Soft background, crisp readable text, refined border */
 .badge--default,
 .badge--neutral,
 .badge--primary,
 .badge--info {
-  background-color: #F3F4F6;
-  color: #374151;
-  border: 0;
+  background-color: #F8FAFC;
+  color: #334155;
+  border: 1px solid #E2E8F0;
 }
 
 .badge--success {
   background-color: #ECFDF5;
   color: #047857;
-  border: 0;
+  border: 1px solid #A7F3D0;
 }
 
 .badge--error,
 .badge--danger {
   background-color: #FEF2F2;
-  color: #DC2626;
-  border: 0;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
 }
 
 .badge--warning {
   background-color: #FFFBEB;
   color: #B45309;
-  border: 0;
+  border: 1px solid #FDE68A;
 }

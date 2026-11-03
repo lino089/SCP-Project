@@ -3,52 +3,63 @@ import './StatCard.css';
 
 /**
  * Shared StatCard / KPI Overview Card
+ * Enterprise Clean Precision Design (Linear / Vercel style)
+ * Icon Diet applied: highlights primary metrics, uppercase micro-label, status dot & accent border
  */
 export default function StatCard({
   label = '',
   title = '',
   value = '',
+  unit = '',
   description = '',
   badge = null,
   badgeVariant = 'default',
-  icon: Icon = null,
-  variant = 'default',
+  statusDot = null,
+  accentPosition = 'none', // 'top' | 'left' | 'none'
+  accentBorder = false,    // shortcut to apply accentPosition='top' if true
+  variant = 'default',     // 'success' | 'warning' | 'danger' | 'info' | 'default'
   footer = null,
   hoverable = false,
   className = '',
 }) {
   const displayLabel = label || title;
+  const effectiveAccent = accentBorder ? 'top' : accentPosition;
 
-  const iconVariantClasses = {
-    success: 'bg-emerald-50 text-emerald-600 border-emerald-200/60',
-    info: 'bg-blue-50 text-blue-600 border-blue-200/60',
-    warning: 'bg-amber-50 text-amber-600 border-amber-200/60',
-    danger: 'bg-rose-50 text-rose-600 border-rose-200/60',
-    default: 'bg-slate-50 text-slate-600 border-slate-200/60',
-  };
+  const accentClass =
+    effectiveAccent === 'top' && variant !== 'default'
+      ? `accent-border-top--${variant}`
+      : effectiveAccent === 'left' && variant !== 'default'
+      ? `accent-border-left--${variant}`
+      : '';
+
+  const dotVariant =
+    statusDot === true
+      ? variant
+      : typeof statusDot === 'string'
+      ? statusDot
+      : null;
 
   return (
-    <div className={`stat-card ${hoverable ? 'stat-card--hoverable' : ''} ${className}`.trim()}>
+    <div
+      className={`stat-card ${accentClass} ${hoverable ? 'stat-card--hoverable' : ''} ${className}`.trim()}
+    >
       <div className="stat-card-top">
         <span className="stat-card-label">{displayLabel}</span>
         {badge ? (
           typeof badge === 'string' ? (
-            <Badge variant={badgeVariant}>{badge}</Badge>
+            <Badge variant={badgeVariant} dot>{badge}</Badge>
           ) : (
             badge
           )
-        ) : Icon ? (
-          <span
-            className={`p-1.5 rounded-md border flex items-center justify-center shrink-0 ${
-              iconVariantClasses[variant] || iconVariantClasses.default
-            }`}
-          >
-            <Icon size={16} />
-          </span>
+        ) : dotVariant ? (
+          <span className={`status-dot status-dot--${dotVariant}`} />
         ) : null}
       </div>
 
-      <div className="stat-card-main-val">{value}</div>
+      <div className="stat-card-main-val">
+        <span className="font-mono">{value}</span>
+        {unit && <span className="stat-card-unit">{unit}</span>}
+      </div>
 
       {description && <p className="stat-card-desc">{description}</p>}
 

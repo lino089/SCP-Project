@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input } from '../../components/shared';
 import { useAuth } from '../../hooks/useAuth';
-import { KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import './ChangePassword.css';
 
 export default function ChangePasswordPage() {
@@ -76,7 +75,7 @@ export default function ChangePasswordPage() {
       <div className="change-password-card">
         <div className="change-password-header">
           <div className="change-password-badge">
-            <ShieldAlert size={14} />
+            <span className="status-dot status-dot--warning mr-1.5" />
             <span>Tindakan Wajib Keamanan</span>
           </div>
           <h1 className="change-password-title">Perbarui Kata Sandi Akun</h1>
@@ -89,7 +88,7 @@ export default function ChangePasswordPage() {
 
         {isSuccess ? (
           <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-3 text-emerald-800 text-sm">
-            <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0" />
+            <span className="status-dot status-dot--success" />
             <div>
               <div className="font-semibold">Kata Sandi Berhasil Diperbarui!</div>
               <div className="text-xs text-emerald-700">Mengarahkan ke halaman utama...</div>
@@ -150,7 +149,6 @@ export default function ChangePasswordPage() {
                 size="lg"
                 fullWidth
                 loading={isLoading}
-                icon={KeyRound}
               >
                 Simpan &amp; Lanjutkan ke Beranda
               </Button>

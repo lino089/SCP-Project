@@ -15,7 +15,6 @@ import {
   Ban,
   RotateCcw,
   Check,
-  ArrowLeft,
 } from 'lucide-react';
 import {
   Button,
@@ -813,21 +812,18 @@ export default function ScheduleImportPage() {
           <div className="schedule-import-header-actions">
             <Button
               variant="danger"
-              icon={Ban}
               onClick={() => handleTriggerCancel(activeBatchId)}
             >
               Batalkan Impor
             </Button>
             <Button
               variant="outline"
-              icon={ArrowLeft}
               onClick={() => navigate('/kurikulum/jadwal/import')}
             >
               Unggah Ulang
             </Button>
             <Button
               variant="primary"
-              icon={Check}
               disabled={stats.matched === 0}
               onClick={() => {
                 setCommitError('');
@@ -841,39 +837,39 @@ export default function ScheduleImportPage() {
 
         {/* 4 Cards Metrik Ringkasan Ekstraksi */}
         <div className="review-import-stats-grid">
-          <div className="review-stat-flat-card">
+          <div className="review-stat-flat-card accent-border-top--neutral">
             <div className="review-stat-card-top">
               <span className="review-stat-label">Total Entri Jadwal</span>
-              <Badge variant="neutral">Semua</Badge>
+              <Badge variant="neutral" dot>Semua</Badge>
             </div>
-            <div className="review-stat-value">{stats.total}</div>
+            <div className="review-stat-value font-mono">{stats.total}</div>
             <p className="review-stat-desc">Total slot jadwal diekstrak dari kedua dokumen PDF.</p>
           </div>
 
-          <div className="review-stat-flat-card">
+          <div className="review-stat-flat-card accent-border-top--success">
             <div className="review-stat-card-top">
               <span className="review-stat-label">Baris Cocok (Matched)</span>
-              <Badge variant="success">Siap Komit</Badge>
+              <Badge variant="success" dot>Siap Komit</Badge>
             </div>
-            <div className="review-stat-value text-emerald-700">{stats.matched}</div>
+            <div className="review-stat-value text-emerald-700 font-mono">{stats.matched}</div>
             <p className="review-stat-desc">Kelas, guru, mapel, dan ruangan terpetakan 100%.</p>
           </div>
 
-          <div className="review-stat-flat-card">
+          <div className="review-stat-flat-card accent-border-top--danger">
             <div className="review-stat-card-top">
               <span className="review-stat-label">Belum Cocok (Unmatched)</span>
-              <Badge variant="error">{stats.unmatched} Perlu Aksi</Badge>
+              <Badge variant="error" dot>{stats.unmatched} Perlu Aksi</Badge>
             </div>
-            <div className="review-stat-value text-red-700">{stats.unmatched}</div>
+            <div className="review-stat-value text-red-700 font-mono">{stats.unmatched}</div>
             <p className="review-stat-desc">Perlu dipetakan manual atau diabaikan sebelum komit.</p>
           </div>
 
-          <div className="review-stat-flat-card">
+          <div className="review-stat-flat-card accent-border-top--warning">
             <div className="review-stat-card-top">
               <span className="review-stat-label">Konflik Tabrakan (Conflict)</span>
-              <Badge variant="warning">{stats.conflict} Bentrok</Badge>
+              <Badge variant="warning" dot>{stats.conflict} Bentrok</Badge>
             </div>
-            <div className="review-stat-value text-amber-700">{stats.conflict}</div>
+            <div className="review-stat-value text-amber-700 font-mono">{stats.conflict}</div>
             <p className="review-stat-desc">Alokasi ruang atau guru bentrok pada slot bersamaan.</p>
           </div>
         </div>

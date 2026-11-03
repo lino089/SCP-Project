@@ -83,6 +83,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/academic-settings', [AcademicSettingController::class, 'index']);
         Route::patch('/academic-settings', [AcademicSettingController::class, 'updateCycle']);
         Route::patch('/academic-settings/monday-status', [AcademicSettingController::class, 'updateMondayStatus']);
+        Route::patch('/academic-settings/year', [AcademicSettingController::class, 'updateAcademicYear']);
         Route::get('/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
         Route::get('/academic-settings/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
 

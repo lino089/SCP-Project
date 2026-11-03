@@ -1,8 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Clock, User, Plus, AlertCircle } from 'lucide-react';
-import { Button, Table, Badge, PasswordModal } from '../../components/shared';
+import {
+  CheckCircle2,
+  Clock,
+  User,
+  AlertCircle,
+  Users,
+  GraduationCap,
+  Layers,
+  Calendar,
+  CalendarRange,
+  Edit2,
+  RotateCw,
+} from 'lucide-react';
+import {
+  Button,
+  Table,
+  Badge,
+  PasswordModal,
+  Modal,
+  Input,
+  Select,
+  StatCard,
+} from '../../components/shared';
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
+import { masterDataSummaryApi } from '../../services/masterDataApi';
 import './DashboardWaka.css';
 
 export default function DashboardWakaPage() {
@@ -11,6 +33,18 @@ export default function DashboardWakaPage() {
   // Settings states
   const [activeCycle, setActiveCycle] = useState(1);
   const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [academicYear, setAcademicYear] = useState('2025/2026 Ganjil');
+  const [semester, setSemester] = useState('Ganjil');
+
+  // Master Data summary stats
+  const [summaryData, setSummaryData] = useState({
+    classes: 0,
+    rooms: 0,
+    subjects: 0,
+    teachers: 0,
+    students: 0,
+    schedules: 0,
+  });
 
   // Cycle History list
   const [historyList, setHistoryList] = useState([]);
@@ -19,15 +53,22 @@ export default function DashboardWakaPage() {
   const [missingJournals, setMissingJournals] = useState([]);
 
   // Loading & Feedback states
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // Edit Academic Year Modal state
+  const [isYearModalOpen, setIsYearModalOpen] = useState(false);
+  const [inputAcademicYear, setInputAcademicYear] = useState('2025/2026');
+  const [inputSemester, setInputSemester] = useState('Ganjil');
 
   // Password confirmation modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState({
     title: '',
     description: '',
-    pendingAction: null, // { type: 'cycle' | 'upacara', target: any }
+    pendingAction: null, // { type: 'cycle' | 'upacara' | 'year', target: any }
   });
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
@@ -38,63 +79,74 @@ export default function DashboardWakaPage() {
     setTimeout(() => setFeedbackMessage(null), 4000);
   };
 
-  // Load initial data on mount
-  useEffect(() => {
-    let isMounted = true;
+  const showError = (msg) => {
+    setErrorMessage(msg);
+    setFeedbackMessage(null);
+    setTimeout(() => setErrorMessage(null), 5000);
+  };
 
-    async function loadDashboardData() {
-      try {
-        const settingsRes = await academicSettingApi.getSettings();
-        if (isMounted && settingsRes?.data) {
-          setActiveCycle(Number(settingsRes.data.active_cycle || 1));
-          setMondayIsUpacara(Boolean(settingsRes.data.monday_is_upacara));
+  // Load initial data dari database riil
+  const loadDashboardData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [settingsRes, sumRes, historyRes, missingRes] = await Promise.all([
+        academicSettingApi.getSettings(),
+        masterDataSummaryApi.getSummary(),
+        academicSettingApi.getCycleHistory(),
+        scheduleApi.getMissingJournals().catch(() => ({ data: [] })),
+      ]);
+
+      // 1. Settings
+      if (settingsRes?.data) {
+        setActiveCycle(Number(settingsRes.data.active_cycle || 1));
+        setMondayIsUpacara(Boolean(settingsRes.data.monday_is_upacara));
+        if (settingsRes.data.academic_year) {
+          setAcademicYear(settingsRes.data.academic_year);
         }
-      } catch {
-        // Fallback default
+        if (settingsRes.data.semester) {
+          setSemester(settingsRes.data.semester);
+        }
       }
 
-      try {
-        const historyRes = await academicSettingApi.getCycleHistory();
-        if (isMounted) {
-          const list = historyRes?.data
-            ? Array.isArray(historyRes.data)
-              ? historyRes.data
-              : historyRes.data.data || []
-            : [];
-          setHistoryList(list);
-        }
-      } catch {
-        if (isMounted) setHistoryList([]);
+      // 2. Master Data Summary
+      if (sumRes?.data) {
+        setSummaryData(sumRes.data);
       }
 
-      try {
-        const missingRes = await scheduleApi.getMissingJournals();
-        if (isMounted) {
-          const raw = missingRes?.data
-            ? Array.isArray(missingRes.data)
-              ? missingRes.data
-              : missingRes.data.data || []
-            : [];
-          const formatted = raw.map((item) => ({
-            id: item.id,
-            className: item.school_class?.name || item.className || 'Kelas',
-            teacherName: item.teacher?.name || item.teacherName || 'Guru',
-            subjectName: item.subject?.name || item.subjectName || 'Mata Pelajaran',
-            period: `Jam Ke-${item.period_number || item.slot || 1}`,
-          }));
-          setMissingJournals(formatted);
-        }
-      } catch {
-        if (isMounted) setMissingJournals([]);
-      }
+      // 3. Cycle History
+      const histList = historyRes?.data
+        ? Array.isArray(historyRes.data)
+          ? historyRes.data
+          : historyRes.data.data || []
+        : [];
+      setHistoryList(histList);
+
+      // 4. Missing Journals
+      const raw = missingRes?.data
+        ? Array.isArray(missingRes.data)
+          ? missingRes.data
+          : missingRes.data.data || []
+        : [];
+      const formatted = raw.map((item) => ({
+        id: item.id,
+        className: item.school_class?.name || item.className || 'Kelas',
+        teacherName: item.teacher?.name || item.teacherName || 'Guru',
+        subjectName: item.subject?.name || item.subjectName || 'Mata Pelajaran',
+        period: `Jam Ke-${item.period_number || item.slot || 1}`,
+      }));
+      setMissingJournals(formatted);
+    } catch (err) {
+      console.warn('Gagal memuat data dashboard waka:', err);
+      setLoadError(err.message || 'Gagal memuat data pengaturan dan ringkasan akademik.');
+    } finally {
+      setIsLoading(false);
     }
-
-    loadDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   // Trigger cycle change request
   const handleRequestCycleChange = (targetCycle) => {
@@ -122,7 +174,39 @@ export default function DashboardWakaPage() {
     setModalOpen(true);
   };
 
-  // Confirm password action
+  // Open Edit Academic Year Modal
+  const handleOpenYearModal = () => {
+    const parts = academicYear.split(' ');
+    setInputAcademicYear(parts[0] || '2025/2026');
+    setInputSemester(semester || parts[1] || 'Ganjil');
+    setIsYearModalOpen(true);
+  };
+
+  // Submit Year Edit -> Request Password
+  const handleSubmitYearEdit = (e) => {
+    e.preventDefault();
+    if (!inputAcademicYear.trim()) {
+      showError('Format tahun ajaran tidak boleh kosong.');
+      return;
+    }
+    const combinedYear = `${inputAcademicYear.trim()} ${inputSemester}`;
+    setIsYearModalOpen(false);
+    setModalError('');
+    setModalConfig({
+      title: 'Konfirmasi Penetapan Tahun Ajaran Baru',
+      description: `Anda akan menetapkan Tahun Ajaran Aktif sekolah menjadi "${combinedYear}". Informasi ini akan ditampilkan di seluruh portal siswa, guru, dan orang tua. Masukkan kata sandi akun untuk verifikasi.`,
+      pendingAction: {
+        type: 'year',
+        target: {
+          academicYear: combinedYear,
+          semester: inputSemester,
+        },
+      },
+    });
+    setModalOpen(true);
+  };
+
+  // Confirm password action (Step-Up Auth)
   const handleConfirmPassword = async (password) => {
     setModalLoading(true);
     setModalError('');
@@ -130,51 +214,48 @@ export default function DashboardWakaPage() {
     try {
       if (modalConfig.pendingAction?.type === 'cycle') {
         const target = modalConfig.pendingAction.target;
-        try {
-          await academicSettingApi.updateCycle({ cycle_type: target, password });
-        } catch (apiErr) {
-          // If offline / demo mode fallback
-          if (apiErr.status === 422 && apiErr.message) {
-            setModalError(apiErr.message || 'Kata sandi verifikasi tidak valid.');
-            setModalLoading(false);
-            return;
-          }
-        }
+        await academicSettingApi.updateCycle({ cycle_type: target, password });
 
-        const now = new Date();
-        const formattedDate = now.toISOString().replace('T', ' ').substring(0, 19);
-        const newEntry = {
-          id: Date.now(),
-          from_cycle: activeCycle,
-          to_cycle: target,
-          changed_at: formattedDate,
-          changed_by: 'Waka Kurikulum',
-        };
-
-        setHistoryList((prev) => [newEntry, ...prev]);
         setActiveCycle(target);
+        // Refresh cycle history from database
+        try {
+          const histRes = await academicSettingApi.getCycleHistory();
+          const list = histRes?.data
+            ? Array.isArray(histRes.data)
+              ? histRes.data
+              : histRes.data.data || []
+            : [];
+          setHistoryList(list);
+        } catch {
+          // ignore
+        }
         setModalOpen(false);
         showFeedback(`Berhasil mengubah jadwal aktif menjadi Putaran ${target}.`);
       } else if (modalConfig.pendingAction?.type === 'upacara') {
         const nextStatus = modalConfig.pendingAction.target;
-        try {
-          await academicSettingApi.updateMondayStatus({ is_upacara: nextStatus, password });
-        } catch (apiErr) {
-          if (apiErr.status === 422 && apiErr.message) {
-            setModalError(apiErr.message || 'Kata sandi verifikasi tidak valid.');
-            setModalLoading(false);
-            return;
-          }
-        }
+        await academicSettingApi.updateMondayStatus({ is_upacara: nextStatus, password });
 
         setMondayIsUpacara(nextStatus);
         setModalOpen(false);
         showFeedback(
           `Status Upacara Hari Senin berhasil diubah ke ${nextStatus ? 'AKTIF' : 'NONAKTIF'}.`
         );
+      } else if (modalConfig.pendingAction?.type === 'year') {
+        const { academicYear: targetYear, semester: targetSem } = modalConfig.pendingAction.target;
+        await academicSettingApi.updateAcademicYear({
+          academic_year: targetYear,
+          semester: targetSem,
+          password,
+        });
+
+        setAcademicYear(targetYear);
+        setSemester(targetSem);
+        setModalOpen(false);
+        showFeedback(`Tahun Ajaran aktif berhasil ditetapkan menjadi "${targetYear}".`);
       }
-    } catch {
-      setModalError('Terjadi kesalahan saat memproses permintaan.');
+    } catch (apiErr) {
+      const msg = apiErr.message || apiErr.response?.data?.message;
+      setModalError(msg || 'Kata sandi verifikasi tidak valid atau permintaan gagal.');
     } finally {
       setModalLoading(false);
     }
@@ -196,13 +277,13 @@ export default function DashboardWakaPage() {
       key: 'from_cycle',
       label: 'Dari Putaran',
       align: 'center',
-      renderCell: (row) => <Badge variant="neutral">Putaran {row.from_cycle}</Badge>,
+      renderCell: (row) => <Badge variant="neutral">Putaran {row.from_cycle || row.cycle_number || 1}</Badge>,
     },
     {
       key: 'to_cycle',
       label: 'Ke Putaran',
       align: 'center',
-      renderCell: (row) => <Badge variant="default">Putaran {row.to_cycle}</Badge>,
+      renderCell: (row) => <Badge variant="default">Putaran {row.to_cycle || row.cycle_number || 1}</Badge>,
     },
     {
       key: 'changed_at',
@@ -211,7 +292,7 @@ export default function DashboardWakaPage() {
       renderCell: (row) => (
         <span className="inline-flex items-center gap-1.5 text-gray-700">
           <Clock size={13} className="text-gray-400" />
-          <span className="font-mono text-[12px] text-gray-700">{row.changed_at}</span>
+          <span className="font-mono text-[12px] text-gray-700">{row.changed_at || row.started_at || '-'}</span>
         </span>
       ),
     },
@@ -222,7 +303,7 @@ export default function DashboardWakaPage() {
       renderCell: (row) => (
         <span className="inline-flex items-center gap-1.5 text-gray-900 font-medium">
           <User size={13} className="text-gray-400" />
-          {row.changed_by || 'Waka Kurikulum'}
+          {row.changed_by?.name || row.changedBy?.name || 'Waka Kurikulum'}
         </span>
       ),
     },
@@ -250,14 +331,19 @@ export default function DashboardWakaPage() {
         <div>
           <h1 className="dashboard-title">Dashboard Akademik</h1>
           <p className="dashboard-subtitle">
-            Kelola siklus putaran jadwal KBM, status upacara, dan kepatuhan jurnal sekolah.
+            Kelola tahun ajaran aktif, siklus rotasi KBM, status upacara, dan ringkasan master data sekolah.
           </p>
         </div>
-        <div className="dashboard-header-actions w-full sm:w-auto flex justify-start sm:justify-end">
+        <div className="dashboard-header-actions w-full sm:w-auto flex justify-start sm:justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleOpenYearModal}
+          >
+            <CalendarRange size={15} />
+            <span>Atur Tahun Ajaran</span>
+          </Button>
           <Button
             variant="primary"
-            icon={Plus}
-            className="w-full sm:w-auto"
             onClick={() => navigate('/kurikulum/jadwal/import')}
           >
             Import Jadwal
@@ -265,15 +351,61 @@ export default function DashboardWakaPage() {
         </div>
       </div>
 
-      {/* Overview Cards Row */}
-      <div className="dashboard-cards-grid">
-        {/* Card 1: Putaran Jadwal Aktif */}
-        <div className="dashboard-flat-card">
-          <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Putaran jadwal aktif</span>
-            <Badge variant="default">Aktif: Putaran {activeCycle}</Badge>
+      {/* Error Alert Banner with Retry */}
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
           </div>
-          <div className="dashboard-card-main-val">Putaran {activeCycle}</div>
+          <Button size="sm" variant="outline" onClick={loadDashboardData}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
+
+      {/* Ringkasan Master Data Riil (4 Kartu Metrik) */}
+      <div className="dashboard-metrics-grid">
+        <StatCard
+          title="Total Guru"
+          value={summaryData.teachers ?? 0}
+          icon={Users}
+          description="Guru aktif terdaftar di sistem"
+          color="blue"
+        />
+        <StatCard
+          title="Total Siswa"
+          value={summaryData.students ?? 0}
+          icon={GraduationCap}
+          description="Peserta didik aktif seluruh rombel"
+          color="emerald"
+        />
+        <StatCard
+          title="Rombel Kelas"
+          value={summaryData.classes ?? 0}
+          icon={Layers}
+          description="Kelas terdaftar (Tingkat X, XI, XII)"
+          color="amber"
+        />
+        <StatCard
+          title="Alokasi Jadwal KBM"
+          value={summaryData.schedules ?? 0}
+          icon={Calendar}
+          description="Slot jadwal pelajaran aktif di database"
+          color="purple"
+        />
+      </div>
+
+      {/* Kontrol Konfigurasi Akademik (4 Kartu) */}
+      <div className="dashboard-cards-grid--4">
+        {/* Card 1: Putaran Jadwal Aktif */}
+        <div className="dashboard-flat-card accent-border-top--neutral">
+          <div className="dashboard-card-top">
+            <span className="dashboard-card-label">Putaran Jadwal Aktif</span>
+            <Badge variant="default" dot>Putaran {activeCycle}</Badge>
+          </div>
+          <div className="dashboard-card-main-val font-mono">Putaran {activeCycle}</div>
           <p className="dashboard-card-desc">Siklus jadwal rotasi mingguan yang sedang berjalan.</p>
           <div className="dashboard-card-footer-controls">
             <div className="inline-flex items-center bg-gray-100 p-1 rounded-md gap-1 w-fit">
@@ -304,10 +436,10 @@ export default function DashboardWakaPage() {
         </div>
 
         {/* Card 2: Status Upacara Hari Senin */}
-        <div className="dashboard-flat-card">
+        <div className={`dashboard-flat-card ${mondayIsUpacara ? 'accent-border-top--success' : 'accent-border-top--neutral'}`}>
           <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Upacara hari Senin</span>
-            <Badge variant={mondayIsUpacara ? 'success' : 'neutral'}>
+            <span className="dashboard-card-label">Upacara Hari Senin</span>
+            <Badge variant={mondayIsUpacara ? 'success' : 'neutral'} dot>
               {mondayIsUpacara ? 'Aktif' : 'Nonaktif'}
             </Badge>
           </div>
@@ -326,16 +458,34 @@ export default function DashboardWakaPage() {
           </div>
         </div>
 
-        {/* Card 3: Rekap Kepatuhan Jurnal */}
-        <div className="dashboard-flat-card">
+        {/* Card 3: Tahun Ajaran & Semester Aktif */}
+        <div className="dashboard-flat-card accent-border-top--neutral">
           <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Jurnal hari ini</span>
-            <Badge variant={missingJournals.length > 0 ? 'error' : 'success'}>
+            <span className="dashboard-card-label">Tahun Ajaran Aktif</span>
+            <Badge variant="default">{semester}</Badge>
+          </div>
+          <div className="dashboard-card-main-val font-mono">{academicYear}</div>
+          <p className="dashboard-card-desc">
+            Periode kalender akademik aktif yang tampil di portal seluruh pengguna.
+          </p>
+          <div className="dashboard-card-footer-controls">
+            <Button variant="secondary" size="sm" onClick={handleOpenYearModal}>
+              <Edit2 size={13} />
+              <span>Ubah Tahun Ajaran</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Card 4: Rekap Kepatuhan Jurnal */}
+        <div className={`dashboard-flat-card ${missingJournals.length > 0 ? 'accent-border-top--warning' : 'accent-border-top--success'}`}>
+          <div className="dashboard-card-top">
+            <span className="dashboard-card-label">Jurnal Hari Ini</span>
+            <Badge variant={missingJournals.length > 0 ? 'warning' : 'success'} dot>
               {missingJournals.length > 0 ? `${missingJournals.length} Terlambat` : 'Lengkap'}
             </Badge>
           </div>
           <div className="dashboard-card-main-val flex items-baseline">
-            <span className="text-[24px] font-semibold text-gray-900 tracking-tight">
+            <span className="text-[24px] font-semibold text-gray-900 tracking-tight font-mono">
               {missingJournals.length}
             </span>
             <span className="text-[13px] font-normal text-gray-600 ml-1">sesi belum diisi</span>
@@ -347,7 +497,7 @@ export default function DashboardWakaPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => navigate('/web/schedules')}
+              onClick={() => navigate('/kurikulum/jadwal')}
             >
               Lihat Matriks Jadwal
             </Button>
@@ -371,8 +521,8 @@ export default function DashboardWakaPage() {
 
         <div className="dashboard-row-cards-list">
           {missingJournals.length === 0 ? (
-            <div className="dashboard-empty-row">
-              <CheckCircle2 size={16} className="text-emerald-600" />
+            <div className="dashboard-empty-row flex items-center gap-2">
+              <span className="status-dot status-dot--success" />
               <span>Seluruh guru pengampu telah mengisi jurnal KBM hari ini dengan lengkap.</span>
             </div>
           ) : (
@@ -428,11 +578,77 @@ export default function DashboardWakaPage() {
         <Table
           columns={historyColumns}
           data={historyList}
+          isLoading={isLoading}
           emptyMessage="Belum ada riwayat perubahan putaran jadwal."
         />
       </div>
 
-      {/* Password Confirmation Modal */}
+      {/* Modal Form: Atur Tahun Ajaran Aktif */}
+      <Modal
+        isOpen={isYearModalOpen}
+        onClose={() => setIsYearModalOpen(false)}
+        title="Tetapkan Tahun Ajaran & Semester Aktif"
+      >
+        <form onSubmit={handleSubmitYearEdit} className="space-y-4">
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Pembaruan Tahun Ajaran dan Semester akan langsung berlaku pada seluruh portal siswa, wali murid, dan pencatatan akademik.
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Tahun Ajaran <span className="text-red-500">*</span>
+            </label>
+            <Input
+              type="text"
+              value={inputAcademicYear}
+              onChange={(e) => setInputAcademicYear(e.target.value)}
+              placeholder="Contoh: 2025/2026 atau 2026/2027"
+              required
+            />
+            <span className="text-[11px] text-gray-400 mt-0.5 block">
+              Format: YYYY/YYYY (contoh: 2025/2026)
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Semester <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={inputSemester}
+              onChange={(e) => setInputSemester(e.target.value)}
+              options={[
+                { value: 'Ganjil', label: 'Semester Ganjil' },
+                { value: 'Genap', label: 'Semester Genap' },
+              ]}
+            />
+          </div>
+
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide block mb-1">
+              Pratinjau Tampilan Header:
+            </span>
+            <span className="text-sm font-bold font-mono text-gray-900">
+              {inputAcademicYear.trim()} {inputSemester}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsYearModalOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button type="submit" variant="primary">
+              Lanjutkan Verifikasi
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Password Confirmation Modal (Step-Up Auth) */}
       <PasswordModal
         isOpen={modalOpen}
         onClose={() => {

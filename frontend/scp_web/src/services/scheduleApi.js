@@ -11,6 +11,7 @@ export const academicSettingApi = {
   getPeriodTemplates: () => api.get('/period-templates'),
   updateCycle: (data) => api.patch('/academic-settings', data), // { cycle_type: 1|2, password }
   updateMondayStatus: (data) => api.patch('/academic-settings/monday-status', data), // { is_upacara: boolean, password }
+  updateAcademicYear: (data) => api.patch('/academic-settings/year', data), // { academic_year: string, semester?: string, password }
   getCycleHistory: (params) => api.get('/cycle-history', { params }),
 };
 

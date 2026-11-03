@@ -40,7 +40,7 @@ export default function Button({
       {loading ? (
         <span className="btn__spinner" aria-hidden="true" />
       ) : Icon ? (
-        <Icon size={size === 'sm' ? 14 : size === 'lg' ? 18 : 16} strokeWidth={2} />
+        <Icon size={size === 'sm' ? 14 : size === 'lg' ? 17 : 15} strokeWidth={1.5} />
       ) : null}
       {children && <span>{children}</span>}
     </button>

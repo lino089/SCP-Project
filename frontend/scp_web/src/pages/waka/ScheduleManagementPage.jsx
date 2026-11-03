@@ -2,17 +2,12 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  Clock,
   AlertTriangle,
   Trash2,
   Save,
   CheckCircle2,
-  MapPin,
-  GraduationCap,
   Flag,
   AlertCircle,
-  ExternalLink,
-  RotateCcw,
 } from 'lucide-react';
 import {
   Button,
@@ -463,26 +458,9 @@ export default function ScheduleManagementPage() {
 
         try {
           const res = await scheduleApi.createSchedule(payload);
-          const newSched = res.data?.schedule || {
-            ...payload,
-            id: Date.now(),
-            day: pendingAction.data.day,
-            slot: payload.period_number,
-            duration: payload.duration_periods,
-            teacherName: teacherList.find((t) => t.id === payload.teacher_id)?.name || 'Guru',
-            className: classList.find((c) => c.id === payload.class_id)?.name || 'Kelas',
-            roomName: roomList.find((r) => r.id === payload.room_id)?.name || 'Ruang',
-            subjectName: subjectList.find((s) => s.id === payload.subject_id)?.name || 'Mapel',
-          };
-          setScheduleList((prev) => [...prev, newSched]);
-        } catch (apiErr) {
-          if (apiErr.status === 422) {
-            setPasswordModalError(apiErr.message || 'Data jadwal tidak valid atau terjadi bentrok.');
-            setPasswordModalLoading(false);
-            return;
-          }
-          const fallbackNew = {
-            id: Date.now(),
+          const created = res.data?.schedule || res.data || payload;
+          const newSched = {
+            id: created.id,
             ...payload,
             day: pendingAction.data.day,
             slot: payload.period_number,
@@ -493,12 +471,17 @@ export default function ScheduleManagementPage() {
             roomName: roomList.find((r) => r.id === payload.room_id)?.name || 'Ruang',
             subjectName: subjectList.find((s) => s.id === payload.subject_id)?.name || 'Mapel',
           };
-          setScheduleList((prev) => [...prev, fallbackNew]);
+          setScheduleList((prev) => [...prev, newSched]);
+          setIsPasswordModalOpen(false);
+          setIsFormModalOpen(false);
+          showToast('Jadwal pelajaran berhasil ditambahkan.');
+          await fetchData();
+        } catch (apiErr) {
+          const msg = apiErr.message || apiErr.response?.data?.message;
+          setPasswordModalError(msg || 'Data jadwal tidak valid atau terjadi bentrok.');
+          setPasswordModalLoading(false);
+          return;
         }
-
-        setIsPasswordModalOpen(false);
-        setIsFormModalOpen(false);
-        showToast('Jadwal pelajaran berhasil ditambahkan.');
       } else if (pendingAction.type === 'update') {
         const payload = {
           cycle_type: Number(pendingAction.data.cycle),
@@ -514,57 +497,53 @@ export default function ScheduleManagementPage() {
 
         try {
           await scheduleApi.updateSchedule(pendingAction.data.id, payload);
+          setScheduleList((prev) =>
+            prev.map((s) =>
+              s.id === pendingAction.data.id
+                ? {
+                    ...s,
+                    ...payload,
+                    day: pendingAction.data.day,
+                    slot: payload.period_number,
+                    duration: payload.duration_periods,
+                    teacherName: teacherList.find((t) => t.id === payload.teacher_id)?.name || s.teacherName,
+                    className: classList.find((c) => c.id === payload.class_id)?.name || s.className,
+                    roomName: roomList.find((r) => r.id === payload.room_id)?.name || s.roomName,
+                    subjectName: subjectList.find((s) => s.id === payload.subject_id)?.name || s.subjectName,
+                  }
+                : s
+            )
+          );
+          setIsPasswordModalOpen(false);
+          setIsFormModalOpen(false);
+          showToast('Jadwal pelajaran berhasil diperbarui.');
+          await fetchData();
         } catch (apiErr) {
-          if (apiErr.status === 422) {
-            setPasswordModalError(apiErr.message || 'Gagal memperbarui jadwal: kata sandi salah atau bentrok.');
-            setPasswordModalLoading(false);
-            return;
-          }
+          const msg = apiErr.message || apiErr.response?.data?.message;
+          setPasswordModalError(msg || 'Gagal memperbarui jadwal: kata sandi salah atau bentrok.');
+          setPasswordModalLoading(false);
+          return;
         }
-
-        setScheduleList((prev) =>
-          prev.map((s) =>
-            s.id === pendingAction.data.id
-              ? {
-                  ...s,
-                  ...payload,
-                  day: pendingAction.data.day,
-                  slot: payload.period_number,
-                  duration: payload.duration_periods,
-                  teacherName: teacherList.find((t) => t.id === payload.teacher_id)?.name || s.teacherName,
-                  className: classList.find((c) => c.id === payload.class_id)?.name || s.className,
-                  roomName: roomList.find((r) => r.id === payload.room_id)?.name || s.roomName,
-                  subjectName: subjectList.find((s) => s.id === payload.subject_id)?.name || s.subjectName,
-                }
-              : s
-          )
-        );
-
-        setIsPasswordModalOpen(false);
-        setIsFormModalOpen(false);
-        showToast('Jadwal pelajaran berhasil diperbarui.');
       } else if (pendingAction.type === 'delete') {
         try {
           await scheduleApi.deleteSchedule(pendingAction.id, { password });
+          setScheduleList((prev) => prev.filter((s) => s.id !== pendingAction.id));
+          setIsPasswordModalOpen(false);
+          setIsFormModalOpen(false);
+          showToast('Jadwal pelajaran berhasil dihapus.');
+          await fetchData();
         } catch (apiErr) {
-          if (apiErr.status === 409) {
+          if (apiErr.status === 409 || apiErr.response?.status === 409) {
             setPasswordModalError(
               'Jadwal tidak dapat dihapus (HTTP 409): Jadwal ini telah memiliki riwayat catatan jurnal KBM.'
             );
-            setPasswordModalLoading(false);
-            return;
+          } else {
+            const msg = apiErr.message || apiErr.response?.data?.message;
+            setPasswordModalError(msg || 'Kata sandi verifikasi tidak valid.');
           }
-          if (apiErr.status === 422) {
-            setPasswordModalError('Kata sandi verifikasi tidak valid.');
-            setPasswordModalLoading(false);
-            return;
-          }
+          setPasswordModalLoading(false);
+          return;
         }
-
-        setScheduleList((prev) => prev.filter((s) => s.id !== pendingAction.id));
-        setIsPasswordModalOpen(false);
-        setIsFormModalOpen(false);
-        showToast('Jadwal pelajaran berhasil dihapus.');
       } else if (pendingAction.type === 'reset') {
         try {
           const res = await scheduleApi.resetSchedules({ password });
@@ -647,7 +626,6 @@ export default function ScheduleManagementPage() {
           <Button
             variant="outline"
             className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
-            icon={RotateCcw}
             onClick={handleOpenResetScheduleModal}
             title="Reset Seluruh Data Jadwal"
           >
@@ -655,14 +633,12 @@ export default function ScheduleManagementPage() {
           </Button>
           <Button
             variant="outline"
-            icon={ExternalLink}
             onClick={() => navigate('/kurikulum/jadwal/import')}
           >
             Import Jadwal
           </Button>
           <Button
             variant="primary"
-            icon={Plus}
             disabled={!prerequisiteCheck.isReady}
             onClick={() => handleOpenAddModal()}
           >
@@ -955,7 +931,6 @@ export default function ScheduleManagementPage() {
                 <div className="schedule-class-header">
                   <div className="schedule-class-title-group">
                     <div className="schedule-class-title-row">
-                      <GraduationCap size={20} className="text-gray-700" />
                       <h2 className="schedule-class-title">Kelas {c.name}</h2>
                       <Badge variant="outline">Tingkat {c.level}</Badge>
                       {hasConflict && (
@@ -1145,12 +1120,10 @@ export default function ScheduleManagementPage() {
                                               : item.teacherName}
                                           </span>
                                           <div className="schedule-card__badge-row">
-                                            <span className="schedule-card__info-tag">
-                                              <Clock size={10} className="inline mr-1 text-gray-400" />
+                                            <span className="schedule-card__info-tag font-mono">
                                               {item.duration || item.duration_periods} JP
                                             </span>
-                                            <span className="schedule-card__info-tag">
-                                              <MapPin size={10} className="inline mr-1 text-gray-400" />
+                                            <span className="schedule-card__info-tag font-mono">
                                               {item.roomName}
                                             </span>
                                           </div>

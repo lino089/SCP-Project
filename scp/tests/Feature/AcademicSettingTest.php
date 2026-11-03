@@ -236,6 +236,56 @@ class AcademicSettingTest extends TestCase
             'is_upacara' => false,
             'password' => 'password123',
         ])->assertStatus(403);
+        $this->patchJson('/api/academic-settings/year', [
+            'academic_year' => '2026/2027 Ganjil',
+            'password' => 'password123',
+        ])->assertStatus(403);
         $this->getJson('/api/cycle-history')->assertStatus(403);
+    }
+
+    public function test_waka_can_update_academic_year(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->patchJson('/api/academic-settings/year', [
+            'academic_year' => '2026/2027 Genap',
+            'semester' => 'Genap',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Tahun ajaran aktif berhasil diperbarui.',
+                'data' => [
+                    'academic_year' => '2026/2027 Genap',
+                    'semester' => 'Genap',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('system_configurations', [
+            'id' => 1,
+            'academic_year' => '2026/2027 Genap',
+            'semester' => 'Genap',
+        ]);
+    }
+
+    public function test_update_academic_year_requires_valid_password(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $response = $this->patchJson('/api/academic-settings/year', [
+            'academic_year' => '2026/2027 Genap',
+            'password' => 'wrongpassword',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validasi Gagal',
+                'errors' => [
+                    'password' => ['Password tidak valid'],
+                ],
+            ]);
     }
 }

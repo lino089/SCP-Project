@@ -19,7 +19,12 @@ class AcademicSettingController extends Controller
     {
         $config = SystemConfiguration::firstOrCreate(
             ['id' => 1],
-            ['active_cycle' => 1, 'monday_is_upacara' => true]
+            [
+                'active_cycle' => 1,
+                'monday_is_upacara' => true,
+                'academic_year' => '2025/2026 Ganjil',
+                'semester' => 'Ganjil',
+            ]
         );
 
         $periodTemplates = PeriodTemplate::orderBy('day_type')
@@ -112,7 +117,12 @@ class AcademicSettingController extends Controller
 
         $config = SystemConfiguration::firstOrCreate(
             ['id' => 1],
-            ['active_cycle' => 1, 'monday_is_upacara' => true]
+            [
+                'active_cycle' => 1,
+                'monday_is_upacara' => true,
+                'academic_year' => '2025/2026 Ganjil',
+                'semester' => 'Ganjil',
+            ]
         );
         $config->update(['monday_is_upacara' => $request->is_upacara]);
 
@@ -121,6 +131,47 @@ class AcademicSettingController extends Controller
             'message' => 'Status upacara hari senin berhasil diperbarui.',
             'data' => [
                 'monday_is_upacara' => $config->monday_is_upacara,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Memperbarui tahun ajaran dan semester aktif dengan konfirmasi password.
+     */
+    public function updateAcademicYear(Request $request): JsonResponse
+    {
+        $request->validate([
+            'academic_year' => 'required|string|max:50',
+            'semester' => 'nullable|string|in:Ganjil,Genap',
+            'password' => 'required|string',
+        ]);
+
+        if ($error = $this->passwordIsConfirmed($request)) {
+            return $error;
+        }
+
+        $config = SystemConfiguration::firstOrCreate(
+            ['id' => 1],
+            [
+                'active_cycle' => 1,
+                'monday_is_upacara' => true,
+                'academic_year' => '2025/2026 Ganjil',
+                'semester' => 'Ganjil',
+            ]
+        );
+
+        $updateData = ['academic_year' => trim($request->academic_year)];
+        if ($request->filled('semester')) {
+            $updateData['semester'] = $request->semester;
+        }
+        $config->update($updateData);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tahun ajaran aktif berhasil diperbarui.',
+            'data' => [
+                'academic_year' => $config->academic_year,
+                'semester' => $config->semester,
             ],
         ], 200);
     }

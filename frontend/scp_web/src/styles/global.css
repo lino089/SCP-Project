@@ -94,3 +94,64 @@ kbd {
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   user-select: none;
 }
+
+/* =========================================================================
+   ENTERPRISE STATUS INDICATORS & ACCENT BORDERS (LINEAR / VERCEL STYLE)
+   ========================================================================= */
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #94A3B8;
+}
+
+.status-dot--success { background-color: #10B981; }
+.status-dot--warning { background-color: #F59E0B; }
+.status-dot--danger  { background-color: #EF4444; }
+.status-dot--info    { background-color: #3B82F6; }
+.status-dot--neutral { background-color: #94A3B8; }
+
+.status-dot--pulse {
+  position: relative;
+}
+.status-dot--pulse::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background-color: inherit;
+  opacity: 0.4;
+  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Accent Borders */
+.accent-border-top--success { border-top: 3px solid #10B981 !important; }
+.accent-border-top--warning { border-top: 3px solid #F59E0B !important; }
+.accent-border-top--danger  { border-top: 3px solid #EF4444 !important; }
+.accent-border-top--info    { border-top: 3px solid #3B82F6 !important; }
+.accent-border-top--neutral { border-top: 3px solid #94A3B8 !important; }
+
+.accent-border-left--success { border-left: 3px solid #10B981 !important; }
+.accent-border-left--warning { border-left: 3px solid #F59E0B !important; }
+.accent-border-left--danger  { border-left: 3px solid #EF4444 !important; }
+.accent-border-left--info    { border-left: 3px solid #3B82F6 !important; }
+.accent-border-left--neutral { border-left: 3px solid #94A3B8 !important; }
+
+/* Section Heading Standard */
+.section-label-enterprise {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  line-height: 1.25;
+  display: block;
+}

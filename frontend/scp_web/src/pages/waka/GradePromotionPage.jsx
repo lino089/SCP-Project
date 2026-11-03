@@ -1,10 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Sparkles,
   Pencil,
-  CheckCircle,
   RotateCcw,
-  RefreshCw,
   ArrowRight,
 } from 'lucide-react';
 import {
@@ -312,7 +309,6 @@ export default function GradePromotionPage() {
         <div className="promotion-header-actions">
           <Button
             variant="secondary"
-            icon={RefreshCw}
             onClick={handleRefresh}
             loading={isLoading}
             title="Muat Ulang Data"
@@ -322,7 +318,6 @@ export default function GradePromotionPage() {
 
           <Button
             variant="danger"
-            icon={Sparkles}
             onClick={() => setIsConfirmModalOpen(true)}
           >
             Eksekusi Promosi Massal
@@ -332,11 +327,9 @@ export default function GradePromotionPage() {
 
       {/* Success Notification Result Card */}
       {promotionResult && (
-        <div className="promotion-success-card">
+        <div className="promotion-success-card accent-border-left--success">
           <div className="promotion-success-left">
-            <div className="promotion-success-icon">
-              <CheckCircle size={22} />
-            </div>
+            <span className="status-dot status-dot--success mt-1" />
             <div>
               <h4 className="font-semibold text-neutral-900 text-sm">
                 Proses Promosi Massal Berhasil Dijalankan

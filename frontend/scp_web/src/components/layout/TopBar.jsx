@@ -94,7 +94,7 @@ export default function TopBar({ onToggleSidebar }) {
           onClick={onToggleSidebar}
           aria-label="Toggle navigasi menu"
         >
-          <Menu size={18} />
+          <Menu size={18} strokeWidth={1.5} />
         </button>
 
         <div
@@ -143,7 +143,7 @@ export default function TopBar({ onToggleSidebar }) {
             aria-label="Toggle tema"
             onClick={handleToggleTheme}
           >
-            <Sun size={17} />
+            <Sun size={16} strokeWidth={1.5} />
           </button>
           <button
             type="button"
@@ -151,7 +151,7 @@ export default function TopBar({ onToggleSidebar }) {
             title="Pusat Bantuan &amp; FAQ"
             aria-label="Pusat bantuan"
           >
-            <HelpCircle size={17} />
+            <HelpCircle size={16} strokeWidth={1.5} />
           </button>
           <button
             type="button"
@@ -159,7 +159,7 @@ export default function TopBar({ onToggleSidebar }) {
             title="Notifikasi"
             aria-label="Notifikasi"
           >
-            <Bell size={17} />
+            <Bell size={16} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -192,7 +192,7 @@ export default function TopBar({ onToggleSidebar }) {
                   navigate('/profile');
                 }}
               >
-                <User size={14} />
+                <User size={14} strokeWidth={1.5} />
                 <span>Profil &amp; Keamanan</span>
               </button>
 
@@ -201,7 +201,7 @@ export default function TopBar({ onToggleSidebar }) {
                 className="web-topbar__dropdown-item text-red-600 hover:bg-red-50 hover:text-red-700"
                 onClick={handleLogout}
               >
-                <LogOut size={14} />
+                <LogOut size={14} strokeWidth={1.5} />
                 <span>Keluar Akun</span>
               </button>
             </div>

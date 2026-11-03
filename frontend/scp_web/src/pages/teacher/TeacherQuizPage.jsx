@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Plus,
-  Calendar,
   Sparkles,
   FileUp,
   Edit3,
   Trash2,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Send,
   Users,
   Award,
@@ -105,41 +105,33 @@ export default function TeacherQuizPage() {
     setTimeout(() => setToast({ show: false, message: '', variant: 'success' }), 4000);
   };
 
-  // Fetch initial data
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [quizRes, classRes] = await Promise.all([
-          quizApi.getQuizzes({ per_page: 50 }),
-          masterDataApi.classes.getClasses(),
-        ]);
-        if (isMounted) {
-          if (quizRes?.data) setQuizzes(Array.isArray(quizRes.data) ? quizRes.data : []);
-          if (classRes?.data) setClassList(Array.isArray(classRes.data) ? classRes.data : []);
-        }
-      } catch (err) {
-        console.warn('Gagal memuat data kuis:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  const [loadError, setLoadError] = useState(null);
+
+  // Fetch initial data dari API database riil
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [quizRes, classRes] = await Promise.all([
+        quizApi.getQuizzes({ per_page: 50 }),
+        masterDataApi.classes.getClasses(),
+      ]);
+      if (quizRes?.data) setQuizzes(Array.isArray(quizRes.data) ? quizRes.data : []);
+      if (classRes?.data) setClassList(Array.isArray(classRes.data) ? classRes.data : []);
+    } catch (err) {
+      console.warn('Gagal memuat data kuis:', err);
+      setLoadError(err.message || 'Gagal memuat data kuis atau daftar kelas.');
+    } finally {
+      setLoading(false);
     }
-    loadData();
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Class options for select dropdown
   const classOptions = useMemo(() => {
-    if (classList.length === 0) {
-      return [
-        { value: '1', label: 'Kelas X-RPL-1' },
-        { value: '2', label: 'Kelas X-RPL-2' },
-        { value: '3', label: 'Kelas XI-RPL-1' },
-      ];
-    }
     return classList.map((c) => ({
       value: String(c.id),
       label: `Kelas ${c.name} (${c.level || ''})`,
@@ -195,10 +187,14 @@ export default function TeacherQuizPage() {
 
   // 1. Inisialisasi Kuis Baru
   const handleOpenCreateModal = () => {
+    if (classOptions.length === 0) {
+      showToast('Daftar kelas belum termuat atau masih kosong. Harap tunggu sebentar.', 'error');
+      return;
+    }
     setCreateForm({
       title: '',
-      class_id: classOptions[0]?.value || '1',
-      class_name: classOptions[0]?.label?.replace('Kelas ', '') || 'X-RPL-1',
+      class_id: classOptions[0]?.value || '',
+      class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
       due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       max_attempts: '2',
     });
@@ -522,7 +518,7 @@ export default function TeacherQuizPage() {
 
   const handleOpenSubmissionDetail = (sub) => {
     setSelectedSubmission(sub);
-    setOverrideScore(String(sub.ai_score ?? '80'));
+    setOverrideScore(String(sub.score ?? sub.ai_score ?? sub.final_score ?? '0'));
     setOverrideFeedback(sub.teacher_feedback || '');
     setIsSubmissionDetailOpen(true);
   };
@@ -604,7 +600,7 @@ export default function TeacherQuizPage() {
             {row.title}
           </span>
           <span className="text-[11px] text-slate-500 mt-0.5">
-            {row.subject?.name || 'Matematika'} &bull; Kode: {row.subject?.code || 'MTK'}
+            {row.subject?.name || row.lesson_plan?.subject?.name || '-'} {row.subject?.code ? `\u2022 Kode: ${row.subject.code}` : ''}
           </span>
         </div>
       ),
@@ -614,7 +610,7 @@ export default function TeacherQuizPage() {
       label: 'Rombel Kelas',
       renderCell: (row) => (
         <Badge variant="neutral">
-          Kelas <span className="font-mono font-medium">{row.schoolClass?.name || 'X-RPL-1'}</span>
+          Kelas <span className="font-mono font-medium">{row.schoolClass?.name || row.class_name || '-'}</span>
         </Badge>
       ),
     },
@@ -622,10 +618,7 @@ export default function TeacherQuizPage() {
       key: 'dueDate',
       label: 'Tenggat Waktu',
       renderCell: (row) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-          <Calendar size={13} className="text-slate-400" />
-          <span className="font-mono">{row.due_date}</span>
-        </div>
+        <span className="font-mono text-xs text-slate-700">{row.due_date}</span>
       ),
     },
     {
@@ -650,12 +643,12 @@ export default function TeacherQuizPage() {
       label: 'Status Kuis',
       renderCell: (row) => {
         if (row.status === 'draft_review') {
-          return <Badge variant="warning">Draft Siap Review</Badge>;
+          return <Badge variant="warning" dot>Draft Review</Badge>;
         }
         if (row.status === 'published') {
-          return <Badge variant="success">Aktif Dipublikasi</Badge>;
+          return <Badge variant="success" dot>Aktif</Badge>;
         }
-        return <Badge variant="info">Hasil Dirilis</Badge>;
+        return <Badge variant="info" dot>Hasil Dirilis</Badge>;
       },
     },
     {
@@ -791,11 +784,25 @@ export default function TeacherQuizPage() {
           </p>
         </div>
         <div>
-          <Button variant="primary" icon={Plus} onClick={handleOpenCreateModal}>
+          <Button variant="primary" onClick={handleOpenCreateModal}>
             Buat Kuis Baru (AI)
           </Button>
         </div>
       </div>
+
+      {/* Error Alert Banner with Retry */}
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadData}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
 
       {/* Tabs Filter */}
       <div className="teacher-quiz-tabs">
@@ -840,7 +847,7 @@ export default function TeacherQuizPage() {
               setCreateForm({
                 ...createForm,
                 class_id: e.target.value,
-                class_name: selectedOpt?.label?.replace('Kelas ', '') || 'X-RPL-1',
+                class_name: selectedOpt?.label?.replace('Kelas ', '') || '',
               });
             }}
           />
@@ -1112,7 +1119,7 @@ export default function TeacherQuizPage() {
             <div>
               <span className="text-xs text-slate-400">Target Rombel:</span>
               <p className="text-xs font-semibold text-slate-800 font-mono">
-                {currentQuiz?.schoolClass?.name || 'X-RPL-1'}
+                {currentQuiz?.schoolClass?.name || currentQuiz?.class_name || '-'}
               </p>
             </div>
             <div>
@@ -1488,7 +1495,7 @@ export default function TeacherQuizPage() {
           <div className="submissions-top-bar">
             <div>
               <p className="text-xs text-slate-500">
-                Target Kelas: <strong className="font-mono text-slate-800">{currentQuiz?.schoolClass?.name || 'X-RPL-1'}</strong> &bull; Batas Percobaan: <strong className="font-mono text-slate-800">{currentQuiz?.max_attempts}x</strong>
+                Target Kelas: <strong className="font-mono text-slate-800">{currentQuiz?.schoolClass?.name || currentQuiz?.class_name || '-'}</strong> &bull; Batas Percobaan: <strong className="font-mono text-slate-800">{currentQuiz?.max_attempts}x</strong>
               </p>
             </div>
             <div>

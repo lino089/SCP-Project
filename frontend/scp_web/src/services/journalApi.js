@@ -76,10 +76,10 @@ export const journalApi = {
 
   /**
    * Mengambil daftar siswa per kelas (untuk presensi saat sesi baru dimulai)
-   * GET /api/students?class_id={classId}&per_page=100
+   * GET /api/students?class_id={classId}&all=true&per_page=100
    */
   async getClassStudents(classId) {
-    return api.get('/students', { params: { class_id: classId, per_page: 100 } });
+    return api.get('/students', { params: { class_id: classId, all: true, per_page: 100 } });
   },
 };
 

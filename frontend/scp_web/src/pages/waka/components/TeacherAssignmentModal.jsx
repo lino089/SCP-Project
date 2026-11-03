@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserCheck, ShieldAlert, Trash2, Plus, AlertCircle } from 'lucide-react';
+import { UserCheck, ShieldAlert, Trash2, AlertCircle } from 'lucide-react';
 import Modal from '../../../components/shared/Modal';
 import Button from '../../../components/shared/Button';
 import Select from '../../../components/shared/Select';
@@ -189,7 +189,6 @@ export default function TeacherAssignmentModal({
             <Button
               type="submit"
               variant="primary"
-              icon={Plus}
               loading={isSubmitting || isLoading}
               disabled={isSubmitting || isLoading}
             >

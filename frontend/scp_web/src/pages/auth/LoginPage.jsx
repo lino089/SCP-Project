@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input } from '../../components/shared';
 import { useAuth } from '../../hooks/useAuth';
-import { ShieldCheck, User, Lock } from 'lucide-react';
+import { User, Lock } from 'lucide-react';
 import './Login.css';
 
 export default function LoginPage() {
@@ -111,7 +111,6 @@ export default function LoginPage() {
               size="lg"
               fullWidth
               loading={isLoading}
-              icon={ShieldCheck}
             >
               Masuk
             </Button>

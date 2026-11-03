@@ -63,12 +63,24 @@ export default function AppRouter() {
               <Route path="/web/monitoring" element={<MonitoringRecapPage />} />
             </Route>
 
-            {/* Teacher Routes */}
+            {/* Teacher Permission Verification (Kesiswaan, Wali Kelas, or Waka) */}
+            <Route
+              element={
+                <RoleRoute
+                  allowedRoles={['teacher', 'waka']}
+                  requireKesiswaanOrWaliKelas
+                  redirectTo="/teacher/schedule"
+                />
+              }
+            >
+              <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
+            </Route>
+
+            {/* Standard Teacher Routes */}
             <Route element={<RoleRoute allowedRoles={['teacher']} />}>
               <Route path="/teacher/schedule" element={<TeacherSchedulePage />} />
               <Route path="/teacher/journal" element={<TeacherJournalPage />} />
               <Route path="/teacher/quiz" element={<TeacherQuizPage />} />
-              <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
             </Route>
 
             {/* Student Routes */}

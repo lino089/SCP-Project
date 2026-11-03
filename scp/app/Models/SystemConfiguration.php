@@ -9,6 +9,8 @@ class SystemConfiguration extends Model
     protected $fillable = [
         'active_cycle',
         'monday_is_upacara',
+        'academic_year',
+        'semester',
     ];
 
     protected $casts = [

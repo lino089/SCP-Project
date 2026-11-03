@@ -5,15 +5,10 @@ import {
   X,
   FileText,
   Eye,
-  Calendar,
-  Clock,
-  ShieldCheck,
-  CheckCircle2,
-  Users,
-  GraduationCap,
   Download,
   AlertCircle,
   Briefcase,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
@@ -49,13 +44,15 @@ export default function PermissionVerifyPage() {
   const [permissionList, setPermissionList] = useState([]);
   const [filterStatus, setFilterStatus] = useState('pending');
   const [previewDoc, setPreviewDoc] = useState(null);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(true);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(() => isAuthorized);
+  const [studentFetchError, setStudentFetchError] = useState(null);
 
   // State Perizinan Guru
   const [teacherLeaveList, setTeacherLeaveList] = useState([]);
   const [teacherFilterStatus, setTeacherFilterStatus] = useState('pending');
   const [previewTeacherDoc, setPreviewTeacherDoc] = useState(null);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
+  const [teacherFetchError, setTeacherFetchError] = useState(null);
 
   // Toast Notifikasi & Processing State
   const [toastMessage, setToastMessage] = useState('');
@@ -64,12 +61,14 @@ export default function PermissionVerifyPage() {
   // Load Data Perizinan Siswa
   const fetchStudentLeaves = useCallback(async () => {
     setIsLoadingStudents(true);
+    setStudentFetchError(null);
     try {
       const res = await leaveApi.getLeaveRequests({ per_page: 100 });
       const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
       setPermissionList(list);
-    } catch {
-      // Fallback ditangani di service layer
+    } catch (err) {
+      console.warn('Gagal memuat perizinan siswa:', err);
+      setStudentFetchError(err.message || 'Gagal memuat antrean perizinan siswa.');
     } finally {
       setIsLoadingStudents(false);
     }
@@ -79,18 +78,22 @@ export default function PermissionVerifyPage() {
   const fetchTeacherLeaves = useCallback(async () => {
     if (!canVerify) return;
     setIsLoadingTeachers(true);
+    setTeacherFetchError(null);
     try {
       const res = await leaveApi.getTeacherLeaveRequests({ per_page: 100 });
       const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
       setTeacherLeaveList(list);
-    } catch {
-      // Fallback
+    } catch (err) {
+      console.warn('Gagal memuat perizinan guru:', err);
+      setTeacherFetchError(err.message || 'Gagal memuat antrean perizinan guru.');
     } finally {
       setIsLoadingTeachers(false);
     }
   }, [canVerify]);
 
   useEffect(() => {
+    if (!isAuthorized) return;
+
     let isMounted = true;
     const loadLeaves = async () => {
       if (!isMounted) return;
@@ -103,7 +106,7 @@ export default function PermissionVerifyPage() {
     return () => {
       isMounted = false;
     };
-  }, [fetchStudentLeaves, fetchTeacherLeaves, canVerify]);
+  }, [isAuthorized, fetchStudentLeaves, fetchTeacherLeaves, canVerify]);
 
   // ==========================================
   // LOGIKA TAB SISWA
@@ -207,19 +210,13 @@ export default function PermissionVerifyPage() {
       renderCell: (row) => (
         <div className="text-gray-700 text-xs">
           {row.type === 'tidak_masuk' ? (
-            <div className="flex items-center gap-1.5">
-              <Calendar size={13} className="text-gray-400" />
-              <span className="font-mono text-[11.5px]">
-                {row.start_date} s/d {row.end_date}
-              </span>
-            </div>
+            <span className="font-mono text-[11.5px]">
+              {row.start_date} s/d {row.end_date}
+            </span>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <Clock size={13} className="text-gray-400" />
-              <span className="font-mono text-[11.5px]">
-                {row.start_date || row.date} ({row.departure_time} - {row.expected_return_time})
-              </span>
-            </div>
+            <span className="font-mono text-[11.5px]">
+              {row.start_date || row.date} ({row.departure_time} - {row.expected_return_time})
+            </span>
           )}
         </div>
       ),
@@ -234,7 +231,7 @@ export default function PermissionVerifyPage() {
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-[11px] font-medium cursor-pointer transition-colors"
             onClick={() => setPreviewDoc(row)}
           >
-            <Eye size={12} className="text-gray-500" />
+            <Eye size={12} strokeWidth={1.5} className="text-gray-500" />
             <span>Lihat Surat</span>
           </button>
         ) : (
@@ -245,9 +242,9 @@ export default function PermissionVerifyPage() {
       key: 'status',
       label: 'Status',
       renderCell: (row) => {
-        if (row.status_approval === 'approved') return <Badge variant="success">Disetujui</Badge>;
-        if (row.status_approval === 'rejected') return <Badge variant="error">Ditolak</Badge>;
-        return <Badge variant="warning">Menunggu</Badge>;
+        if (row.status_approval === 'approved') return <Badge variant="success" dot>Disetujui</Badge>;
+        if (row.status_approval === 'rejected') return <Badge variant="error" dot>Ditolak</Badge>;
+        return <Badge variant="warning" dot>Menunggu</Badge>;
       },
     },
     {
@@ -393,10 +390,7 @@ export default function PermissionVerifyPage() {
       key: 'date',
       label: 'Tanggal Izin',
       renderCell: (row) => (
-        <div className="flex items-center gap-1.5 text-gray-700 text-xs">
-          <Calendar size={13} className="text-gray-400" />
-          <span className="font-mono text-[11.5px] font-medium">{row.date}</span>
-        </div>
+        <span className="font-mono text-[11.5px] font-medium text-gray-700">{row.date}</span>
       ),
     },
     {
@@ -417,7 +411,7 @@ export default function PermissionVerifyPage() {
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-[11px] font-medium cursor-pointer transition-colors"
           onClick={() => setPreviewTeacherDoc(row)}
         >
-          <FileText size={12} className="text-gray-500" />
+          <FileText size={12} strokeWidth={1.5} className="text-gray-500" />
           <span>Lihat Berkas &amp; Tugas</span>
         </button>
       ),
@@ -426,9 +420,9 @@ export default function PermissionVerifyPage() {
       key: 'status',
       label: 'Status',
       renderCell: (row) => {
-        if (row.status === 'approved') return <Badge variant="success">Disetujui</Badge>;
-        if (row.status === 'rejected') return <Badge variant="error">Ditolak</Badge>;
-        return <Badge variant="warning">Menunggu</Badge>;
+        if (row.status === 'approved') return <Badge variant="success" dot>Disetujui</Badge>;
+        if (row.status === 'rejected') return <Badge variant="error" dot>Ditolak</Badge>;
+        return <Badge variant="warning" dot>Menunggu</Badge>;
       },
     },
     {
@@ -501,13 +495,11 @@ export default function PermissionVerifyPage() {
 
         <div className="permission-verify__header-badges">
           {canVerify ? (
-            <Badge variant="warning">
-              <ShieldCheck size={13} className="inline mr-1" />
+            <Badge variant="warning" dot>
               Wewenang Kesiswaan &amp; Waka
             </Badge>
           ) : (
-            <Badge variant="info">
-              <GraduationCap size={13} className="inline mr-1" />
+            <Badge variant="info" dot>
               Mode Wali Kelas (Monitoring)
             </Badge>
           )}
@@ -520,7 +512,7 @@ export default function PermissionVerifyPage() {
       {/* Banner Khusus Wali Kelas */}
       {!canVerify && isWaliKelas() && (
         <div className="mb-5 p-3.5 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5 text-xs text-blue-900">
-          <AlertCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
+          <AlertCircle size={16} strokeWidth={1.5} className="text-blue-600 shrink-0 mt-0.5" />
           <div>
             <strong>Informasi Wewenang Wali Kelas:</strong> Anda memiliki akses pemantauan (Read-Only) terhadap perizinan siswa di rombel binaan Anda. Persetujuan atau penolakan resmi permohonan dispensasi dilakukan oleh Tim Kesiswaan / Guru Piket.
           </div>
@@ -530,7 +522,7 @@ export default function PermissionVerifyPage() {
       {/* Toast Notifikasi */}
       {toastMessage && (
         <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-xs text-emerald-800 animate-fade-in">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <span className="status-dot status-dot--success" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -547,7 +539,6 @@ export default function PermissionVerifyPage() {
             }`}
             onClick={() => setActiveCategory('students')}
           >
-            <Users size={15} />
             <span>Perizinan Siswa</span>
             {studentCounts.pending > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">
@@ -564,7 +555,6 @@ export default function PermissionVerifyPage() {
             }`}
             onClick={() => setActiveCategory('teachers')}
           >
-            <Briefcase size={15} />
             <span>Perizinan Mengajar Guru</span>
             {teacherCounts.pending > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-red-100 text-red-800 font-bold">
@@ -578,6 +568,24 @@ export default function PermissionVerifyPage() {
       {/* KONTEN TAB 1: PERIZINAN SISWA */}
       {(activeCategory === 'students' || !canVerify) && (
         <>
+          {studentFetchError && (
+            <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-red-600 shrink-0" />
+                <span>{studentFetchError}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={fetchStudentLeaves}
+                className="border-red-300 text-red-700 hover:bg-red-100"
+              >
+                <RotateCw className="w-3 h-3 mr-1" />
+                Coba Lagi
+              </Button>
+            </div>
+          )}
+
           {/* Sub-Tabs Filter Status Siswa */}
           <div className="mb-5">
             <Tabs
@@ -601,7 +609,7 @@ export default function PermissionVerifyPage() {
             <Table
               columns={studentColumns}
               data={filteredStudentData}
-              loading={isLoadingStudents}
+              isLoading={isLoadingStudents}
               emptyMessage="Tidak ada data perizinan siswa pada kategori status ini."
             />
           </div>
@@ -611,6 +619,24 @@ export default function PermissionVerifyPage() {
       {/* KONTEN TAB 2: PERIZINAN GURU (Hanya untuk Kesiswaan & Waka) */}
       {canVerify && activeCategory === 'teachers' && (
         <>
+          {teacherFetchError && (
+            <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-red-600 shrink-0" />
+                <span>{teacherFetchError}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={fetchTeacherLeaves}
+                className="border-red-300 text-red-700 hover:bg-red-100"
+              >
+                <RotateCw className="w-3 h-3 mr-1" />
+                Coba Lagi
+              </Button>
+            </div>
+          )}
+
           {/* Sub-Tabs Filter Status Guru */}
           <div className="mb-5">
             <Tabs
@@ -634,7 +660,7 @@ export default function PermissionVerifyPage() {
             <Table
               columns={teacherColumns}
               data={filteredTeacherData}
-              loading={isLoadingTeachers}
+              isLoading={isLoadingTeachers}
               emptyMessage="Tidak ada data perizinan mengajar guru pada kategori status ini."
             />
           </div>

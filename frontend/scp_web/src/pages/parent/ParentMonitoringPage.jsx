@@ -1,23 +1,27 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Calendar, FileText, Eye, AlertTriangle, UserX, Download } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { FileText, Eye, UserX, Download, AlertCircle, RotateCw } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import { quizApi } from '../../services/quizApi';
+import { scheduleApi } from '../../services/scheduleApi';
 import { getStorageUrl } from '../../utils/formatters';
 import Tabs from '../../components/shared/Tabs';
 import Badge from '../../components/shared/Badge';
 import Table from '../../components/shared/Table';
 import Modal from '../../components/shared/Modal';
 import Button from '../../components/shared/Button';
+import { ScheduleTimetableMatrix } from '../../components/schedule';
 import './ParentMonitoring.css';
 
 export default function ParentMonitoringPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [attendances, setAttendances] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
+  const [childSchedules, setChildSchedules] = useState([]);
   const [previewDoc, setPreviewDoc] = useState(null);
 
   // Child Profile Information
@@ -32,51 +36,50 @@ export default function ParentMonitoringPage() {
       nis: student?.nis_nip || '-',
       className: schoolClass?.name || (isLinked ? '-' : 'Kelas Belum Ditentukan'),
       guardianName: user?.name || 'Wali Siswa',
-      academicYear: '2025/2026 Ganjil',
+      academicYear: user?.academic_year || '2025/2026 Ganjil',
       isLinked,
     };
   }, [user]);
 
-  // Fetch Attendance, Leave records, & Published Result Quizzes
-  useEffect(() => {
-    let isMounted = true;
+  // Fetch Attendance, Leave records, Published Result Quizzes, & Class Schedules
+  const fetchMonitoringData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [attRes, leaveRes, quizRes, schedRes] = await Promise.all([
+        leaveApi.getAttendances({ per_page: 50 }),
+        leaveApi.getLeaveRequests({ per_page: 50 }),
+        quizApi.getQuizzes({ status: 'published_result', per_page: 50 }),
+        scheduleApi.getSchedules({ all: 1 }).catch(() => ({ data: [] })),
+      ]);
 
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const [attRes, leaveRes, quizRes] = await Promise.all([
-          leaveApi.getAttendances({ per_page: 50 }),
-          leaveApi.getLeaveRequests({ per_page: 50 }),
-          quizApi.getQuizzes({ status: 'published_result', per_page: 50 }),
-        ]);
+      // 1. Rekapitulasi Presensi
+      const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
+      setAttendances(attList);
 
-        if (isMounted) {
-          // 1. Rekapitulasi Presensi
-          const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
-          setAttendances(attList);
+      // 2. Riwayat Izin
+      const leaveList = Array.isArray(leaveRes) ? leaveRes : Array.isArray(leaveRes?.data) ? leaveRes.data : [];
+      setLeaveRequests(leaveList);
 
-          // 2. Riwayat Izin
-          const leaveList = Array.isArray(leaveRes) ? leaveRes : Array.isArray(leaveRes?.data) ? leaveRes.data : [];
-          setLeaveRequests(leaveList);
+      // 3. Capaian Kuis (Hanya yang berstatus published_result)
+      const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
+      const publishedResults = quizList.filter((q) => q.status === 'published_result');
+      setQuizzes(publishedResults);
 
-          // 3. Capaian Kuis (Hanya yang berstatus published_result)
-          const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
-          const publishedResults = quizList.filter((q) => q.status === 'published_result');
-          setQuizzes(publishedResults);
-        }
-      } catch (err) {
-        console.warn('Gagal memuat data monitoring anak, menggunakan fallback:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+      // 4. Jadwal Belajar Kelas Anak
+      const schedList = Array.isArray(schedRes?.data) ? schedRes.data : Array.isArray(schedRes) ? schedRes : [];
+      setChildSchedules(schedList);
+    } catch (err) {
+      console.warn('Gagal memuat data monitoring anak:', err);
+      setLoadError(err.message || 'Gagal memuat data monitoring anak dari server.');
+    } finally {
+      setLoading(false);
     }
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    fetchMonitoringData();
+  }, [fetchMonitoringData]);
 
   // Compute attendance summary dynamically
   const summary = useMemo(() => {
@@ -121,6 +124,7 @@ export default function ParentMonitoringPage() {
     { id: 'attendance', label: 'Rekapitulasi Kehadiran', count: attendances.length },
     { id: 'permissions', label: 'Riwayat Izin & Dispensasi', count: leaveRequests.length },
     { id: 'quizzes', label: 'Capaian Nilai Kuis AI', count: quizzes.length },
+    { id: 'schedule', label: 'Jadwal Belajar Kelas', count: childSchedules.length },
   ];
 
   // Table Columns: Attendance
@@ -141,7 +145,7 @@ export default function ParentMonitoringPage() {
       label: 'Tanggal KBM',
       renderCell: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-800">
-          {row.date || '2026-10-23'}
+          {row.date || (row.created_at ? row.created_at.split('T')[0] : '-')}
         </span>
       ),
     },
@@ -167,7 +171,7 @@ export default function ParentMonitoringPage() {
       label: 'Waktu Presensi',
       renderCell: (row) => (
         <span className="text-xs text-slate-600 font-mono">
-          {row.time || '07:05 WIB'}
+          {row.time || (row.created_at && row.created_at.includes('T') ? `${row.created_at.split('T')[1]?.slice(0, 5)} WIB` : '-')}
         </span>
       ),
     },
@@ -284,7 +288,7 @@ export default function ParentMonitoringPage() {
       label: 'Mata Pelajaran',
       renderCell: (row) => (
         <span className="text-xs text-slate-700 font-medium">
-          {row.subject?.name || row.subject || 'Dasar Keahlian RPL'}
+          {row.subject?.name || row.subject || row.lesson_plan?.subject?.name || '-'}
         </span>
       ),
     },
@@ -293,7 +297,7 @@ export default function ParentMonitoringPage() {
       label: 'Tanggal Kuis',
       renderCell: (row) => (
         <span className="font-mono text-xs text-slate-600">
-          {row.due_date || row.completedDate || row.created_at?.split('T')[0] || '2026-10-23'}
+          {row.due_date ? String(row.due_date).split('T')[0] : (row.created_at ? String(row.created_at).split('T')[0] : '-')}
         </span>
       ),
     },
@@ -301,7 +305,10 @@ export default function ParentMonitoringPage() {
       key: 'score',
       label: 'Nilai Akhir',
       renderCell: (row) => {
-        const scoreVal = row.score ?? row.ai_score ?? 88;
+        const scoreVal = row.score ?? row.ai_score ?? row.final_score;
+        if (scoreVal === undefined || scoreVal === null) {
+          return <span className="text-xs text-slate-400 italic">Belum Ada Nilai</span>;
+        }
         return (
           <div className="flex items-baseline gap-1">
             <span className="font-mono text-sm font-bold text-slate-900">{scoreVal}</span>
@@ -314,7 +321,10 @@ export default function ParentMonitoringPage() {
       key: 'status',
       label: 'Capaian Kompetensi',
       renderCell: (row) => {
-        const scoreVal = row.score ?? row.ai_score ?? 88;
+        const scoreVal = row.score ?? row.ai_score ?? row.final_score;
+        if (scoreVal === undefined || scoreVal === null) {
+          return <Badge variant="neutral">Belum Ada Nilai</Badge>;
+        }
         return (
           <Badge variant={scoreVal >= 75 ? 'success' : 'warning'}>
             {scoreVal >= 75 ? 'Tuntas KKM' : 'Perlu Remedial'}
@@ -326,6 +336,19 @@ export default function ParentMonitoringPage() {
 
   return (
     <div className="parent-monitoring-page">
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={fetchMonitoringData}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
+
       {/* =========================================================================
           KONDISI KHUSUS: AKUN BELUM TAUT KE DATA SISWA
          ========================================================================= */}
@@ -369,7 +392,6 @@ export default function ParentMonitoringPage() {
               </div>
 
               <div className="parent-semester-badge">
-                <Calendar size={14} className="text-slate-500" />
                 <span>
                   Tahun Ajaran: <strong className="font-mono text-slate-800">{child.academicYear}</strong>
                 </span>
@@ -381,8 +403,7 @@ export default function ParentMonitoringPage() {
               2. ATTENDANCE WARNING ALERT BANNER (KONDISIONAL)
              ===================================================================== */}
           {attendanceWarning.hasAlert && (
-            <div className={`parent-alert-card parent-alert-card--${attendanceWarning.type}`}>
-              <AlertTriangle size={20} className="parent-alert-icon" />
+            <div className={`parent-alert-card parent-alert-card--${attendanceWarning.type} accent-border-left--${attendanceWarning.type === 'danger' ? 'danger' : 'warning'}`}>
               <div>
                 <h4 className="parent-alert-title">{attendanceWarning.title}</h4>
                 <p className="parent-alert-desc">{attendanceWarning.message}</p>
@@ -404,7 +425,7 @@ export default function ParentMonitoringPage() {
             <div className="parent-tab-section">
               {/* 4 Attendance Stat Cards */}
               <div className="parent-stats-grid">
-                <div className="parent-stat-card">
+                <div className="parent-stat-card accent-border-top--success">
                   <div className="parent-stat-head">
                     <span className="parent-stat-label">Hadir di Kelas</span>
                     <span className="parent-stat-dot parent-stat-dot--hadir" />
@@ -416,7 +437,7 @@ export default function ParentMonitoringPage() {
                   <p className="parent-stat-desc">Presensi fisik terkonfirmasi di kelas</p>
                 </div>
 
-                <div className="parent-stat-card">
+                <div className="parent-stat-card accent-border-top--info">
                   <div className="parent-stat-head">
                     <span className="parent-stat-label">Izin Sakit</span>
                     <span className="parent-stat-dot parent-stat-dot--sakit" />
@@ -428,7 +449,7 @@ export default function ParentMonitoringPage() {
                   <p className="parent-stat-desc">Didukung surat keterangan dokter</p>
                 </div>
 
-                <div className="parent-stat-card">
+                <div className="parent-stat-card accent-border-top--warning">
                   <div className="parent-stat-head">
                     <span className="parent-stat-label">Izin Keperluan</span>
                     <span className="parent-stat-dot parent-stat-dot--izin" />
@@ -440,7 +461,7 @@ export default function ParentMonitoringPage() {
                   <p className="parent-stat-desc">Izin resmi diajukan orang tua/wali</p>
                 </div>
 
-                <div className="parent-stat-card">
+                <div className="parent-stat-card accent-border-top--danger">
                   <div className="parent-stat-head">
                     <span className="parent-stat-label">Alpa</span>
                     <span className="parent-stat-dot parent-stat-dot--alpa" />
@@ -515,6 +536,32 @@ export default function ParentMonitoringPage() {
                   emptyMessage="Belum ada hasil kuis yang dirilis resmi untuk siswa."
                 />
               </div>
+            </div>
+          )}
+
+          {/* =====================================================================
+              TAB 4: JADWAL BELAJAR MINGGUAN KELAS ANAK
+             ===================================================================== */}
+          {activeTab === 'schedule' && (
+            <div className="parent-tab-section space-y-4">
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-xs flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                    Matriks Jadwal Belajar Kelas {child.className}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Alokasi mata pelajaran, guru pengampu, dan ruang belajar untuk rombel {child.className}
+                  </p>
+                </div>
+                <Badge variant="outline">{childSchedules.length} Sesi Terjadwal</Badge>
+              </div>
+
+              <ScheduleTimetableMatrix
+                schedules={childSchedules}
+                matrixDays={['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat']}
+                mondayIsUpacara={true}
+                role="student"
+              />
             </div>
           )}
         </>

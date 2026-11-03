@@ -1,12 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mail,
   MessageSquare,
-  LogOut,
   CheckCircle,
-  KeyRound,
-  Globe,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button, Input, Badge } from '../../components/shared';
@@ -243,7 +239,7 @@ export default function ProfilePage() {
 
           {/* Logout Button */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <Button variant="danger" fullWidth icon={LogOut} onClick={handleLogout}>
+            <Button variant="danger" fullWidth onClick={handleLogout}>
               Keluar dari Sistem
             </Button>
           </div>
@@ -253,8 +249,7 @@ export default function ProfilePage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Email Verification Section */}
           <div className="bg-white border border-gray-200 rounded-lg p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Mail size={18} className="text-gray-600" />
+            <div className="mb-2">
               <h2 className="text-base font-semibold text-gray-900">Tautan Email Akun</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4">
@@ -402,8 +397,7 @@ export default function ProfilePage() {
 
           {/* Google SSO Linking */}
           <div className="bg-white border border-gray-200 rounded-lg p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Globe size={18} className="text-gray-600" />
+            <div className="mb-2">
               <h2 className="text-base font-semibold text-gray-900">Tautan Akun Google SSO</h2>
             </div>
             <p className="text-xs text-gray-500 mb-3">
@@ -412,10 +406,10 @@ export default function ProfilePage() {
             {googleConnected ? (
               <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-xs font-medium">
                 <span className="flex items-center gap-2">
-                  <CheckCircle size={16} />
+                  <span className="status-dot status-dot--success" />
                   <span>Akun Google Terhubung</span>
                 </span>
-                <span className="text-[11px] text-emerald-600">Aktif</span>
+                <span className="text-[11px] text-emerald-600 font-semibold">Aktif</span>
               </div>
             ) : (
               <Button
@@ -433,8 +427,7 @@ export default function ProfilePage() {
 
           {/* Change Password Section */}
           <div className="bg-white border border-gray-200 rounded-lg p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <KeyRound size={18} className="text-gray-600" />
+            <div className="mb-2">
               <h2 className="text-base font-semibold text-gray-900">Ubah Kata Sandi</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4">

@@ -1,21 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
-  Users,
-  BookOpen,
-  Calendar,
   Image as ImageIcon,
   ChevronDown,
   ChevronUp,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
   FileSpreadsheet,
-  Filter,
   Info,
-  RotateCcw,
-  GraduationCap,
+  RotateCw,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
@@ -39,7 +32,7 @@ import './MonitoringRecap.css';
 
 export default function MonitoringRecapPage() {
   const navigate = useNavigate();
-  const { hasRole, isKesiswaan, isWaliKelas } = useAuth();
+  const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
 
   const [activeTab, setActiveTab] = useState('presensi'); // 'presensi' | 'jurnal'
 
@@ -48,6 +41,7 @@ export default function MonitoringRecapPage() {
   const [journals, setJournals] = useState([]);
   const [classesList, setClassesList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   // Filter Presensi
   const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -66,42 +60,37 @@ export default function MonitoringRecapPage() {
     return hasRole('waka') || isKesiswaan() || isWaliKelas();
   }, [hasRole, isKesiswaan, isWaliKelas]);
 
-  // Load Data saat Mount
-  useEffect(() => {
-    let isMounted = true;
+  // Load Data saat Mount dari API riil
+  const loadInitialData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [attRes, jourRes, clsRes] = await Promise.all([
+        leaveApi.getAttendances({ per_page: 100 }),
+        journalApi.getJournals({ per_page: 100 }),
+        classApi.getClasses({ per_page: 50 }).catch(() => ({ data: [] })),
+      ]);
 
-    async function loadInitialData() {
-      try {
-        const [attRes, jourRes, clsRes] = await Promise.all([
-          leaveApi.getAttendances({ per_page: 100 }),
-          journalApi.getJournals({ per_page: 100 }),
-          classApi.getClasses({ per_page: 50 }).catch(() => ({ data: [] })),
-        ]);
-
-        if (!isMounted) return;
-
-        if (attRes.success && Array.isArray(attRes.data)) {
-          setAttendances(attRes.data);
-        }
-        if (jourRes.success && Array.isArray(jourRes.data)) {
-          setJournals(jourRes.data);
-        }
-        if (clsRes.data && Array.isArray(clsRes.data)) {
-          setClassesList(clsRes.data);
-        }
-      } catch {
-        // Fallback otomatis tertangani
-      } finally {
-        if (isMounted) setIsLoading(false);
+      if (attRes.success && Array.isArray(attRes.data)) {
+        setAttendances(attRes.data);
       }
+      if (jourRes.success && Array.isArray(jourRes.data)) {
+        setJournals(jourRes.data);
+      }
+      if (clsRes.data && Array.isArray(clsRes.data)) {
+        setClassesList(clsRes.data);
+      }
+    } catch (err) {
+      console.warn('Gagal memuat data monitoring rekap:', err);
+      setLoadError(err.message || 'Gagal memuat rekap presensi dan jurnal dari server.');
+    } finally {
+      setIsLoading(false);
     }
-
-    loadInitialData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
 
   // Filter Presensi Aktif
   const filteredAttendances = useMemo(() => {
@@ -356,10 +345,10 @@ export default function MonitoringRecapPage() {
       label: 'Status Kehadiran',
       renderCell: (row) => {
         const s = (row.status || '').toLowerCase();
-        if (s === 'hadir') return <Badge variant="success">Hadir</Badge>;
-        if (s === 'sakit') return <Badge variant="info">Sakit</Badge>;
-        if (s === 'izin') return <Badge variant="warning">Izin</Badge>;
-        return <Badge variant="error">Alpa</Badge>;
+        if (s === 'hadir') return <Badge variant="success" dot>Hadir</Badge>;
+        if (s === 'sakit') return <Badge variant="info" dot>Sakit</Badge>;
+        if (s === 'izin') return <Badge variant="warning" dot>Izin</Badge>;
+        return <Badge variant="error" dot>Alpa</Badge>;
       },
     },
     {
@@ -432,9 +421,9 @@ export default function MonitoringRecapPage() {
       key: 'status',
       label: 'Status Jurnal',
       renderCell: (row) => {
-        if (row.status === 'completed') return <Badge variant="success">Selesai</Badge>;
-        if (row.status === 'teacher_absent') return <Badge variant="danger">Jam Kosong</Badge>;
-        return <Badge variant="neutral">Sedang Berlangsung</Badge>;
+        if (row.status === 'completed') return <Badge variant="success" dot>Selesai</Badge>;
+        if (row.status === 'teacher_absent') return <Badge variant="danger" dot>Jam Kosong</Badge>;
+        return <Badge variant="neutral" dot>Sedang Berlangsung</Badge>;
       },
     },
     {
@@ -516,9 +505,23 @@ export default function MonitoringRecapPage() {
           {isWaliKelas() && !hasRole('waka') && !isKesiswaan() && (
             <Badge variant="warning">Terkunci pada Kelas Binaan</Badge>
           )}
-          <Badge variant="default">Tahun Ajaran 2026/2027</Badge>
+          <Badge variant="default">Tahun Ajaran {user?.academic_year || '2025/2026 Ganjil'}</Badge>
         </div>
       </div>
+
+      {/* Error Alert Banner with Retry */}
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadInitialData}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
 
       {/* Tabs Menu Utama: Rekap Presensi vs Jurnal Mengajar */}
       <div className="mb-6">
@@ -526,8 +529,8 @@ export default function MonitoringRecapPage() {
           activeTab={activeTab}
           onChange={setActiveTab}
           tabs={[
-            { id: 'presensi', label: 'Rekap Presensi Siswa', icon: Users },
-            { id: 'jurnal', label: 'Rekap Jurnal Mengajar Sekolah', icon: BookOpen },
+            { id: 'presensi', label: 'Rekap Presensi Siswa' },
+            { id: 'jurnal', label: 'Rekap Jurnal Mengajar Sekolah' },
           ]}
         />
       </div>
@@ -540,36 +543,41 @@ export default function MonitoringRecapPage() {
             <StatCard
               label="Tingkat Kehadiran"
               value={`${metrics.rate}%`}
-              icon={CheckCircle2}
+              accentBorder
               variant="success"
+              statusDot="success"
               description="Rasio kehadiran akumulatif"
             />
             <StatCard
               label="Siswa Hadir"
               value={`${metrics.hadir} Siswa`}
-              icon={Users}
+              accentBorder
               variant="default"
+              statusDot="neutral"
               description="Mengikuti KBM di kelas"
             />
             <StatCard
               label="Sakit"
               value={`${metrics.sakit} Siswa`}
-              icon={Clock}
+              accentBorder
               variant="info"
+              statusDot="info"
               description="Keterangan sakit resmi"
             />
             <StatCard
               label="Izin"
               value={`${metrics.izin} Siswa`}
-              icon={Calendar}
+              accentBorder
               variant="warning"
+              statusDot="warning"
               description="Izin terverifikasi Kesiswaan"
             />
             <StatCard
               label="Alpa / Tanpa Ket"
               value={`${metrics.alpa} Siswa`}
-              icon={AlertCircle}
+              accentBorder
               variant="danger"
+              statusDot="danger"
               description="Tidak hadir tanpa konfirmasi"
             />
           </div>
@@ -577,18 +585,14 @@ export default function MonitoringRecapPage() {
           {/* Filter Card Presensi */}
           <div className="monitoring-filter-card">
             <div className="monitoring-filter-card__header">
-              <div className="flex items-center gap-2">
-                <Filter size={15} className="text-gray-500" />
-                <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Filter &amp; Parameter Rekapitulasi Presensi
-                </span>
-              </div>
+              <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                Filter &amp; Parameter Rekapitulasi Presensi
+              </span>
               <div className="flex items-center gap-2">
                 {(filterDate !== new Date().toISOString().split('T')[0] || filterClass !== 'ALL' || filterStatus !== 'ALL' || searchQuery) && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    icon={RotateCcw}
                     onClick={() => {
                       setFilterDate(new Date().toISOString().split('T')[0]);
                       setFilterClass('ALL');
@@ -718,7 +722,6 @@ export default function MonitoringRecapPage() {
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-xs">
             <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gray-50/50">
               <div className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-gray-600" />
                 <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
                   Daftar Presensi Siswa ({filteredAttendances.length} Baris Data)
                 </h2>
@@ -733,12 +736,11 @@ export default function MonitoringRecapPage() {
             <Table
               columns={attendanceColumns}
               data={filteredAttendances}
-              loading={isLoading}
+              isLoading={isLoading}
               emptyComponent={
                 <div className="py-12 px-4">
                   <EmptyState
                     type={searchQuery ? 'search' : 'default'}
-                    icon={Users}
                     title={
                       searchQuery
                         ? 'Pencarian Presensi Tidak Ditemukan'
@@ -782,29 +784,33 @@ export default function MonitoringRecapPage() {
             <StatCard
               label="Keterlaksanaan KBM"
               value={`${journalMetrics.completionRate}%`}
-              icon={CheckCircle2}
+              accentBorder
               variant="success"
+              statusDot="success"
               description="Sesi KBM terlaksana tuntas"
             />
             <StatCard
               label="Total Sesi Jurnal"
               value={`${journalMetrics.total} Sesi`}
-              icon={BookOpen}
+              accentBorder
               variant="default"
+              statusDot="neutral"
               description="Dokumentasi mengajar tercatat"
             />
             <StatCard
               label="Jam Kosong / Guru Absen"
               value={`${journalMetrics.absent} Sesi`}
-              icon={AlertCircle}
+              accentBorder
               variant="danger"
+              statusDot="danger"
               description="Sesi tanpa kehadiran guru"
             />
             <StatCard
               label="Guru Pengganti"
               value={`${journalMetrics.substitute} Sesi`}
-              icon={Users}
+              accentBorder
               variant="warning"
+              statusDot="warning"
               description="Ditangani tim kesiswaan / piket"
             />
           </div>
@@ -812,18 +818,14 @@ export default function MonitoringRecapPage() {
           {/* Filter Card Jurnal */}
           <div className="monitoring-filter-card">
             <div className="monitoring-filter-card__header">
-              <div className="flex items-center gap-2">
-                <Filter size={15} className="text-gray-500" />
-                <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Filter &amp; Parameter Jurnal Mengajar KBM
-                </span>
-              </div>
+              <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                Filter &amp; Parameter Jurnal Mengajar KBM
+              </span>
               <div className="flex items-center gap-2">
                 {(journalFilterDate || journalSearchQuery) && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    icon={RotateCcw}
                     onClick={() => {
                       setJournalFilterDate('');
                       setJournalSearchQuery('');
@@ -915,7 +917,6 @@ export default function MonitoringRecapPage() {
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-xs">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div className="flex items-center gap-2">
-                <BookOpen size={16} className="text-gray-600" />
                 <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
                   Riwayat Jurnal KBM Seluruh Kelas ({filteredJournals.length} Jurnal)
                 </h2>
@@ -928,12 +929,11 @@ export default function MonitoringRecapPage() {
             <Table
               columns={journalColumns}
               data={filteredJournals}
-              loading={isLoading}
+              isLoading={isLoading}
               emptyComponent={
                 <div className="py-12 px-4">
                   <EmptyState
                     type={journalSearchQuery ? 'search' : 'default'}
-                    icon={BookOpen}
                     title={
                       journalSearchQuery
                         ? 'Pencarian Jurnal Tidak Ditemukan'

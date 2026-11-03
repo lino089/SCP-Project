@@ -110,11 +110,11 @@
 }
 
 .dashboard-card-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #6B7280;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .dashboard-card-main-val {
@@ -254,5 +254,40 @@
   .dashboard-row-card-right {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+
+/* Grid Metrics Master Data */
+.dashboard-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-metrics-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* 4-Column Controls Grid */
+.dashboard-cards-grid--4 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+@media (min-width: 768px) {
+  .dashboard-cards-grid--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .dashboard-cards-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
   }
 }

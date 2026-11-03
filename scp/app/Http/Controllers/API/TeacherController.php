@@ -492,7 +492,13 @@ class TeacherController extends Controller
             $data['name'] = $request->name;
         }
         if ($request->filled('nip') || $request->filled('nis_nip')) {
-            $data['nis_nip'] = $request->input('nip') ?? $request->input('nis_nip');
+            $newNip = $request->input('nip') ?? $request->input('nis_nip');
+            $data['nis_nip'] = $newNip;
+            // Jika guru belum pernah ganti password mandiri (masih password awal),
+            // sinkronkan password ke NIP baru
+            if ($teacher->must_change_password) {
+                $data['password'] = Hash::make($newNip, ['rounds' => 4]);
+            }
         }
         if ($request->has('fet_staff_id')) {
             $data['fet_staff_id'] = $request->fet_staff_id;
@@ -501,7 +507,7 @@ class TeacherController extends Controller
             $data['email'] = $request->email;
         }
         if ($request->has('phone_number')) {
-            $data['phone_number'] = $request->phone_number;
+            $data['phone_number'] = User::normalizePhoneNumber($request->phone_number);
         }
         if ($request->has('subject_id')) {
             $data['subject_id'] = $request->subject_id;

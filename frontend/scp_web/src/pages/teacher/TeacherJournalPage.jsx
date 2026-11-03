@@ -3,13 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   PlayCircle,
   CheckCircle,
-  Save,
   AlertTriangle,
   ShieldCheck,
-  Check,
   ArrowLeft,
   X,
   FileCheck2,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
@@ -19,7 +18,7 @@ import {
   Badge,
   FileUpload,
 } from '../../components/shared';
-import ForbiddenState from '../../components/feedback/ForbiddenState';
+import { ForbiddenState, EmptyState } from '../../components/feedback';
 import './TeacherJournal.css';
 
 export default function TeacherJournalPage() {
@@ -32,6 +31,7 @@ export default function TeacherJournalPage() {
 
   // Jadwal aktif KBM
   const [schedule, setSchedule] = useState(passedSchedule || null);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(!passedSchedule);
   const [journalId, setJournalId] = useState(null);
   const [classOpened, setClassOpened] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,12 +53,23 @@ export default function TeacherJournalPage() {
   useEffect(() => {
     let isMounted = true;
     if (!schedule) {
-      journalApi.getTeacherSchedules({ per_page: 1 }).then((res) => {
-        if (!isMounted) return;
-        if (res.success && res.data && res.data.length > 0) {
-          setSchedule(res.data[0]);
-        }
-      });
+      setIsLoadingInitial(true);
+      journalApi
+        .getTeacherSchedules({ per_page: 1 })
+        .then((res) => {
+          if (!isMounted) return;
+          if (res.success && res.data && res.data.length > 0) {
+            setSchedule(res.data[0]);
+          }
+        })
+        .catch((err) => {
+          console.warn('Gagal memuat jadwal default guru:', err);
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingInitial(false);
+        });
+    } else {
+      setIsLoadingInitial(false);
     }
     return () => {
       isMounted = false;
@@ -87,10 +98,7 @@ export default function TeacherJournalPage() {
   // Muat tugas titipan jika dalam mode pengganti Kesiswaan atau Wali Kelas
   const taskTitipan = useMemo(() => {
     if (isSubstituteMode) {
-      return (
-        schedule?.task_instruction ||
-        'Lanjutkan praktikum modul dan serahkan ringkasan tugas latihan mandiri ke ketua kelas / meja piket.'
-      );
+      return schedule?.task_instruction || '';
     }
     return '';
   }, [isSubstituteMode, schedule?.task_instruction]);
@@ -143,7 +151,11 @@ export default function TeacherJournalPage() {
       }
 
       // Ambil daftar siswa kelas terkait
-      const classId = schedule.school_class_id || schedule.class_id || 1;
+      const classId = schedule.school_class_id || schedule.class_id;
+      if (!classId) {
+        setErrorMessage('Data rombel kelas pada jadwal ini tidak ditemukan.');
+        return;
+      }
       const studRes = await journalApi.getClassStudents(classId);
       const studentList = studRes.data || [];
       setStudents(studentList);
@@ -291,6 +303,50 @@ export default function TeacherJournalPage() {
           actionText="Kembali ke Kalender Mengajar"
           onAction={() => navigate('/teacher/schedule')}
         />
+      </div>
+    );
+  }
+
+  // Jika sedang memuat jadwal awal
+  if (isLoadingInitial) {
+    return (
+      <div className="teacher-journal">
+        <div className="teacher-journal__header">
+          <div className="teacher-journal__title-group">
+            <h1>Jurnal KBM &amp; Presensi Kelas</h1>
+            <p className="teacher-journal__subtitle">
+              Buka kelas berjalan, catat topik materi pembelajaran, verifikasi kehadiran siswa, dan unggah foto dokumentasi KBM.
+            </p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-12 my-6 text-center max-w-lg mx-auto">
+          <RotateCw className="w-8 h-8 animate-spin text-slate-700 mx-auto mb-3" />
+          <p className="text-xs text-slate-500">Memeriksa sesi KBM aktif Anda...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Jika belum ada jadwal KBM aktif yang dipilih
+  if (!schedule) {
+    return (
+      <div className="teacher-journal">
+        <div className="teacher-journal__header">
+          <div className="teacher-journal__title-group">
+            <h1>Jurnal KBM &amp; Presensi Kelas</h1>
+            <p className="teacher-journal__subtitle">
+              Buka kelas berjalan, catat topik materi pembelajaran, verifikasi kehadiran siswa, dan unggah foto dokumentasi KBM.
+            </p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 my-6 text-center max-w-lg mx-auto">
+          <EmptyState
+            title="Belum Ada Jadwal KBM yang Dipilih"
+            message="Silakan pilih jadwal KBM aktif Anda dari Kalender Mengajar untuk membuka sesi pembelajaran kelas hari ini."
+            actionText="Buka Kalender Jadwal Mengajar"
+            onAction={() => navigate('/teacher/schedule')}
+          />
+        </div>
       </div>
     );
   }
@@ -626,7 +682,7 @@ export default function TeacherJournalPage() {
                         </td>
                         <td className="py-2.5 px-3">
                           <code className="font-mono text-[11px] text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                            {st.nis}
+                            {st.nis_nip || st.nis || '-'}
                           </code>
                         </td>
                         <td className="py-2.5 px-3 font-medium text-gray-900">
@@ -685,9 +741,8 @@ export default function TeacherJournalPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="h-10 px-5 rounded-md text-xs font-bold bg-[#FFDE02] text-gray-900 hover:bg-[#F2D300] active:scale-[0.98] transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="h-10 px-5 rounded-md text-xs font-bold bg-[#FFDE02] text-gray-900 hover:bg-[#F2D300] active:scale-[0.98] transition-all shadow-xs flex items-center justify-center cursor-pointer disabled:opacity-50"
               >
-                <Check size={16} strokeWidth={2.5} />
                 <span>
                   {isSubmitting ? 'Menyimpan...' : 'Simpan Presensi Piket'}
                 </span>
@@ -696,7 +751,6 @@ export default function TeacherJournalPage() {
               <Button
                 type="submit"
                 variant="primary"
-                icon={Save}
                 loading={isSubmitting}
               >
                 Simpan Jurnal &amp; Selesaikan Sesi

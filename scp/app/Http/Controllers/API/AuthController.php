@@ -76,6 +76,10 @@ class AuthController extends Controller
     public function me(Request $request){
         $user = $request->user()->load('assignments');
 
+        if ($user->role === 'student') {
+            $user->load('schoolClass:id,name,level');
+        }
+
         if ($user->role === 'parent') {
             $user->load([
                 'linkedStudent:id,name,nis_nip,class_id,gender',
@@ -83,10 +87,15 @@ class AuthController extends Controller
             ]);
         }
 
+        $sysConfig = \App\Models\SystemConfiguration::first();
+        $userData = $user->toArray();
+        $userData['academic_year'] = $sysConfig?->academic_year ?? '2025/2026 Ganjil';
+        $userData['active_cycle'] = $sysConfig?->active_cycle ?? 1;
+
         return response()->json([
             'success' => true,
             'message' => 'Data profil berhasil diambil',
-            'data' => $user
+            'data' => $userData
         ], 200);
     }
 

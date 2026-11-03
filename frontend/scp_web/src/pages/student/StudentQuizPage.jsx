@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Calendar,
   Clock,
   FileQuestion,
   CheckCircle2,
@@ -27,6 +26,7 @@ export default function StudentQuizPage() {
   const { user } = useAuth();
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   // Active quiz taking states
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -56,38 +56,37 @@ export default function StudentQuizPage() {
   const timerRef = useRef(null);
   const autoSubmitRef = useRef(null);
 
-  // Student Info Fallback
+  // Student Info
   const studentInfo = {
-    name: user?.name || 'Aisyah Putri Ramadhani',
-    nis: user?.nis_nip || '2024001',
-    className: user?.class_name || 'X-RPL-1',
+    name: user?.name || 'Peserta Didik',
+    nis: user?.nis_nip || '-',
+    className: user?.school_class?.name || user?.schoolClass?.name || user?.class_name || '-',
   };
 
   // Fetch quizzes for student
-  useEffect(() => {
-    let isMounted = true;
-    async function loadQuizzes() {
-      setLoading(true);
-      try {
-        const res = await quizApi.getQuizzes();
-        if (isMounted && res?.data) {
-          // Filter to quizzes applicable to student (published or published_result)
-          const available = res.data.filter(
-            (q) => q.status === 'published' || q.status === 'published_result'
-          );
-          setQuizzes(available);
-        }
-      } catch (err) {
-        console.warn('Gagal memuat kuis siswa:', err);
-      } finally {
-        if (isMounted) setLoading(false);
+  const loadQuizzes = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await quizApi.getQuizzes();
+      if (res?.data) {
+        // Filter to quizzes applicable to student (published or published_result)
+        const available = res.data.filter(
+          (q) => q.status === 'published' || q.status === 'published_result'
+        );
+        setQuizzes(available);
       }
+    } catch (err) {
+      console.warn('Gagal memuat kuis siswa:', err);
+      setLoadError(err.message || 'Gagal memuat kuis siswa dari server.');
+    } finally {
+      setLoading(false);
     }
-    loadQuizzes();
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadQuizzes();
+  }, [loadQuizzes]);
 
   // Timer effect during active quiz
   useEffect(() => {
@@ -136,7 +135,8 @@ export default function StudentQuizPage() {
         setQuestions(questionsList);
         setCurrentQuestionIdx(0);
         setSubmissionComplete(false);
-        setTimeLeftSeconds(30 * 60); // 30 minutes
+        const durationMins = Number(quiz.duration_minutes || quiz.duration || 30);
+        setTimeLeftSeconds(durationMins * 60);
 
         // Check sessionStorage for draft answers
         const savedDraft = sessionStorage.getItem(`quiz_draft_${quiz.id}`);
@@ -255,7 +255,7 @@ export default function StudentQuizPage() {
         <div className="flex flex-col">
           <span className="text-xs font-semibold text-slate-900">{row.title}</span>
           <span className="text-[11px] text-slate-500">
-            {row.subject?.name || 'Matematika'} &bull; <strong className="font-mono">{row.questions_count || 0}</strong> butir soal
+            {row.subject?.name || row.lesson_plan?.subject?.name || '-'} &bull; <strong className="font-mono">{row.questions_count || 0}</strong> butir soal
           </span>
         </div>
       ),
@@ -264,17 +264,14 @@ export default function StudentQuizPage() {
       key: 'teacher',
       label: 'Guru Pengampu',
       renderCell: (row) => (
-        <span className="text-xs text-slate-700">{row.teacher?.name || 'Drs. Ahmad Fauzi, M.Pd.'}</span>
+        <span className="text-xs text-slate-700">{row.teacher?.name || row.lesson_plan?.teacher?.name || '-'}</span>
       ),
     },
     {
       key: 'dueDate',
       label: 'Batas Pengerjaan',
       renderCell: (row) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-mono">
-          <Calendar size={13} className="text-slate-400" />
-          <span>{row.due_date}</span>
-        </div>
+        <span className="font-mono text-xs text-slate-700">{row.due_date}</span>
       ),
     },
     {
@@ -291,9 +288,9 @@ export default function StudentQuizPage() {
       label: 'Status Kuis',
       renderCell: (row) => {
         if (row.status === 'published_result') {
-          return <Badge variant="info">Hasil Tersedia</Badge>;
+          return <Badge variant="info" dot>Hasil Tersedia</Badge>;
         }
-        return <Badge variant="success">Sedang Berlangsung</Badge>;
+        return <Badge variant="success" dot>Sedang Berlangsung</Badge>;
       },
     },
     {
@@ -354,6 +351,20 @@ export default function StudentQuizPage() {
           </span>
         </div>
       </div>
+
+      {/* Error Alert Banner with Retry */}
+      {loadError && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#991b1b', fontSize: '0.875rem' }}>
+            <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
+            <span>{loadError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadQuizzes}>
+            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            Coba Lagi
+          </Button>
+        </div>
+      )}
 
       {/* Tabel Kuis Aktif */}
       <div className="student-quiz-table-wrap">
@@ -621,16 +632,21 @@ export default function StudentQuizPage() {
                   </span>
                   <div className="flex items-baseline gap-2 mt-0.5">
                     <span className="text-3xl font-mono font-bold text-slate-900">
-                      {mySubmission?.ai_score ?? 88}
+                      {mySubmission?.score ?? mySubmission?.ai_score ?? mySubmission?.final_score ?? 0}
                     </span>
                     <span className="text-xs font-mono text-slate-400">/ 100 Poin</span>
                   </div>
                 </div>
 
                 <div>
-                  <Badge variant={(mySubmission?.ai_score ?? 88) >= 75 ? 'success' : 'warning'}>
-                    {(mySubmission?.ai_score ?? 88) >= 75 ? 'Tuntas KKM' : 'Perlu Remedial'}
-                  </Badge>
+                  {(() => {
+                    const finalScore = mySubmission?.score ?? mySubmission?.ai_score ?? mySubmission?.final_score ?? 0;
+                    return (
+                      <Badge variant={finalScore >= 75 ? 'success' : 'warning'}>
+                        {finalScore >= 75 ? 'Tuntas KKM' : 'Perlu Remedial'}
+                      </Badge>
+                    );
+                  })()}
                   {mySubmission?.is_overridden && (
                     <span className="text-[11px] text-amber-700 block mt-1 font-medium">
                       &bull; Skor telah disesuaikan Guru

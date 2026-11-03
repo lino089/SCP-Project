@@ -30,6 +30,7 @@ class MasterDataSummaryController extends Controller
                 'subjects' => Subject::count(),
                 'teachers' => User::where('role', 'teacher')->count(),
                 'students' => User::where('role', 'student')->count(),
+                'schedules' => Schedule::count(),
             ],
         ], 200);
     }

@@ -20,7 +20,7 @@ import './Sidebar.css';
 export default function Sidebar({ isOpen = false, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, hasRole, isKesiswaan, logout } = useAuth();
+  const { user, hasRole, isKesiswaan, isWaliKelas, logout } = useAuth();
 
   // Accordion state for Waka Kurikulum menu groups
   const [openGroups, setOpenGroups] = useState({
@@ -163,7 +163,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
       return (
         <>
           <div className="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            Menu Guru {isKesiswaan() ? '& Kesiswaan' : ''}
+            Menu Guru {isKesiswaan() ? '& Kesiswaan' : isWaliKelas() ? '& Wali Kelas' : ''}
           </div>
 
           <NavLink
@@ -199,16 +199,20 @@ export default function Sidebar({ isOpen = false, onClose }) {
             <span>Manajemen Kuis AI</span>
           </NavLink>
 
-          <NavLink
-            to="/teacher/permissions"
-            className={({ isActive }) =>
-              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
-            }
-            onClick={() => onClose?.()}
-          >
-            <UserCheck size={16} strokeWidth={1.5} />
-            <span>Verifikasi Perizinan</span>
-          </NavLink>
+          {(isKesiswaan() || isWaliKelas() || hasRole('waka')) && (
+            <NavLink
+              to="/teacher/permissions"
+              className={({ isActive }) =>
+                `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+              }
+              onClick={() => onClose?.()}
+            >
+              <UserCheck size={16} strokeWidth={1.5} />
+              <span>
+                {isKesiswaan() || hasRole('waka') ? 'Verifikasi Perizinan' : 'Perizinan Siswa'}
+              </span>
+            </NavLink>
+          )}
 
           {isKesiswaan() && (
             <NavLink

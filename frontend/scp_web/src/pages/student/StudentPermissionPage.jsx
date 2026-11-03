@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Plus,
   Calendar,
   Clock,
   FileText,
@@ -8,9 +7,9 @@ import {
   Edit2,
   Eye,
   AlertCircle,
-  CheckCircle2,
   Send,
   Download,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
@@ -32,6 +31,7 @@ export default function StudentPermissionPage() {
 
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
   // Modal State
@@ -52,29 +52,25 @@ export default function StudentPermissionPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load Data Perizinan
-  useEffect(() => {
-    let isMounted = true;
-
-    async function fetchData() {
-      try {
-        const res = await leaveApi.getLeaveRequests({ per_page: 50 });
-        if (!isMounted) return;
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setLeaveRequests(list);
-      } catch {
-        // Fallback otomatis tertangani di service layer
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+  // Load Data Perizinan dari Database Riil
+  const loadPermissions = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const res = await leaveApi.getLeaveRequests({ per_page: 50 });
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setLeaveRequests(list);
+    } catch (err) {
+      console.warn('Gagal memuat data perizinan:', err);
+      setFetchError(err.message || err.response?.data?.message || 'Gagal memuat data riwayat perizinan.');
+    } finally {
+      setIsLoading(false);
     }
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadPermissions();
+  }, [loadPermissions]);
 
   // Metrik Ringkasan
   const stats = useMemo(() => {
@@ -329,12 +325,12 @@ export default function StudentPermissionPage() {
       label: 'Status Persetujuan',
       renderCell: (row) => {
         if (row.status_approval === 'approved') {
-          return <Badge variant="success">Disetujui Kesiswaan</Badge>;
+          return <Badge variant="success" dot>Disetujui Kesiswaan</Badge>;
         }
         if (row.status_approval === 'rejected') {
-          return <Badge variant="error">Ditolak</Badge>;
+          return <Badge variant="error" dot>Ditolak</Badge>;
         }
-        return <Badge variant="warning">Menunggu Verifikasi</Badge>;
+        return <Badge variant="warning" dot>Menunggu Verifikasi</Badge>;
       },
     },
     {
@@ -382,7 +378,6 @@ export default function StudentPermissionPage() {
           <Button
             variant="primary"
             size="md"
-            icon={Plus}
             onClick={() => {
               resetForm();
               setIsCreateModalOpen(true);
@@ -396,17 +391,31 @@ export default function StudentPermissionPage() {
       {/* Success Toast */}
       {toastMessage && (
         <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-xs text-emerald-800">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <span className="status-dot status-dot--success" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Error Alert with Retry */}
+      {fetchError && (
+        <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadPermissions} className="border-red-300 text-red-700 hover:bg-red-100">
+            <RotateCw className="w-3 h-3 mr-1" />
+            Coba Lagi
+          </Button>
         </div>
       )}
 
       {/* Stat Cards Grid */}
       <div className="student-permission__stats">
-        <StatCard title="Total Pengajuan" value={stats.total} icon={FileText} />
-        <StatCard title="Menunggu Verifikasi" value={stats.pending} icon={Clock} variant="warning" />
-        <StatCard title="Izin Disetujui" value={stats.approved} icon={CheckCircle2} variant="success" />
-        <StatCard title="Izin Ditolak" value={stats.rejected} icon={AlertCircle} variant="danger" />
+        <StatCard title="Total Pengajuan" value={stats.total} accentBorder variant="default" statusDot="neutral" />
+        <StatCard title="Menunggu Verifikasi" value={stats.pending} accentBorder variant="warning" statusDot="warning" />
+        <StatCard title="Izin Disetujui" value={stats.approved} accentBorder variant="success" statusDot="success" />
+        <StatCard title="Izin Ditolak" value={stats.rejected} accentBorder variant="danger" statusDot="danger" />
       </div>
 
       {/* Tabel Riwayat Pengajuan Izin */}
@@ -423,7 +432,7 @@ export default function StudentPermissionPage() {
         <Table
           columns={columns}
           data={leaveRequests}
-          loading={isLoading}
+          isLoading={isLoading}
           emptyMessage="Belum ada riwayat perizinan yang diajukan."
         />
       </div>
