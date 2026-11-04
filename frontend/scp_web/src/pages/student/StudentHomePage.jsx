@@ -165,11 +165,18 @@ export default function StudentHomePage() {
     },
     {
       key: 'topic',
-      label: 'Materi Pembelajaran / Keterangan',
+      label: 'Materi Pembelajaran / Catatan Guru',
       renderCell: (row) => (
-        <span className="text-xs text-slate-600">
-          {row.journal?.topic_description || row.notes || 'Sesi pembelajaran kelas reguler'}
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-slate-700">
+            {row.journal?.topic_description || 'Sesi pembelajaran kelas reguler'}
+          </span>
+          {row.notes && (
+            <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 inline-block max-w-fit font-medium">
+              Catatan Guru: {row.notes}
+            </span>
+          )}
+        </div>
       ),
     },
   ];

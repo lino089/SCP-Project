@@ -140,11 +140,36 @@
 
 /* Document Preview Modal */
 .student-permission__doc-preview {
-  padding: 1.25rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
   text-align: center;
+}
+
+.student-permission__doc-container {
+  position: relative;
+  min-height: 240px;
+  max-height: 460px;
+  background-color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.student-permission__doc-img {
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  display: block;
+}
+
+.student-permission__doc-meta {
+  padding: 1rem;
+  background-color: #ffffff;
+  text-align: left;
+  border-top: 1px solid #f1f5f9;
 }
 
 .student-permission__doc-icon {

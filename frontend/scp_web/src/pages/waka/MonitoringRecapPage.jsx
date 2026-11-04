@@ -9,6 +9,8 @@ import {
   Info,
   RotateCw,
   AlertCircle,
+  ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
@@ -26,7 +28,7 @@ import {
   SearchInput,
 } from '../../components/shared';
 import { EmptyState } from '../../components/feedback';
-import { getStorageUrl } from '../../utils/formatters';
+import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './MonitoringRecap.css';
 
@@ -54,6 +56,18 @@ export default function MonitoringRecapPage() {
   const [journalSearchQuery, setJournalSearchQuery] = useState('');
   const [expandedTopicIds, setExpandedTopicIds] = useState(new Set());
   const [previewPhoto, setPreviewPhoto] = useState(null);
+  const [isPhotoLoading, setIsPhotoLoading] = useState(false);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
+  const [photoSourceUrl, setPhotoSourceUrl] = useState('');
+  const [triedFallback, setTriedFallback] = useState(false);
+
+  const handleOpenPhotoPreview = (row) => {
+    setPreviewPhoto(row);
+    setPhotoLoadError(false);
+    setIsPhotoLoading(true);
+    setTriedFallback(false);
+    setPhotoSourceUrl(getStorageUrl(row.photo_url || row.photo_path));
+  };
 
   // Otorisasi: Waka, Kesiswaan, atau Wali Kelas
   const isAuthorized = useMemo(() => {
@@ -104,7 +118,8 @@ export default function MonitoringRecapPage() {
         const nis = (item.student?.nis_nip || '').toLowerCase();
         const subject = (item.journal?.schedule?.subject?.name || '').toLowerCase();
         const className = (item.student?.schoolClass?.name || '').toLowerCase();
-        if (!name.includes(q) && !nis.includes(q) && !subject.includes(q) && !className.includes(q)) {
+        const note = (item.notes || '').toLowerCase();
+        if (!name.includes(q) && !nis.includes(q) && !subject.includes(q) && !className.includes(q) && !note.includes(q)) {
           return false;
         }
       }
@@ -186,6 +201,7 @@ export default function MonitoringRecapPage() {
       'Nama Siswa': item.student?.name || '-',
       'Kelas': item.student?.schoolClass?.name || '-',
       'Status Kehadiran': (item.status || 'Hadir').toUpperCase(),
+      'Catatan Siswa': item.notes || '-',
       'Mata Pelajaran': item.journal?.schedule?.subject?.name || 'KBM Reguler',
       'Guru Pengampu': item.journal?.schedule?.teacher?.name || '-',
     }));
@@ -200,6 +216,7 @@ export default function MonitoringRecapPage() {
       { wch: 28 },
       { wch: 16 },
       { wch: 18 },
+      { wch: 28 },
       { wch: 28 },
       { wch: 28 },
     ];
@@ -352,6 +369,21 @@ export default function MonitoringRecapPage() {
       },
     },
     {
+      key: 'notes',
+      label: 'Catatan Siswa',
+      renderCell: (row) =>
+        row.notes ? (
+          <span
+            className="text-xs text-amber-900 bg-amber-50 border border-amber-200/80 rounded px-2 py-0.5 inline-block max-w-[200px] truncate font-medium"
+            title={row.notes}
+          >
+            {row.notes}
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs italic">-</span>
+        ),
+    },
+    {
       key: 'subject',
       label: 'Keterangan Sesi KBM',
       renderCell: (row) => (
@@ -461,11 +493,11 @@ export default function MonitoringRecapPage() {
       label: 'Foto Bukti',
       align: 'right',
       renderCell: (row) =>
-        row.photo_path ? (
+        (row.photo_url || row.photo_path) ? (
           <button
             type="button"
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-xs font-medium cursor-pointer transition-colors"
-            onClick={() => setPreviewPhoto(row)}
+            onClick={() => handleOpenPhotoPreview(row)}
           >
             <ImageIcon size={13} className="text-gray-500" />
             <span>Lihat Foto</span>
@@ -971,28 +1003,139 @@ export default function MonitoringRecapPage() {
       {/* MODAL PRATINJAU FOTO DOKUMENTASI KBM */}
       <Modal
         isOpen={Boolean(previewPhoto)}
-        onClose={() => setPreviewPhoto(null)}
+        onClose={() => {
+          setPreviewPhoto(null);
+          setPhotoLoadError(false);
+          setIsPhotoLoading(false);
+          setTriedFallback(false);
+        }}
         title="Dokumentasi Pelaksanaan KBM"
         size="lg"
       >
         <div className="monitoring-recap__photo-preview">
-          <img
-            src={getStorageUrl(previewPhoto?.photo_path) || '/assets/hero.png'}
-            alt="Dokumentasi Kelas KBM"
-            className="monitoring-recap__photo-img"
-            onError={(e) => {
-              e.target.src = 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop';
-            }}
-          />
+          {/* Kondisi 1: Tidak Ada Foto Dokumentasi Terlampir */}
+          {!previewPhoto?.photo_path && !previewPhoto?.photo_url ? (
+            <div className="py-14 px-6 flex flex-col items-center justify-center text-center bg-gray-50/70">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3 border border-gray-200">
+                <ImageIcon size={24} />
+              </div>
+              <h4 className="text-sm font-bold text-gray-800">Tidak Ada Foto Dokumentasi</h4>
+              <p className="text-xs text-gray-500 max-w-sm mt-1">
+                Sesi pembelajaran ini belum memiliki berkas foto dokumentasi KBM yang diunggah ke sistem.
+              </p>
+            </div>
+          ) : (
+            <div className="monitoring-recap__photo-container">
+              {/* Overlay Indikator Loading */}
+              {isPhotoLoading && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 text-white gap-2.5">
+                  <RotateCw size={26} className="animate-spin text-[#FFDE02]" />
+                  <span className="text-xs text-slate-300 font-medium">
+                    Mengambil foto dokumentasi dari Supabase Storage...
+                  </span>
+                </div>
+              )}
+
+              {/* Tampilan Kondisi Gagal Dimuat (Error State) */}
+              {photoLoadError ? (
+                <div className="py-12 px-6 flex flex-col items-center justify-center text-center text-slate-200">
+                  <div className="w-12 h-12 rounded-full bg-red-950/70 border border-red-700/60 text-red-400 flex items-center justify-center mb-3">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">Foto Dokumentasi Gagal Dimuat</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mt-1">
+                    Berkas foto di Supabase Storage tidak dapat diakses atau terjadi kendala koneksi jaringan.
+                  </p>
+                  <div className="flex items-center gap-2.5 mt-4">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs text-white border border-slate-600 font-semibold transition cursor-pointer flex items-center gap-1.5"
+                      onClick={() => {
+                        setPhotoLoadError(false);
+                        setIsPhotoLoading(true);
+                        const separator = photoSourceUrl.includes('?') ? '&' : '?';
+                        setPhotoSourceUrl(`${photoSourceUrl.split('?')[0]}${separator}_t=${Date.now()}`);
+                      }}
+                    >
+                      <RotateCw size={12} /> Muat Ulang
+                    </button>
+                    {!triedFallback && (
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded bg-[#FFDE02] hover:bg-[#F2D300] text-xs text-slate-900 font-bold transition cursor-pointer"
+                        onClick={() => {
+                          setTriedFallback(true);
+                          setPhotoLoadError(false);
+                          setIsPhotoLoading(true);
+                          setPhotoSourceUrl(getFallbackStorageUrl(previewPhoto?.photo_path));
+                        }}
+                      >
+                        Coba Cadangan Server Lokal
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={photoSourceUrl}
+                  alt={`Dokumentasi KBM ${previewPhoto?.schedule?.subject?.name || ''}`}
+                  className={`monitoring-recap__photo-img transition-opacity duration-300 ${
+                    isPhotoLoading ? 'opacity-0' : 'opacity-100'
+                  }`}
+                  onLoad={() => setIsPhotoLoading(false)}
+                  onError={() => {
+                    setIsPhotoLoading(false);
+                    if (!triedFallback) {
+                      setTriedFallback(true);
+                      const fallback = getFallbackStorageUrl(previewPhoto?.photo_path);
+                      if (fallback && fallback !== photoSourceUrl) {
+                        setIsPhotoLoading(true);
+                        setPhotoSourceUrl(fallback);
+                        return;
+                      }
+                    }
+                    setPhotoLoadError(true);
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Meta Data Dokumentasi Terkait */}
           <div className="monitoring-recap__photo-meta">
-            <div className="text-sm font-bold text-gray-900">
-              {previewPhoto?.schedule?.subject?.name} &bull; {previewPhoto?.schedule?.schoolClass?.name}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-gray-900">
+                  {previewPhoto?.schedule?.subject?.name || 'Mata Pelajaran'} &bull; {previewPhoto?.schedule?.schoolClass?.name || 'Kelas'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span>Guru Pengampu: <strong>{previewPhoto?.schedule?.teacher?.name || '-'}</strong></span>
+                  {previewPhoto?.substitute_teacher_id && (
+                    <span className="px-1.5 py-0.2 rounded text-[10.5px] bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                      Diisi Guru Pengganti (Kesiswaan)
+                    </span>
+                  )}
+                  <span>&bull;</span>
+                  <span>Tanggal KBM: <strong>{previewPhoto?.date}</strong></span>
+                </div>
+              </div>
+
+              {photoSourceUrl && !photoLoadError && (
+                <a
+                  href={photoSourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 text-xs font-semibold rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 flex items-center gap-1 shrink-0 transition"
+                  title="Buka foto asli di tab baru"
+                >
+                  <ExternalLink size={12} /> Buka Foto Asli
+                </a>
+              )}
             </div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Guru Pengampu: {previewPhoto?.schedule?.teacher?.name} &bull; Tanggal: {previewPhoto?.date}
-            </div>
-            <div className="text-xs text-gray-700 mt-2 p-2.5 bg-gray-50 rounded border border-gray-200">
-              <strong>Topik:</strong> {previewPhoto?.topic_description || '-'}
+
+            <div className="text-xs text-gray-700 mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 leading-relaxed">
+              <span className="font-bold text-gray-900 block mb-0.5">Topik Pembelajaran:</span>
+              <span>{previewPhoto?.topic_description || '-'}</span>
             </div>
           </div>
         </div>

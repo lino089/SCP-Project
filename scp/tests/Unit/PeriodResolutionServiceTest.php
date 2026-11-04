@@ -21,6 +21,7 @@ class PeriodResolutionServiceTest extends TestCase
     {
         parent::setUp();
 
+        PeriodResolutionService::clearCache();
         $this->seed(PeriodTemplateSeeder::class);
         $this->service = new PeriodResolutionService();
     }

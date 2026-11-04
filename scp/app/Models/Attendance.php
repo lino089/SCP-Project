@@ -11,6 +11,7 @@ class Attendance extends Model
         'journal_id',
         'student_id',
         'status',
+        'notes',
         'date',
     ];
 

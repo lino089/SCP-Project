@@ -440,29 +440,43 @@ class StudentController extends Controller
             'per_page' => 'nullable|integer|min:1|max:5000',
             'search' => 'nullable|string|max:100',
             'class_id' => 'nullable|integer|exists:classes,id',
+            'level' => 'nullable|string|max:10',
             'all' => 'nullable|in:true,false,1,0',
         ]);
 
         $perPage = $request->integer('per_page', 15);
         $search = $request->input('search');
         $classId = $request->input('class_id');
+        $level = $request->input('level');
 
-        $query = User::where('role', 'student')->with('schoolClass');
+        $query = User::where('role', 'student')->with('schoolClass:id,name,level');
 
         if ($classId) {
             $query->where('class_id', $classId);
+        }
+
+        if ($level && $level !== 'ALL') {
+            $query->whereHas('schoolClass', function ($q) use ($level) {
+                $q->where('level', (string) $level);
+            });
         }
 
         if ($search) {
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
             $query->where(function ($q) use ($search, $like) {
                 $q->where('name', $like, '%' . $search . '%')
-                    ->orWhere('nis_nip', $like, '%' . $search . '%');
+                    ->orWhere('nis_nip', $like, '%' . $search . '%')
+                    ->orWhereHas('schoolClass', function ($cq) use ($search, $like) {
+                        $cq->where('name', $like, '%' . $search . '%');
+                    });
             });
         }
 
+        $isPgsql = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql';
+        $orderRaw = $isPgsql ? 'student_number ASC NULLS LAST' : 'student_number IS NULL, student_number ASC';
+
         if ($request->boolean('all')) {
-            $students = $query->orderByRaw('student_number IS NULL, student_number ASC')->orderBy('name')->get();
+            $students = $query->orderByRaw($orderRaw)->orderBy('name')->get();
 
             return response()->json([
                 'success' => true,
@@ -477,7 +491,7 @@ class StudentController extends Controller
             ], 200);
         }
 
-        $students = $query->orderByRaw('student_number IS NULL, student_number ASC')->orderBy('name')->paginate($perPage);
+        $students = $query->orderByRaw($orderRaw)->orderBy('name')->paginate($perPage);
 
         return response()->json([
             'success' => true,

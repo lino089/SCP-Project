@@ -242,7 +242,7 @@ class JournalController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Jurnal KBM berhasil dibuka.',
-            'data' => $journal->fresh(['schedule.subject', 'schedule.schoolClass', 'substituteTeacher']),
+            'data' => $journal->fresh(['schedule.subject', 'schedule.schoolClass', 'substituteTeacher', 'attendances.student:id,name,nis_nip']),
             'meta' => [
                 'approved_leaves' => $approvedLeaves->map(function ($leave) {
                     return [
@@ -330,8 +330,12 @@ class JournalController extends Controller
             'topic_description' => 'required|string|min:10',
             'photo' => 'required|image|mimes:jpg,jpeg,png,webp|max:10240',
             'exceptions' => 'nullable|array',
-            'exceptions.*.student_id' => 'required|integer|exists:users,id',
-            'exceptions.*.status' => 'required|string|in:Sakit,Izin,Alpa',
+            'exceptions.*.student_id' => 'required_with:exceptions|integer|exists:users,id',
+            'exceptions.*.status' => 'required_with:exceptions|string|in:Sakit,Izin,Alpa',
+            'exceptions.*.notes' => 'nullable|string|max:500',
+            'student_notes' => 'nullable|array',
+            'student_notes.*.student_id' => 'required_with:student_notes|integer|exists:users,id',
+            'student_notes.*.notes' => 'nullable|string|max:500',
         ]);
 
         $file = $request->file('photo');
@@ -345,6 +349,9 @@ class JournalController extends Controller
         $filename = 'journals/' . Str::uuid() . '.jpg';
         $disk = config('filesystems.default', 'public');
         Storage::disk($disk)->put($filename, (string) $encoded);
+        if ($disk !== 'public') {
+            Storage::disk('public')->put($filename, (string) $encoded);
+        }
 
         // Eksekusi atomik: Presensi Exception-Based + Update Status Jurnal
         $insertedCount = 0;
@@ -371,6 +378,38 @@ class JournalController extends Controller
 
             // 3. Susun data presensi: prioritaskan array exceptions manual dari guru
             $manualExceptions = collect($request->input('exceptions', []))->keyBy('student_id');
+
+            // Kumpulkan catatan siswa dari student_notes dan exceptions
+            $notesMap = [];
+            $rawStudentNotes = $request->input('student_notes', []);
+            if (is_array($rawStudentNotes)) {
+                foreach ($rawStudentNotes as $key => $item) {
+                    if (is_array($item) && isset($item['student_id'])) {
+                        $stId = (int) $item['student_id'];
+                        $note = trim($item['notes'] ?? '');
+                        if ($note !== '') {
+                            $notesMap[$stId] = mb_substr($note, 0, 500);
+                        }
+                    } elseif (is_numeric($key) && is_string($item)) {
+                        $stId = (int) $key;
+                        $note = trim($item);
+                        if ($note !== '') {
+                            $notesMap[$stId] = mb_substr($note, 0, 500);
+                        }
+                    }
+                }
+            }
+            if (is_array($request->input('exceptions'))) {
+                foreach ($request->input('exceptions') as $exc) {
+                    if (isset($exc['student_id']) && !empty($exc['notes'])) {
+                        $stId = (int) $exc['student_id'];
+                        if (!isset($notesMap[$stId])) {
+                            $notesMap[$stId] = mb_substr(trim($exc['notes']), 0, 500);
+                        }
+                    }
+                }
+            }
+
             $now = Carbon::now('Asia/Jakarta');
             $attendanceData = [];
 
@@ -385,10 +424,13 @@ class JournalController extends Controller
                     $status = ($leave->category === 'sakit') ? 'Sakit' : 'Izin';
                 }
 
+                $note = $notesMap[$studentId] ?? null;
+
                 $attendanceData[] = [
                     'journal_id' => $journal->id,
                     'student_id' => $studentId,
                     'status' => $status,
+                    'notes' => $note,
                     'date' => $journalDate,
                     'created_at' => $now,
                     'updated_at' => $now,

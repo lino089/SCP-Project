@@ -6,9 +6,35 @@ use App\Models\PeriodTemplate;
 use App\Models\Schedule;
 use App\Models\SystemConfiguration;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 
 class PeriodResolutionService
 {
+    /**
+     * Cache in-memory untuk seluruh baris period_templates (~40 baris).
+     * Mencegah N+1 query berulang saat mapping ribuan jadwal KBM.
+     */
+    protected static ?Collection $templateCache = null;
+
+    /**
+     * Membersihkan cache in-memory (berguna saat test atau perubahan setting bel).
+     */
+    public static function clearCache(): void
+    {
+        self::$templateCache = null;
+    }
+
+    /**
+     * Mengambil seluruh template jam dalam satu query tunggal ter-cache.
+     */
+    protected function getTemplates(): Collection
+    {
+        if (self::$templateCache === null) {
+            self::$templateCache = PeriodTemplate::all();
+        }
+        return self::$templateCache;
+    }
+
     /**
      * Menentukan tipe hari (day_type) berdasarkan tanggal dan setting upacara hari Senin.
      */
@@ -48,13 +74,10 @@ class PeriodResolutionService
         $duration = (int) ($schedule->duration_periods ?? 1);
         $endPeriod = $startPeriod + $duration - 1;
 
-        $startTemplate = PeriodTemplate::where('day_type', $dayType)
-            ->where('period_number', $startPeriod)
-            ->first();
+        $templates = $this->getTemplates()->where('day_type', $dayType);
 
-        $endTemplate = PeriodTemplate::where('day_type', $dayType)
-            ->where('period_number', $endPeriod)
-            ->first();
+        $startTemplate = $templates->firstWhere('period_number', $startPeriod);
+        $endTemplate = $templates->firstWhere('period_number', $endPeriod);
 
         return [
             'start_time' => $startTemplate?->start_time,

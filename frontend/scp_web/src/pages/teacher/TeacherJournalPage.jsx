@@ -9,10 +9,15 @@ import {
   X,
   FileCheck2,
   RotateCw,
+  Eye,
+  Edit3,
+  MessageSquare,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { compressImage } from '../../utils/imageCompressor';
+import { getStorageUrl } from '../../utils/formatters';
 import {
   Button,
   Badge,
@@ -48,6 +53,8 @@ export default function TeacherJournalPage() {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [approvedLeaves, setApprovedLeaves] = useState([]);
+  const [studentNotes, setStudentNotes] = useState({});
+  const [savedJournalData, setSavedJournalData] = useState(null);
 
   // Ambil jadwal default bila pengguna langsung membuka /teacher/journal tanpa navigasi
   useEffect(() => {
@@ -133,6 +140,14 @@ export default function TeacherJournalPage() {
     };
   }, [photoPreview]);
 
+  // Helper ubah catatan siswa individual
+  const handleNoteChange = useCallback((studentId, noteText) => {
+    setStudentNotes((prev) => ({
+      ...prev,
+      [studentId]: noteText,
+    }));
+  }, []);
+
   // Buka Sesi Kelas KBM (POST /api/journals)
   const handleOpenClass = async () => {
     if (!schedule) return;
@@ -148,6 +163,10 @@ export default function TeacherJournalPage() {
 
       if (res.success && res.data) {
         setJournalId(res.data.id);
+        setSavedJournalData(res.data);
+        if (res.data.topic_description && !topic) {
+          setTopic(res.data.topic_description);
+        }
       }
 
       // Ambil daftar siswa kelas terkait
@@ -164,19 +183,32 @@ export default function TeacherJournalPage() {
       const leaves = res.meta?.approved_leaves || [];
       setApprovedLeaves(leaves);
 
-      // Inisialisasi Presensi: Seluruh siswa default 'Hadir',
-      // kecuali yang terdaftar di approved_leaves
+      // Inisialisasi Presensi & Catatan:
+      // Periksa apakah sudah ada riwayat presensi yang tersimpan sebelumnya
       const initAttendance = {};
+      const initNotes = {};
+      const existingAttendances = res.data?.attendances || [];
+      const existingAttMap = new Map(existingAttendances.map((a) => [a.student_id, a]));
+
       studentList.forEach((st) => {
-        const leave = leaves.find((l) => l.student_id === st.id);
-        if (leave) {
-          initAttendance[st.id] = leave.default_status || (leave.category === 'sakit' ? 'Sakit' : 'Izin');
+        const existingAtt = existingAttMap.get(st.id);
+        if (existingAtt) {
+          initAttendance[st.id] = existingAtt.status || 'Hadir';
+          if (existingAtt.notes) {
+            initNotes[st.id] = existingAtt.notes;
+          }
         } else {
-          initAttendance[st.id] = 'Hadir';
+          const leave = leaves.find((l) => l.student_id === st.id);
+          if (leave) {
+            initAttendance[st.id] = leave.default_status || (leave.category === 'sakit' ? 'Sakit' : 'Izin');
+          } else {
+            initAttendance[st.id] = 'Hadir';
+          }
         }
       });
 
       setAttendance(initAttendance);
+      setStudentNotes(initNotes);
       setClassOpened(true);
     } catch (err) {
       const status = err.status || err.response?.status;
@@ -186,6 +218,57 @@ export default function TeacherJournalPage() {
       } else {
         setErrorMessage(msg || 'Gagal membuka sesi KBM. Silakan periksa koneksi Anda.');
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Melihat Detail Jurnal & Catatan Siswa untuk Jurnal yang sudah Selesai (Completed)
+  const handleViewJournalDetail = async () => {
+    const targetId = schedule?.journal_id || journalId;
+    if (!targetId) return;
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      const res = await journalApi.getJournalDetail(targetId);
+      if (res.success && res.data) {
+        const jData = res.data;
+        setSavedJournalData(jData);
+        setJournalId(jData.id);
+        setTopic(jData.topic_description || '');
+        if (jData.photo_url || jData.photo_path) {
+          setPhotoPreview(getStorageUrl(jData.photo_url || jData.photo_path));
+        }
+
+        const existingAttendances = jData.attendances || [];
+        const initAtt = {};
+        const initNts = {};
+        const studList = [];
+
+        existingAttendances.forEach((att) => {
+          initAtt[att.student_id] = att.status;
+          if (att.notes) {
+            initNts[att.student_id] = att.notes;
+          }
+          if (att.student) {
+            studList.push({
+              id: att.student.id,
+              name: att.student.name,
+              nis_nip: att.student.nis_nip,
+            });
+          }
+        });
+
+        if (studList.length > 0) {
+          setStudents(studList);
+        }
+        setAttendance(initAtt);
+        setStudentNotes(initNts);
+        setSubmitted(true);
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Gagal memuat detail jurnal & catatan presensi.');
     } finally {
       setIsSubmitting(false);
     }
@@ -253,9 +336,12 @@ export default function TeacherJournalPage() {
       const exceptions = [];
       Object.entries(attendance).forEach(([stId, status]) => {
         if (status !== 'Hadir') {
+          const parsedId = parseInt(stId, 10);
+          const note = (studentNotes[stId] || studentNotes[parsedId] || '').trim();
           exceptions.push({
-            student_id: parseInt(stId, 10),
+            student_id: parsedId,
             status: status,
+            notes: note || undefined,
           });
         }
       });
@@ -272,9 +358,26 @@ export default function TeacherJournalPage() {
       exceptions.forEach((exc, index) => {
         formData.append(`exceptions[${index}][student_id]`, exc.student_id);
         formData.append(`exceptions[${index}][status]`, exc.status);
+        if (exc.notes) {
+          formData.append(`exceptions[${index}][notes]`, exc.notes);
+        }
       });
 
-      await journalApi.completeJournal(journalId || schedule.id, formData);
+      // Kirim array student_notes untuk setiap siswa yang memiliki catatan (Hadir maupun Absen)
+      let noteIndex = 0;
+      Object.entries(studentNotes).forEach(([stId, noteText]) => {
+        const cleanNote = (noteText || '').trim();
+        if (cleanNote) {
+          formData.append(`student_notes[${noteIndex}][student_id]`, parseInt(stId, 10));
+          formData.append(`student_notes[${noteIndex}][notes]`, cleanNote);
+          noteIndex += 1;
+        }
+      });
+
+      const res = await journalApi.completeJournal(journalId || schedule.id, formData);
+      if (res.data) {
+        setSavedJournalData(res.data);
+      }
       setSubmitted(true);
     } catch (err) {
       const status = err.status || err.response?.status;
@@ -409,47 +512,147 @@ export default function TeacherJournalPage() {
         </div>
       )}
 
-      {/* KONDISI 1: SUKSES SUBMIT (COMPLETED STATE) */}
+      {/* KONDISI 1: SUKSES SUBMIT / DETAIL JURNAL (COMPLETED STATE) */}
       {submitted ? (
-        <div className="border border-emerald-200 bg-white rounded-xl p-10 text-center max-w-xl mx-auto my-8 shadow-xs">
-          <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3.5 border border-emerald-200">
-            <CheckCircle size={32} />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900">
-            {isSubstituteMode ? 'Presensi Piket Berhasil Dicatat' : 'Jurnal KBM Berhasil Disimpan'}
-          </h2>
-          <p className="text-xs text-gray-600 mt-2 leading-relaxed">
-            {isSubstituteMode
-              ? 'Kehadiran siswa telah diverifikasi oleh Tim Kesiswaan dan status kelas diperbarui menjadi Selesai (Diisi Kesiswaan).'
-              : 'Data kehadiran siswa dan dokumentasi materi telah tercatat secara atomik di sistem akademik sekolah.'}
-          </p>
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto my-4">
+          <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                <CheckCircle size={28} />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-900">
+                  {isSubstituteMode ? 'Presensi Piket Kesiswaan Selesai' : 'Jurnal KBM & Presensi Selesai Disimpan'}
+                </h2>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Materi pembelajaran, foto KBM, dan data kehadiran siswa serta catatan individual tercatat secara permanen.
+                </p>
+              </div>
+            </div>
 
-          <div className="flex items-center justify-center gap-3 mt-6">
-            <Button
-              variant="secondary"
-              icon={ArrowLeft}
-              onClick={() => navigate('/teacher/schedule')}
-            >
-              Kembali ke Kalender Jadwal
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSubmitted(false);
-                setClassOpened(false);
-              }}
-            >
-              Buka Form Kembali
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={ArrowLeft}
+                onClick={() => navigate('/teacher/schedule')}
+              >
+                Kembali ke Jadwal
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={Edit3}
+                onClick={() => {
+                  setSubmitted(false);
+                  setClassOpened(true);
+                }}
+              >
+                Edit / Perbarui
+              </Button>
+            </div>
+          </div>
+
+          {/* Ringkasan Jurnal: Topik & Foto */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                Topik Materi Pembelajaran
+              </div>
+              <p className="text-xs text-gray-900 leading-relaxed font-medium">
+                {topic || savedJournalData?.topic_description || '-'}
+              </p>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Statistik Presensi
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="success">Hadir: {counts.hadir}</Badge>
+                  <Badge variant="info">Sakit: {counts.sakit}</Badge>
+                  <Badge variant="warning">Izin: {counts.izin}</Badge>
+                  <Badge variant="error">Alpa: {counts.alpa}</Badge>
+                </div>
+              </div>
+              {(photoPreview || savedJournalData?.photo_url || savedJournalData?.photo_path) && (
+                <a
+                  href={photoPreview || getStorageUrl(savedJournalData?.photo_url || savedJournalData?.photo_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
+                >
+                  <Eye size={13} /> Lihat Foto
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Tabel Detail Presensi & Catatan Siswa */}
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <FileText size={16} className="text-amber-500" />
+                Detail Kehadiran &amp; Catatan Siswa ({students.length} Siswa)
+              </h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">No</th>
+                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">NIS</th>
+                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Nama Siswa</th>
+                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-32">Status</th>
+                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Catatan Siswa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {students.map((st, idx) => {
+                    const stStatus = attendance[st.id] || 'Hadir';
+                    const note = (studentNotes[st.id] || '').trim();
+                    return (
+                      <tr key={st.id} className="hover:bg-gray-50/50">
+                        <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{String(idx + 1).padStart(2, '0')}</td>
+                        <td className="py-2.5 px-3 font-mono text-gray-700">{st.nis_nip || st.nis || '-'}</td>
+                        <td className="py-2.5 px-3 font-medium text-gray-900">{st.name}</td>
+                        <td className="py-2.5 px-3">
+                          {stStatus === 'Hadir' && <Badge variant="success">Hadir</Badge>}
+                          {stStatus === 'Sakit' && <Badge variant="info">Sakit</Badge>}
+                          {stStatus === 'Izin' && <Badge variant="warning">Izin</Badge>}
+                          {stStatus === 'Alpa' && <Badge variant="error">Alpa</Badge>}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {note ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-900 border border-amber-200 font-medium text-xs">
+                              <MessageSquare size={12} className="text-amber-600 shrink-0" />
+                              {note}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : !classOpened ? (
         /* KONDISI 2: STANDBY SESI KELAS SIAP DIBUKA */
         <div className="teacher-journal__standby-card">
           <div className="teacher-journal__standby-pulse">
-            <span className="teacher-journal__pulse-dot" />
+            <span className={`teacher-journal__pulse-dot ${schedule?.journal_status === 'completed' ? 'bg-emerald-500' : ''}`} />
             <span className="teacher-journal__pulse-label">
-              {isSubstituteMode ? 'Sesi Ambil Alih Kelas Siap' : 'Sesi Kelas Siap Dibuka'}
+              {schedule?.journal_status === 'completed'
+                ? 'Jurnal KBM Selesai Disimpan'
+                : isSubstituteMode
+                ? 'Sesi Ambil Alih Kelas Siap'
+                : 'Sesi Kelas Siap Dibuka'}
             </span>
           </div>
 
@@ -474,19 +677,41 @@ export default function TeacherJournalPage() {
           )}
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button
-              variant="primary"
-              size="md"
-              icon={PlayCircle}
-              loading={isSubmitting}
-              onClick={handleOpenClass}
-            >
-              {isSubstituteMode
-                ? 'Mulai Presensi & Ambil Alih Kelas'
-                : 'Mulai & Buka Kelas Sekarang'}
-            </Button>
+            {schedule?.journal_status === 'completed' ? (
+              <>
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={Eye}
+                  loading={isSubmitting}
+                  onClick={handleViewJournalDetail}
+                >
+                  Lihat Detail Jurnal &amp; Catatan Siswa
+                </Button>
+                <Button
+                  variant="outline"
+                  size="md"
+                  icon={Edit3}
+                  onClick={handleOpenClass}
+                >
+                  Buka &amp; Perbarui Jurnal
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                size="md"
+                icon={PlayCircle}
+                loading={isSubmitting}
+                onClick={handleOpenClass}
+              >
+                {isSubstituteMode
+                  ? 'Mulai Presensi & Ambil Alih Kelas'
+                  : 'Mulai & Buka Kelas Sekarang'}
+              </Button>
+            )}
 
-            {(isKesiswaan() || hasRole('waka')) && (
+            {(isKesiswaan() || hasRole('waka')) && schedule?.journal_status !== 'completed' && (
               <Button
                 variant="outline"
                 size="md"
@@ -651,19 +876,22 @@ export default function TeacherJournalPage() {
 
             {/* Tabel Presensi Exception-Based */}
             <div className="w-full overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[600px]">
+              <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50/70">
                     <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">
                       No
                     </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-28">
+                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">
                       NIS
                     </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">
+                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[180px]">
                       Nama Peserta Didik
                     </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider text-right">
+                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[240px]">
+                      Catatan Siswa (Opsional)
+                    </th>
+                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider text-right w-64">
                       Status Kehadiran (Pilih Jika Absen)
                     </th>
                   </tr>
@@ -674,6 +902,7 @@ export default function TeacherJournalPage() {
                     const hasApprovedLeave = approvedLeaves.some(
                       (l) => l.student_id === st.id
                     );
+                    const currentNote = studentNotes[st.id] || '';
 
                     return (
                       <tr key={st.id} className="hover:bg-gray-50/50">
@@ -692,6 +921,32 @@ export default function TeacherJournalPage() {
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                 <FileCheck2 size={11} /> Surat Izin Resmi
                               </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              value={currentNote}
+                              onChange={(e) => handleNoteChange(st.id, e.target.value)}
+                              placeholder="Tulis catatan siswa (opsional)..."
+                              maxLength={500}
+                              className={`w-full text-xs py-1.5 px-2.5 pr-7 rounded border transition-all text-gray-800 placeholder:text-gray-400 outline-none ${
+                                currentNote.trim()
+                                  ? 'border-amber-400 bg-amber-50/40 focus:border-amber-500 focus:ring-1 focus:ring-amber-300'
+                                  : 'border-gray-200 bg-white hover:bg-gray-50/80 focus:border-gray-400 focus:ring-1 focus:ring-gray-300'
+                              }`}
+                            />
+                            {currentNote.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => handleNoteChange(st.id, '')}
+                                className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                                title="Hapus catatan"
+                              >
+                                <X size={12} />
+                              </button>
                             )}
                           </div>
                         </td>

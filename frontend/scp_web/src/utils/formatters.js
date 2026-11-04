@@ -78,3 +78,17 @@ export function getStorageUrl(path) {
   const storagePath = cleanPath.startsWith('storage/') ? cleanPath : `storage/${cleanPath}`;
   return `${backendBase}/${storagePath}`;
 }
+
+/**
+ * Fallback direct URL pointing to local Laravel public storage if Supabase is unreachable.
+ * @param {string} path 
+ * @returns {string}
+ */
+export function getFallbackStorageUrl(path) {
+  if (!path) return '';
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+  const backendBase = apiBase.replace(/\/api\/?$/, '');
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const storagePath = cleanPath.startsWith('storage/') ? cleanPath : `storage/${cleanPath}`;
+  return `${backendBase}/${storagePath}`;
+}

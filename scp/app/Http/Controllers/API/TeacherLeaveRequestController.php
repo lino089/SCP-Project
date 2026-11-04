@@ -168,12 +168,24 @@ class TeacherLeaveRequestController extends Controller
         $disk = config('filesystems.default', 'public');
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('teacher_leaves/letters', $disk);
+            $file = $request->file('attachment');
+            $attachmentPath = $file->store('teacher_leaves/letters', $disk);
+            if ($disk !== 'public') {
+                try {
+                    Storage::disk('public')->put($attachmentPath, file_get_contents($file->getRealPath()));
+                } catch (\Throwable) {}
+            }
         }
 
         $taskAttachmentPath = null;
         if ($request->hasFile('task_attachment')) {
-            $taskAttachmentPath = $request->file('task_attachment')->store('teacher_leaves/tasks', $disk);
+            $taskFile = $request->file('task_attachment');
+            $taskAttachmentPath = $taskFile->store('teacher_leaves/tasks', $disk);
+            if ($disk !== 'public') {
+                try {
+                    Storage::disk('public')->put($taskAttachmentPath, file_get_contents($taskFile->getRealPath()));
+                } catch (\Throwable) {}
+            }
         }
 
         // 4. Penyimpanan Record Perizinan

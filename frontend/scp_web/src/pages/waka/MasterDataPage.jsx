@@ -54,6 +54,13 @@ export default function MasterDataPage() {
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
   const [studentList, setStudentList] = useState([]);
+  const [studentPagination, setStudentPagination] = useState({
+    currentPage: 1,
+    lastPage: 1,
+    total: 0,
+    perPage: 25,
+  });
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [trashList, setTrashList] = useState([]);
   const [trashEntityFilter, setTrashEntityFilter] = useState('all');
   const [isRestoring, setIsRestoring] = useState(false);
@@ -141,8 +148,21 @@ export default function MasterDataPage() {
     }
   }, []);
 
+  // Debounce search query specifically for server-side queries
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(typeof searchQuery === 'string' ? searchQuery.trim() : '');
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Load specific tab data with in-memory caching
   const loadTabData = useCallback(async (tabId, force = false) => {
+    if (tabId === 'siswa') {
+      // Siswa tab uses server-side pagination handled by fetchStudents
+      return;
+    }
+
     if (!force && loadedTabs.has(tabId)) {
       // Data already in memory, render instantly
       return;
@@ -181,16 +201,6 @@ export default function MasterDataPage() {
         }
         if (cRes?.data) setClassList(cRes.data);
         if (sRes?.data) setSubjectList(sRes.data);
-      } else if (tabId === 'siswa') {
-        const [sRes, cRes] = await Promise.all([
-          studentApi.getStudents({ all: 1, per_page: 5000 }),
-          classApi.getClasses({ per_page: 100 }).catch(() => null),
-        ]);
-        if (sRes?.data) {
-          setStudentList(sRes.data);
-          setTabCounts((prev) => ({ ...prev, siswa: sRes.data.length }));
-        }
-        if (cRes?.data) setClassList(cRes.data);
       } else if (tabId === 'trash') {
         const res = await recycleBinApi.getTrash({ per_page: 200 });
         if (res?.data) {
@@ -212,6 +222,62 @@ export default function MasterDataPage() {
     }
   }, [loadedTabs]);
 
+  // Fetch paginated students with server-side filtering & sorting
+  const fetchStudents = useCallback(
+    async (page = 1, search = debouncedSearchQuery, level = levelFilter) => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const params = {
+          page,
+          per_page: 25,
+        };
+        if (search) params.search = search;
+        if (level && level !== 'ALL') params.level = level;
+
+        const [sRes, cRes] = await Promise.all([
+          studentApi.getStudents(params),
+          classList.length === 0 ? classApi.getClasses({ per_page: 100 }).catch(() => null) : null,
+        ]);
+
+        if (sRes?.data) {
+          setStudentList(Array.isArray(sRes.data) ? sRes.data : []);
+          if (sRes.meta) {
+            setStudentPagination({
+              currentPage: sRes.meta.current_page || 1,
+              lastPage: sRes.meta.last_page || 1,
+              total: sRes.meta.total || 0,
+              perPage: sRes.meta.per_page || 25,
+            });
+            setTabCounts((prev) => ({ ...prev, siswa: sRes.meta.total || 0 }));
+          }
+        }
+        if (cRes?.data) setClassList(cRes.data);
+      } catch (err) {
+        setFetchError(err.message || 'Gagal memuat data siswa.');
+        setStudentList([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [debouncedSearchQuery, levelFilter, classList.length]
+  );
+
+  // Load students whenever activeTab is siswa or filters change
+  useEffect(() => {
+    if (activeTab === 'siswa') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchStudents(1, debouncedSearchQuery, levelFilter);
+    }
+  }, [activeTab, debouncedSearchQuery, levelFilter, fetchStudents]);
+
+  const handleStudentPageChange = useCallback(
+    (page) => {
+      fetchStudents(page, debouncedSearchQuery, levelFilter);
+    },
+    [fetchStudents, debouncedSearchQuery, levelFilter]
+  );
+
   // Load summary on mount
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -227,8 +293,12 @@ export default function MasterDataPage() {
   // Manual refresh handler
   const handleRefresh = useCallback(async () => {
     refreshSummary();
-    await loadTabData(activeTab, true);
-  }, [activeTab, loadTabData, refreshSummary]);
+    if (activeTab === 'siswa') {
+      await fetchStudents(studentPagination.currentPage, debouncedSearchQuery, levelFilter);
+    } else {
+      await loadTabData(activeTab, true);
+    }
+  }, [activeTab, loadTabData, refreshSummary, fetchStudents, studentPagination.currentPage, debouncedSearchQuery, levelFilter]);
 
   // Template Download Handlers
   const handleDownloadTeacherTemplate = async () => {
@@ -320,11 +390,8 @@ export default function MasterDataPage() {
       const res = await studentApi.importStudents(formData);
       setStudentImportSuccess(res.data || {});
       // Refresh both studentList and classList (since classes may be auto-created!)
-      const [sRes, cRes] = await Promise.all([
-        studentApi.getStudents({ all: 1, per_page: 5000 }).catch(() => null),
-        classApi.getClasses({ per_page: 100 }).catch(() => null),
-      ]);
-      if (sRes?.data) setStudentList(sRes.data);
+      await fetchStudents(1, '', 'ALL');
+      const cRes = await classApi.getClasses({ per_page: 100 }).catch(() => null);
       if (cRes?.data) setClassList(cRes.data);
       refreshSummary();
     } catch (err) {
@@ -924,19 +991,7 @@ export default function MasterDataPage() {
     }
 
     if (activeTab === 'siswa') {
-      return studentList.filter((s) => {
-        const name = String(s.name || '').toLowerCase();
-        const nis = String(s.nis_nip || s.nis || '').toLowerCase();
-        const className = String(s.school_class?.name || s.schoolClass?.name || s.className || '').toLowerCase();
-        const classLevel = s.school_class?.level || s.schoolClass?.level;
-        if (levelFilter !== 'ALL' && String(classLevel) !== levelFilter) return false;
-        if (!q) return true;
-        return (
-          name.includes(q) ||
-          nis.includes(q) ||
-          className.includes(q)
-        );
-      });
+      return studentList;
     }
 
     if (activeTab === 'trash') {
@@ -2053,6 +2108,10 @@ export default function MasterDataPage() {
             columns={columns}
             data={filteredData}
             pageSize={25}
+            currentPage={activeTab === 'siswa' ? studentPagination.currentPage : undefined}
+            totalPages={activeTab === 'siswa' ? studentPagination.lastPage : undefined}
+            totalItems={activeTab === 'siswa' ? studentPagination.total : undefined}
+            onPageChange={activeTab === 'siswa' ? handleStudentPageChange : undefined}
             selectable={activeTab === 'guru' || activeTab === 'siswa'}
             selectedRowKeys={currentSelectedIds}
             onSelectRow={handleSelectRow}

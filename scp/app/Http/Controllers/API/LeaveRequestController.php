@@ -198,7 +198,13 @@ class LeaveRequestController extends Controller
         $documentPath = null;
         $disk = config('filesystems.default', 'public');
         if ($request->hasFile('document')) {
-            $documentPath = $request->file('document')->store('leaves', $disk);
+            $docFile = $request->file('document');
+            $documentPath = $docFile->store('leaves', $disk);
+            if ($disk !== 'public') {
+                try {
+                    Storage::disk('public')->put($documentPath, file_get_contents($docFile->getRealPath()));
+                } catch (\Throwable) {}
+            }
         }
 
         // 4. Penataan Tanggal & Jam
@@ -341,8 +347,19 @@ class LeaveRequestController extends Controller
                 $disk = config('filesystems.default', 'public');
                 if ($leaveRequest->document_path) {
                     Storage::disk($disk)->delete($leaveRequest->document_path);
+                    if ($disk !== 'public') {
+                        try {
+                            Storage::disk('public')->delete($leaveRequest->document_path);
+                        } catch (\Throwable) {}
+                    }
                 }
-                $dataToUpdate['document_path'] = $request->file('document')->store('leaves', $disk);
+                $docFile = $request->file('document');
+                $dataToUpdate['document_path'] = $docFile->store('leaves', $disk);
+                if ($disk !== 'public') {
+                    try {
+                        Storage::disk('public')->put($dataToUpdate['document_path'], file_get_contents($docFile->getRealPath()));
+                    } catch (\Throwable) {}
+                }
             }
 
             $leaveRequest->update($dataToUpdate);
@@ -393,6 +410,11 @@ class LeaveRequestController extends Controller
         if ($leaveRequest->document_path) {
             $disk = config('filesystems.default', 'public');
             Storage::disk($disk)->delete($leaveRequest->document_path);
+            if ($disk !== 'public') {
+                try {
+                    Storage::disk('public')->delete($leaveRequest->document_path);
+                } catch (\Throwable) {}
+            }
         }
 
         $leaveRequest->delete();

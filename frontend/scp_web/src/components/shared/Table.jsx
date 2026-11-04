@@ -161,6 +161,8 @@ export default function Table({
                   const isRowSelected = selectable && selectedRowKeys.includes(key);
                   const absoluteIndex = isClientPaged
                     ? (clampedPage - 1) * effectivePageSize + rowIdx
+                    : isServerPaged
+                    ? (activePage - 1) * effectivePageSize + rowIdx
                     : rowIdx;
                   return (
                     <tr

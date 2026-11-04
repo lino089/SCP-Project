@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Briefcase,
   RotateCw,
+  ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
@@ -19,7 +21,7 @@ import {
   Tabs,
   Table,
 } from '../../components/shared';
-import { getStorageUrl } from '../../utils/formatters';
+import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './PermissionVerify.css';
 
@@ -44,8 +46,33 @@ export default function PermissionVerifyPage() {
   const [permissionList, setPermissionList] = useState([]);
   const [filterStatus, setFilterStatus] = useState('pending');
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [isDocLoading, setIsDocLoading] = useState(false);
+  const [docLoadError, setDocLoadError] = useState(false);
+  const [docSourceUrl, setDocSourceUrl] = useState('');
+  const [triedDocFallback, setTriedDocFallback] = useState(false);
   const [isLoadingStudents, setIsLoadingStudents] = useState(() => isAuthorized);
   const [studentFetchError, setStudentFetchError] = useState(null);
+
+  const handleOpenDocPreview = useCallback((row) => {
+    const rawUrl = row?.document_url || row?.document_path || '';
+    const initialUrl = getStorageUrl(rawUrl);
+    setPreviewDoc(row);
+    setDocSourceUrl(initialUrl);
+    setDocLoadError(false);
+    setTriedDocFallback(false);
+    setIsDocLoading(Boolean(initialUrl));
+  }, []);
+
+  const handleCloseDocPreview = useCallback(() => {
+    setPreviewDoc(null);
+    setDocLoadError(false);
+    setIsDocLoading(false);
+    setTriedDocFallback(false);
+  }, []);
+
+  const docPath = previewDoc?.document_url || previewDoc?.document_path || '';
+  const isImageDoc = Boolean(docPath && /\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(docPath));
+  const isPdfDoc = Boolean(docPath && /\.pdf(\?.*)?$/i.test(docPath));
 
   // State Perizinan Guru
   const [teacherLeaveList, setTeacherLeaveList] = useState([]);
@@ -149,7 +176,7 @@ export default function PermissionVerifyPage() {
         prev.map((p) => (p.id === id ? { ...p, status_approval: newStatus } : p))
       );
       if (previewDoc?.id === id) {
-        setPreviewDoc(null);
+        handleCloseDocPreview();
       }
       setToastMessage(
         newStatus === 'approved'
@@ -185,7 +212,7 @@ export default function PermissionVerifyPage() {
             {row.student?.name || 'Siswa'}
           </div>
           <div className="text-[11px] font-mono text-gray-500 mt-0.5">
-            NIS: {row.student?.nis_nip || '-'} &bull; {row.student?.schoolClass?.name || 'Kelas'}
+            NIS: {row.student?.nis_nip || '-'} &bull; {row.student?.school_class?.name || row.student?.schoolClass?.name || 'Kelas'}
           </div>
         </div>
       ),
@@ -225,11 +252,11 @@ export default function PermissionVerifyPage() {
       key: 'document',
       label: 'Dokumen Bukti',
       renderCell: (row) =>
-        row.document_path ? (
+        row.document_path || row.document_url ? (
           <button
             type="button"
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-[11px] font-medium cursor-pointer transition-colors"
-            onClick={() => setPreviewDoc(row)}
+            onClick={() => handleOpenDocPreview(row)}
           >
             <Eye size={12} strokeWidth={1.5} className="text-gray-500" />
             <span>Lihat Surat</span>
@@ -670,69 +697,239 @@ export default function PermissionVerifyPage() {
       {/* MODAL PRATINJAU SURAT SISWA */}
       <Modal
         isOpen={Boolean(previewDoc)}
-        onClose={() => setPreviewDoc(null)}
+        onClose={handleCloseDocPreview}
         title="Verifikasi Berkas Surat Keterangan Siswa"
-        size="md"
+        size="lg"
       >
         <div className="permission-verify__preview-box">
-          <FileText size={48} className="mx-auto text-gray-400 mb-2" />
-          <div className="text-sm font-bold text-gray-900 font-mono break-all">
-            {previewDoc?.document_path || 'surat_keterangan_resmi.pdf'}
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Lampiran resmi yang diunggah oleh siswa/wali murid.
-          </p>
+          {!previewDoc?.document_path && !previewDoc?.document_url ? (
+            <div className="py-12 px-6 flex flex-col items-center justify-center text-center bg-gray-50">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3 border border-gray-200">
+                <FileText size={24} />
+              </div>
+              <h4 className="text-sm font-bold text-gray-800">Tidak Ada Dokumen Lampiran</h4>
+              <p className="text-xs text-gray-500 max-w-sm mt-1">
+                Pengajuan perizinan ini tidak menyertakan berkas surat atau dokumen bukti.
+              </p>
+            </div>
+          ) : isImageDoc ? (
+            <div className="permission-verify__doc-container">
+              {isDocLoading && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 text-white gap-2.5">
+                  <RotateCw size={26} className="animate-spin text-[#FFDE02]" />
+                  <span className="text-xs text-slate-300 font-medium">
+                    Memuat surat lampiran dari Supabase Storage...
+                  </span>
+                </div>
+              )}
 
+              {docLoadError ? (
+                <div className="py-12 px-6 flex flex-col items-center justify-center text-center text-slate-200">
+                  <div className="w-12 h-12 rounded-full bg-red-950/70 border border-red-700/60 text-red-400 flex items-center justify-center mb-3">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">Gambar Surat Gagal Dimuat</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mt-1">
+                    Berkas surat di Supabase Storage tidak dapat diakses atau terjadi kendala koneksi.
+                  </p>
+                  <div className="flex items-center gap-2.5 mt-4">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs text-white border border-slate-600 font-semibold transition cursor-pointer flex items-center gap-1.5"
+                      onClick={() => {
+                        setDocLoadError(false);
+                        setIsDocLoading(true);
+                        const separator = docSourceUrl.includes('?') ? '&' : '?';
+                        setDocSourceUrl(`${docSourceUrl.split('?')[0]}${separator}_t=${Date.now()}`);
+                      }}
+                    >
+                      <RotateCw size={12} /> Muat Ulang
+                    </button>
+                    {!triedDocFallback && (
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded bg-[#FFDE02] hover:bg-[#F2D300] text-xs text-slate-900 font-bold transition cursor-pointer"
+                        onClick={() => {
+                          setTriedDocFallback(true);
+                          setDocLoadError(false);
+                          setIsDocLoading(true);
+                          setDocSourceUrl(getFallbackStorageUrl(previewDoc?.document_path));
+                        }}
+                      >
+                        Coba Cadangan Server Lokal
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={docSourceUrl}
+                  alt="Surat Lampiran Perizinan Siswa"
+                  className={`permission-verify__doc-img transition-opacity duration-300 ${
+                    isDocLoading ? 'opacity-0' : 'opacity-100'
+                  }`}
+                  onLoad={() => setIsDocLoading(false)}
+                  onError={() => {
+                    setIsDocLoading(false);
+                    if (!triedDocFallback) {
+                      setTriedDocFallback(true);
+                      const fallback = getFallbackStorageUrl(previewDoc?.document_path);
+                      if (fallback && fallback !== docSourceUrl) {
+                        setIsDocLoading(true);
+                        setDocSourceUrl(fallback);
+                        return;
+                      }
+                    }
+                    setDocLoadError(true);
+                  }}
+                />
+              )}
+            </div>
+          ) : isPdfDoc ? (
+            /* Tampilan jika Berkas bertipe PDF */
+            <div className="py-12 px-6 flex flex-col items-center justify-center text-center bg-gray-50/80">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mb-3.5 shadow-xs">
+                <FileText size={36} />
+              </div>
+              <Badge variant="info">Dokumen Lampiran PDF</Badge>
+              <div className="mt-2 text-xs text-gray-700 max-w-sm truncate font-mono">
+                {previewDoc?.document_path?.split('/').pop() || 'surat_keterangan_resmi.pdf'}
+              </div>
+              <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                Lampiran resmi berupa dokumen PDF untuk verifikasi Kesiswaan / Tim Piket Sekolah.
+              </p>
+              {docSourceUrl && (
+                <div className="mt-4 flex items-center gap-2">
+                  <a
+                    href={docSourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-xs transition"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Buka PDF di Tab Baru</span>
+                  </a>
+                  <a
+                    href={docSourceUrl}
+                    download
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded text-xs font-medium transition"
+                  >
+                    <Download size={13} />
+                    <span>Unduh</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Fallback format lainnya */
+            <div className="py-10 px-6 flex flex-col items-center justify-center text-center bg-gray-50">
+              <FileText size={48} className="mx-auto text-gray-400 mb-2" />
+              <div className="text-sm font-bold text-gray-900 font-mono break-all">
+                {previewDoc?.document_path?.split('/').pop() || 'surat_keterangan_resmi.pdf'}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Lampiran resmi yang diunggah oleh siswa/wali murid.
+              </p>
+              {docSourceUrl && (
+                <div className="mt-3">
+                  <a
+                    href={docSourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-medium transition"
+                  >
+                    <Download size={13} />
+                    <span>Buka / Unduh Berkas</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Meta Informasi & Detail Pengajuan */}
           <div className="permission-verify__preview-meta">
-            <div>
-              <strong>Nama Siswa:</strong> {previewDoc?.student?.name}
-            </div>
-            <div className="mt-1">
-              <strong>Kelas:</strong> {previewDoc?.student?.schoolClass?.name}
-            </div>
-            <div className="mt-1">
-              <strong>Jenis Izin:</strong>{' '}
-              {previewDoc?.type === 'tidak_masuk' ? 'Tidak Masuk Sekolah' : 'Dispensasi Keluar'} (
-              {previewDoc?.category})
-            </div>
-            <div className="mt-1">
-              <strong>Waktu:</strong>{' '}
-              {previewDoc?.type === 'tidak_masuk'
-                ? `${previewDoc?.start_date} s/d ${previewDoc?.end_date}`
-                : `${previewDoc?.start_date || previewDoc?.date} (${previewDoc?.departure_time} - ${previewDoc?.expected_return_time})`}
-            </div>
-          </div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div>
+                  <strong className="text-gray-500 font-normal">Nama Siswa:</strong>{' '}
+                  <span className="font-semibold text-gray-900">{previewDoc?.student?.name || '-'}</span>
+                  {previewDoc?.student?.nis_nip && (
+                    <span className="text-xs font-mono text-gray-500 ml-1.5">({previewDoc?.student?.nis_nip})</span>
+                  )}
+                </div>
+                <div>
+                  <strong className="text-gray-500 font-normal">Kelas:</strong>{' '}
+                  <span className="font-medium text-gray-800">
+                    {previewDoc?.student?.school_class?.name || previewDoc?.student?.schoolClass?.name || '-'}
+                  </span>
+                </div>
+                <div>
+                  <strong className="text-gray-500 font-normal">Jenis Izin:</strong>{' '}
+                  <span className="font-medium text-gray-900">
+                    {previewDoc?.type === 'tidak_masuk' ? 'Tidak Masuk Sekolah' : 'Dispensasi Keluar'}
+                  </span>{' '}
+                  <span className="capitalize text-gray-600">({previewDoc?.category})</span>
+                </div>
+                <div>
+                  <strong className="text-gray-500 font-normal">Waktu:</strong>{' '}
+                  <span className="font-mono text-gray-700 text-xs">
+                    {previewDoc?.type === 'tidak_masuk'
+                      ? `${previewDoc?.start_date} s/d ${previewDoc?.end_date}`
+                      : `${previewDoc?.start_date || previewDoc?.date} (${previewDoc?.departure_time} - ${previewDoc?.expected_return_time})`}
+                  </span>
+                </div>
+              </div>
 
-          <div className="flex items-center justify-end gap-2.5 mt-5 pt-3 border-t border-gray-200">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPreviewDoc(null)}
-            >
-              Tutup
-            </Button>
-            {canVerify && previewDoc?.status_approval === 'pending' && (
-              <>
-                <button
-                  type="button"
-                  className="permission-verify__action-btn-reject"
-                  disabled={isProcessingAction}
-                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'rejected')}
+              {docSourceUrl && isImageDoc && !docLoadError && (
+                <a
+                  href={docSourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 text-xs font-semibold rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 flex items-center gap-1 shrink-0 transition"
+                  title="Buka gambar resolusi penuh di tab baru"
                 >
-                  <X size={13} />
-                  <span>Tolak Permohonan</span>
-                </button>
-                <button
-                  type="button"
-                  className="permission-verify__action-btn-approve"
-                  disabled={isProcessingAction}
-                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'approved')}
+                  <ExternalLink size={12} /> Buka Penuh
+                </a>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
+              <span className="text-[11px] text-gray-400 font-mono truncate max-w-[200px] sm:max-w-xs">
+                {previewDoc?.document_path || '-'}
+              </span>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleCloseDocPreview}
                 >
-                  <Check size={13} />
-                  <span>Setujui Permohonan</span>
-                </button>
-              </>
-            )}
+                  Tutup
+                </Button>
+                {canVerify && previewDoc?.status_approval === 'pending' && (
+                  <>
+                    <button
+                      type="button"
+                      className="permission-verify__action-btn-reject"
+                      disabled={isProcessingAction}
+                      onClick={() => handleUpdateStudentStatus(previewDoc.id, 'rejected')}
+                    >
+                      <X size={13} />
+                      <span>Tolak Permohonan</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="permission-verify__action-btn-approve"
+                      disabled={isProcessingAction}
+                      onClick={() => handleUpdateStudentStatus(previewDoc.id, 'approved')}
+                    >
+                      <Check size={13} />
+                      <span>Setujui Permohonan</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </Modal>

@@ -137,6 +137,7 @@ class ScheduleController extends Controller
         $activeCycle = (int) (SystemConfiguration::first()?->active_cycle ?? 1);
         $cycle = $request->has('cycle') ? $request->integer('cycle') : $activeCycle;
 
+        $todayDate = Carbon::now('Asia/Jakarta')->toDateString();
         $query = Schedule::query()
             ->where('cycle_type', $cycle)
             ->with([
@@ -144,6 +145,7 @@ class ScheduleController extends Controller
                 'teacher:id,name,nis_nip,fet_staff_id',
                 'room:id,name,capacity',
                 'subject:id,name',
+                'journals' => fn ($jq) => $jq->whereDate('date', $todayDate),
             ]);
 
         // Scoping: Guru hanya melihat jadwal miliknya sendiri, kecuali Wali Kelas meminta jadwal kelas binaannya
@@ -205,6 +207,9 @@ class ScheduleController extends Controller
             $items = $allSchedules->map(function ($schedule) use ($referenceDate) {
                 $scheduleArray = $schedule->toArray();
                 $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
+                $todayJournal = $schedule->journals?->first();
+                $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
+                $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
                 return $scheduleArray;
             });
 
@@ -229,6 +234,9 @@ class ScheduleController extends Controller
         $items = collect($schedules->items())->map(function ($schedule) use ($referenceDate) {
             $scheduleArray = $schedule->toArray();
             $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
+            $todayJournal = $schedule->journals?->first();
+            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
+            $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
             return $scheduleArray;
         });
 

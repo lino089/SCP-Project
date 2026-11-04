@@ -124,10 +124,9 @@ export default function ScheduleManagementPage() {
     };
   }, []);
 
-  // Fetch all initial data on mount & when cycle changes
-  const fetchData = useCallback(async () => {
-    setIsPageLoading(true);
-    setFetchError(null);
+  // Master data fetching (classes, rooms, subjects, teachers, settings) - only runs once on mount
+  const fetchMasterData = useCallback(async () => {
+    setIsMasterDataLoading(true);
 
     try {
       // 1. Settings
@@ -181,9 +180,21 @@ export default function ScheduleManagementPage() {
       setRoomList(rooms);
       setSubjectList(subjects);
       setTeacherList(teachers);
+    } catch (err) {
+      console.error('Gagal memuat master data jadwal:', err);
+    } finally {
+      setIsMasterDataLoading(false);
+    }
+  }, []);
 
-      // 3. Schedules (Fetch all schedules for current cycle via all=1)
-      const schedRes = await scheduleApi.getSchedules({ cycle: selectedCycle, all: 1 });
+  // Fetch schedules for active cycle (decoupled from master data)
+  const fetchSchedules = useCallback(async (cycleToFetch) => {
+    const targetCycle = cycleToFetch !== undefined ? cycleToFetch : selectedCycle;
+    setIsPageLoading(true);
+    setFetchError(null);
+
+    try {
+      const schedRes = await scheduleApi.getSchedules({ cycle: targetCycle, all: 1 });
       const raw = schedRes?.data
         ? Array.isArray(schedRes.data)
           ? schedRes.data
@@ -225,15 +236,25 @@ export default function ScheduleManagementPage() {
       setScheduleList([]);
     } finally {
       setIsPageLoading(false);
-      setIsMasterDataLoading(false);
     }
   }, [selectedCycle]);
 
-  // Trigger fetch on mount or cycle switch
+  // Combined fetch for retry action
+  const refreshAllData = useCallback(async () => {
+    await Promise.all([fetchMasterData(), fetchSchedules(selectedCycle)]);
+  }, [fetchMasterData, fetchSchedules, selectedCycle]);
+
+  // Load master data once on mount
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchData();
-  }, [fetchData]);
+    fetchMasterData();
+  }, [fetchMasterData]);
+
+  // Trigger schedule fetch when cycle changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSchedules(selectedCycle);
+  }, [fetchSchedules, selectedCycle]);
 
   // Conflict detection across all schedules in current cycle
   const conflictScheduleIds = useMemo(() => {
@@ -475,7 +496,7 @@ export default function ScheduleManagementPage() {
           setIsPasswordModalOpen(false);
           setIsFormModalOpen(false);
           showToast('Jadwal pelajaran berhasil ditambahkan.');
-          await fetchData();
+          await fetchSchedules(selectedCycle);
         } catch (apiErr) {
           const msg = apiErr.message || apiErr.response?.data?.message;
           setPasswordModalError(msg || 'Data jadwal tidak valid atau terjadi bentrok.');
@@ -517,7 +538,7 @@ export default function ScheduleManagementPage() {
           setIsPasswordModalOpen(false);
           setIsFormModalOpen(false);
           showToast('Jadwal pelajaran berhasil diperbarui.');
-          await fetchData();
+          await fetchSchedules(selectedCycle);
         } catch (apiErr) {
           const msg = apiErr.message || apiErr.response?.data?.message;
           setPasswordModalError(msg || 'Gagal memperbarui jadwal: kata sandi salah atau bentrok.');
@@ -531,7 +552,7 @@ export default function ScheduleManagementPage() {
           setIsPasswordModalOpen(false);
           setIsFormModalOpen(false);
           showToast('Jadwal pelajaran berhasil dihapus.');
-          await fetchData();
+          await fetchSchedules(selectedCycle);
         } catch (apiErr) {
           if (apiErr.status === 409 || apiErr.response?.status === 409) {
             setPasswordModalError(
@@ -551,7 +572,7 @@ export default function ScheduleManagementPage() {
           setIsPasswordModalOpen(false);
           setPendingAction(null);
           showToast(res.data?.message || res.message || 'Seluruh Data Jadwal berhasil di-reset.');
-          await fetchData();
+          await fetchSchedules(selectedCycle);
         } catch (apiErr) {
           if (apiErr.status === 422) {
             setPasswordModalError(
@@ -877,7 +898,7 @@ export default function ScheduleManagementPage() {
           <ErrorState
             title="Gagal Memuat Jadwal Pelajaran"
             message={fetchError}
-            onRetry={fetchData}
+            onRetry={refreshAllData}
             retryLabel="Muat Ulang Jadwal"
           />
         </div>

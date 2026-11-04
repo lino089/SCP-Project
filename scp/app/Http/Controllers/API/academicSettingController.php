@@ -125,6 +125,7 @@ class AcademicSettingController extends Controller
             ]
         );
         $config->update(['monday_is_upacara' => $request->is_upacara]);
+        \App\Services\PeriodResolutionService::clearCache();
 
         return response()->json([
             'success' => true,

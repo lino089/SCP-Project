@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
 
 class Journal extends Model
 {
@@ -17,6 +18,36 @@ class Journal extends Model
         'status',
         'substitute_teacher_id'
     ];
+
+    protected $appends = ['photo_url'];
+
+    /**
+     * Resolves absolute URL to Supabase Storage (public or presigned temporary URL)
+     */
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (empty($this->photo_path)) {
+            return null;
+        }
+
+        if (str_starts_with($this->photo_path, 'http://') || str_starts_with($this->photo_path, 'https://')) {
+            return $this->photo_path;
+        }
+
+        $disk = config('filesystems.default', 'public');
+        try {
+            if ($disk === 's3') {
+                $isPrivate = config('filesystems.disks.s3.visibility') === 'private' || env('SUPABASE_STORAGE_PRIVATE', false);
+                if ($isPrivate) {
+                    return Storage::disk('s3')->temporaryUrl($this->photo_path, now()->addMinutes(120));
+                }
+                return Storage::disk('s3')->url($this->photo_path);
+            }
+            return Storage::disk($disk)->url($this->photo_path);
+        } catch (\Throwable) {
+            return url('storage/' . ltrim($this->photo_path, '/'));
+        }
+    }
 
     public function schedule(): BelongsTo
     {
