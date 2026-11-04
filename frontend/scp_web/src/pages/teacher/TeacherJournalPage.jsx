@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   PlayCircle,
@@ -13,6 +13,11 @@ import {
   Edit3,
   MessageSquare,
   FileText,
+  Calendar,
+  Clock,
+  MapPin,
+  User,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
@@ -21,7 +26,6 @@ import { getStorageUrl } from '../../utils/formatters';
 import {
   Button,
   Badge,
-  FileUpload,
 } from '../../components/shared';
 import { ForbiddenState, EmptyState } from '../../components/feedback';
 import './TeacherJournal.css';
@@ -48,6 +52,15 @@ export default function TeacherJournalPage() {
   const [uploadedPhoto, setUploadedPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [compressedFileSize, setCompressedFileSize] = useState(null);
+
+  // Live Camera State (Khusus Pengambilan Foto Langsung Perangkat)
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' | 'user'
+  const [cameraError, setCameraError] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Data Siswa & Presensi
   const [students, setStudents] = useState([]);
@@ -110,6 +123,52 @@ export default function TeacherJournalPage() {
     return '';
   }, [isSubstituteMode, schedule?.task_instruction]);
 
+  // Data Relasi & Penamaan Sesi KBM
+  const className = useMemo(() => {
+    return (
+      schedule?.school_class?.name ||
+      schedule?.schoolClass?.name ||
+      schedule?.class_name ||
+      schedule?.className ||
+      (schedule?.class_id ? `Kelas #${schedule.class_id}` : 'Rombel Kelas')
+    );
+  }, [schedule]);
+
+  const subjectName = useMemo(() => {
+    return schedule?.subject?.name || schedule?.subject_name || 'Mata Pelajaran';
+  }, [schedule]);
+
+  const roomName = useMemo(() => {
+    const raw = schedule?.room?.name || schedule?.room_name || '';
+    if (!raw) return 'Ruang Belajar';
+    return String(raw).toLowerCase().startsWith('ruang') || String(raw).toLowerCase().startsWith('lab')
+      ? String(raw)
+      : `Ruang ${raw}`;
+  }, [schedule]);
+
+  const teacherName = useMemo(() => {
+    return schedule?.teacher?.name || user?.name || 'Guru Pengampu';
+  }, [schedule, user]);
+
+  const startPeriod = schedule?.period_number || 1;
+  const duration = schedule?.duration_periods || 2;
+  const endPeriod = startPeriod + duration - 1;
+
+  const sessionDateFormatted = useMemo(() => {
+    const targetDate = schedule?.date || new Date();
+    try {
+      const d = typeof targetDate === 'string' ? new Date(targetDate) : targetDate;
+      return new Intl.DateTimeFormat('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(d);
+    } catch {
+      return 'Hari ini';
+    }
+  }, [schedule]);
+
   // Helper kompresi dan set foto dokumentasi
   const handlePhotoSelect = async (file) => {
     if (!file) {
@@ -139,6 +198,135 @@ export default function TeacherJournalPage() {
       }
     };
   }, [photoPreview]);
+
+  // Hentikan stream kamera aktif
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    setIsCapturing(false);
+  }, []);
+
+  // Mulai stream kamera perangkat langsung
+  const startCamera = async (facing = cameraFacing) => {
+    setCameraError('');
+    setIsCapturing(false);
+
+    // Hentikan stream sebelumnya bila masih berjalan
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    // Pastikan browser mendukung getUserMedia
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      } else {
+        setCameraError('Perangkat atau browser ini tidak mendukung akses kamera langsung.');
+      }
+      return;
+    }
+
+    try {
+      setIsCameraActive(true);
+      const constraints = {
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Gagal mengakses kamera via getUserMedia:', err);
+      setIsCameraActive(false);
+
+      // Coba fallback intent capture pada mobile device jika getUserMedia terhambat
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      } else {
+        setCameraError(
+          err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+            ? 'Izin akses kamera ditolak. Silakan izinkan akses kamera pada peramban Anda.'
+            : 'Kamera perangkat tidak dapat diakses atau sedang digunakan oleh aplikasi lain.'
+        );
+      }
+    }
+  };
+
+  // Switch kamera depan/belakang
+  const switchCamera = () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(nextFacing);
+    startCamera(nextFacing);
+  };
+
+  // Jepret foto langsung dari stream video
+  const capturePhoto = async () => {
+    if (!videoRef.current || isCapturing) return;
+    setIsCapturing(true);
+
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, width, height);
+
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) {
+            setIsCapturing(false);
+            return;
+          }
+          const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+          const file = new File([blob], `kbm_kamera_${timestamp}.jpg`, { type: 'image/jpeg' });
+          await handlePhotoSelect(file);
+          stopCamera();
+        },
+        'image/jpeg',
+        0.85
+      );
+    } catch (err) {
+      console.error('Gagal menjepret foto kamera:', err);
+      setIsCapturing(false);
+    }
+  };
+
+  // Kaitkan stream ke videoRef saat isCameraActive berubah
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraActive]);
+
+  // Bersihkan track kamera saat komponen unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
   // Helper ubah catatan siswa individual
   const handleNoteChange = useCallback((studentId, noteText) => {
@@ -470,14 +658,14 @@ export default function TeacherJournalPage() {
             <>
               <Badge variant="warning">Mode Guru Pengganti (Kesiswaan)</Badge>
               <Badge variant="neutral">
-                {schedule?.schoolClass?.name || 'Kelas'} &bull; {schedule?.subject?.name}
+                {className} &bull; {subjectName}
               </Badge>
             </>
           ) : (
             <>
-              <Badge variant="default">{schedule?.subject?.name || 'Mata Pelajaran'}</Badge>
+              <Badge variant="default">{subjectName}</Badge>
               <Badge variant="neutral">
-                {schedule?.schoolClass?.name || 'Kelas'} &bull; {schedule?.room?.name || 'Ruang'}
+                {className} &bull; {roomName}
               </Badge>
             </>
           )}
@@ -645,89 +833,187 @@ export default function TeacherJournalPage() {
       ) : !classOpened ? (
         /* KONDISI 2: STANDBY SESI KELAS SIAP DIBUKA */
         <div className="teacher-journal__standby-card">
-          <div className="teacher-journal__standby-pulse">
-            <span className={`teacher-journal__pulse-dot ${schedule?.journal_status === 'completed' ? 'bg-emerald-500' : ''}`} />
-            <span className="teacher-journal__pulse-label">
-              {schedule?.journal_status === 'completed'
-                ? 'Jurnal KBM Selesai Disimpan'
-                : isSubstituteMode
-                ? 'Sesi Ambil Alih Kelas Siap'
-                : 'Sesi Kelas Siap Dibuka'}
-            </span>
+          {/* 1. Header Kartu: Status & Judul Utama */}
+          <div className="teacher-journal__card-header">
+            <div className="teacher-journal__card-header-main">
+              <div className="teacher-journal__standby-pulse">
+                <span
+                  className={`teacher-journal__pulse-dot ${
+                    schedule?.journal_status === 'completed'
+                      ? 'teacher-journal__pulse-dot--completed'
+                      : isSubstituteMode
+                      ? 'teacher-journal__pulse-dot--warning'
+                      : 'teacher-journal__pulse-dot--active'
+                  }`}
+                />
+                <span
+                  className={`teacher-journal__pulse-label ${
+                    schedule?.journal_status === 'completed'
+                      ? 'text-emerald-700'
+                      : isSubstituteMode
+                      ? 'text-amber-800'
+                      : 'text-blue-700'
+                  }`}
+                >
+                  {schedule?.journal_status === 'completed'
+                    ? 'Jurnal KBM Selesai Disimpan'
+                    : isSubstituteMode
+                    ? 'Sesi Ambil Alih Kelas Siap'
+                    : 'Sesi Kelas Siap Dibuka'}
+                </span>
+              </div>
+
+              <div className="teacher-journal__card-title-row">
+                <h2 className="teacher-journal__standby-title">{subjectName}</h2>
+                <span className="teacher-journal__class-badge">{className}</span>
+              </div>
+            </div>
+
+            <div className="teacher-journal__card-header-aside">
+              <span className="teacher-journal__cycle-pill">
+                Putaran {schedule?.cycle_type || 1}
+              </span>
+              <span className="teacher-journal__duration-pill">
+                {duration} Jam Pelajaran ({duration} JP)
+              </span>
+            </div>
           </div>
 
-          <h2 className="teacher-journal__standby-title">
-            {schedule?.subject?.name || 'Mata Pelajaran'} &bull; {schedule?.schoolClass?.name || 'Kelas'}
-          </h2>
+          {/* 2. Grid Informasi Utama (Tanggal, Waktu, Ruang, Guru Pengampu) */}
+          <div className="teacher-journal__info-grid">
+            {/* Tile 1: Tanggal Pelaksanaan */}
+            <div className="teacher-journal__info-tile">
+              <div className="teacher-journal__tile-icon text-blue-600 bg-blue-50">
+                <Calendar size={18} />
+              </div>
+              <div className="teacher-journal__tile-content">
+                <span className="teacher-journal__tile-label">Tanggal KBM</span>
+                <strong className="teacher-journal__tile-value">
+                  {sessionDateFormatted}
+                </strong>
+              </div>
+            </div>
 
-          <p className="teacher-journal__standby-desc">
-            {isSubstituteMode
-              ? `Guru Asli: ${schedule?.teacher?.name || 'Guru Pengampu'} • Jam ke-${schedule?.period_number || 1} • Ruang ${schedule?.room?.name || 'Ruang'}`
-              : `Jadwal: Hari ini, Jam ke-${schedule?.period_number || 1} s/d ${(schedule?.period_number || 1) + (schedule?.duration_periods || 2) - 1} • Lokasi ${schedule?.room?.name || 'Ruang Kelas'}`}
-          </p>
+            {/* Tile 2: Jam Pelajaran */}
+            <div className="teacher-journal__info-tile">
+              <div className="teacher-journal__tile-icon text-amber-600 bg-amber-50">
+                <Clock size={18} />
+              </div>
+              <div className="teacher-journal__tile-content">
+                <span className="teacher-journal__tile-label">Alokasi Waktu KBM</span>
+                <strong className="teacher-journal__tile-value">
+                  Jam Ke-{startPeriod} s/d {endPeriod} ({duration} JP)
+                </strong>
+              </div>
+            </div>
 
-          {/* Tugas Titipan Guru Asli jika Mode Kesiswaan */}
+            {/* Tile 3: Ruang Belajar */}
+            <div className="teacher-journal__info-tile">
+              <div className="teacher-journal__tile-icon text-rose-600 bg-rose-50">
+                <MapPin size={18} />
+              </div>
+              <div className="teacher-journal__tile-content">
+                <span className="teacher-journal__tile-label">Ruang Kelas</span>
+                <strong className="teacher-journal__tile-value">
+                  {roomName}
+                </strong>
+              </div>
+            </div>
+
+            {/* Tile 4: Guru Pengampu */}
+            <div className="teacher-journal__info-tile">
+              <div className="teacher-journal__tile-icon text-emerald-600 bg-emerald-50">
+                <User size={18} />
+              </div>
+              <div className="teacher-journal__tile-content">
+                <span className="teacher-journal__tile-label">
+                  {isSubstituteMode ? 'Guru Pengampu Asli' : 'Guru Pengampu'}
+                </span>
+                <strong className="teacher-journal__tile-value truncate" title={teacherName}>
+                  {teacherName}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Tugas Titipan Guru Asli jika Mode Kesiswaan */}
           {isSubstituteMode && taskTitipan && (
             <div className="teacher-journal__task-box">
-              <span className="teacher-journal__task-box-title">
-                📢 Tugas Titipan Guru Pengampu Asli:
+              <span className="teacher-journal__task-box-title flex items-center gap-1.5">
+                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                Instruksi Tugas Titipan Guru Pengampu Asli:
               </span>
               <p className="teacher-journal__task-box-body">"{taskTitipan}"</p>
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            {schedule?.journal_status === 'completed' ? (
-              <>
-                <Button
-                  variant="primary"
-                  size="md"
-                  icon={Eye}
-                  loading={isSubmitting}
-                  onClick={handleViewJournalDetail}
-                >
-                  Lihat Detail Jurnal &amp; Catatan Siswa
-                </Button>
-                <Button
-                  variant="outline"
-                  size="md"
-                  icon={Edit3}
-                  onClick={handleOpenClass}
-                >
-                  Buka &amp; Perbarui Jurnal
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="primary"
-                size="md"
-                icon={PlayCircle}
-                loading={isSubmitting}
-                onClick={handleOpenClass}
-              >
-                {isSubstituteMode
-                  ? 'Mulai Presensi & Ambil Alih Kelas'
-                  : 'Mulai & Buka Kelas Sekarang'}
-              </Button>
-            )}
+          {/* 4. Notis Khusus jika Jurnal Sudah Selesai */}
+          {schedule?.journal_status === 'completed' && (
+            <div className="teacher-journal__completed-notice">
+              <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+              <span>
+                Jurnal pembelajaran, presensi kehadiran siswa, dan catatan individual sesi ini telah tercatat secara permanen di database.
+              </span>
+            </div>
+          )}
 
-            {(isKesiswaan() || hasRole('waka')) && schedule?.journal_status !== 'completed' && (
-              <Button
-                variant="outline"
-                size="md"
-                onClick={handleMarkTeacherAbsent}
-              >
-                Tandai Guru Berhalangan (Jam Kosong)
-              </Button>
-            )}
-
+          {/* 5. Action Buttons Bar dengan hierarki terstruktur */}
+          <div className="teacher-journal__actions-bar">
             <Button
               variant="secondary"
               size="md"
+              icon={ArrowLeft}
               onClick={() => navigate('/teacher/schedule')}
             >
-              Kembali
+              Kembali ke Jadwal
             </Button>
+
+            <div className="teacher-journal__actions-primary">
+              {schedule?.journal_status === 'completed' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="md"
+                    icon={Edit3}
+                    onClick={handleOpenClass}
+                  >
+                    Buka &amp; Perbarui Jurnal
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={Eye}
+                    loading={isSubmitting}
+                    onClick={handleViewJournalDetail}
+                  >
+                    Lihat Detail Jurnal &amp; Catatan Siswa
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {(isKesiswaan() || hasRole('waka')) && (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      onClick={handleMarkTeacherAbsent}
+                    >
+                      Tandai Guru Berhalangan
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={PlayCircle}
+                    loading={isSubmitting}
+                    onClick={handleOpenClass}
+                  >
+                    {isSubstituteMode
+                      ? 'Mulai Presensi & Ambil Alih Kelas'
+                      : 'Mulai & Buka Kelas Sekarang'}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -797,50 +1083,168 @@ export default function TeacherJournalPage() {
               </div>
             </div>
 
-            {/* 2. Dokumentasi Foto Kelas */}
+            {/* 2. Dokumentasi Foto Kelas (Wajib Kamera Langsung) */}
             <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-gray-900">
                   2. Dokumentasi Foto Kelas <span className="text-red-500">*</span>
                 </h2>
                 {compressedFileSize && (
-                  <span className="text-[11px] font-mono text-emerald-600">
+                  <span className="text-[11px] font-mono text-emerald-600 font-semibold">
                     Terkonversi: {compressedFileSize} KB
                   </span>
                 )}
               </div>
 
               <p className="text-xs text-gray-500">
-                Unggah bukti foto suasana kegiatan KBM di kelas (Maks. 10MB, otomatis dikompresi).
+                Ambil bukti foto kegiatan KBM secara langsung via kamera perangkat.
               </p>
 
+              {/* Hidden file input strictly with capture="environment" for fallback device native camera */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handlePhotoSelect(f);
+                }}
+              />
+
               {photoPreview ? (
+                /* Mode 1: Pratinjau Foto Kamera yang Berhasil Diambil */
                 <div className="teacher-journal__photo-preview">
                   <img
                     src={photoPreview}
-                    alt="Pratinjau Dokumentasi KBM"
+                    alt="Pratinjau Foto Dokumentasi KBM"
                     className="teacher-journal__photo-img"
                   />
+                  <div className="teacher-journal__photo-badge">
+                    <ShieldCheck size={13} />
+                    <span>Foto Kamera Terverifikasi</span>
+                  </div>
                   <div className="teacher-journal__photo-info">
-                    <span>
-                      {uploadedPhoto?.name} ({compressedFileSize} KB)
+                    <span className="font-mono text-xs text-gray-700 truncate max-w-[200px] sm:max-w-[280px]">
+                      {uploadedPhoto?.name || 'Dokumentasi_KBM.jpg'} ({compressedFileSize || 0} KB)
                     </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-gray-700 hover:text-black flex items-center gap-1 cursor-pointer bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                        onClick={() => {
+                          handlePhotoSelect(null);
+                          startCamera();
+                        }}
+                      >
+                        <RotateCw size={13} /> Ambil Ulang
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 cursor-pointer px-1 py-1"
+                        onClick={() => handlePhotoSelect(null)}
+                      >
+                        <X size={14} /> Hapus
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : isCameraActive ? (
+                /* Mode 2: Viewfinder Kamera Langsung Aktif */
+                <div className="teacher-journal__camera-viewfinder">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="teacher-journal__camera-stream"
+                  />
+                  {/* Top Bar Kamera */}
+                  <div className="teacher-journal__camera-topbar">
+                    <span className="teacher-journal__camera-live-badge">
+                      <span className="teacher-journal__live-pulse"></span>
+                      KAMERA LANGSUNG
+                    </span>
+                    <div className="teacher-journal__camera-controls">
+                      <button
+                        type="button"
+                        className="teacher-journal__camera-ctrl-btn"
+                        onClick={switchCamera}
+                        title="Putar Kamera Depan / Belakang"
+                      >
+                        <RotateCw size={13} />
+                        <span>Putar</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="teacher-journal__camera-ctrl-btn"
+                        onClick={stopCamera}
+                        title="Tutup Kamera"
+                      >
+                        <X size={14} />
+                        <span>Tutup</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom Bar Shutter */}
+                  <div className="teacher-journal__camera-bottombar">
                     <button
                       type="button"
-                      className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 cursor-pointer"
-                      onClick={() => handlePhotoSelect(null)}
+                      className="teacher-journal__shutter-btn"
+                      onClick={capturePhoto}
+                      disabled={isCapturing}
+                      title="Ambil Foto Dokumentasi"
                     >
-                      <X size={14} /> Hapus Foto
+                      <Camera size={26} />
                     </button>
+                    <p className="teacher-journal__shutter-hint">
+                      {isCapturing ? 'Memproses foto...' : 'Ketuk tombol untuk mengambil foto'}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <FileUpload
-                  accept="image/jpeg,image/png,image/webp"
-                  file={uploadedPhoto}
-                  onChange={handlePhotoSelect}
-                  hint="Format JPG, PNG atau foto kamera langsung (Otomatis dioptimalkan)"
-                />
+                /* Mode 3: Idle Box - Buka Kamera Perangkat */
+                <div
+                  className="teacher-journal__camera-box"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <div className="teacher-journal__camera-icon-wrap">
+                    <Camera size={24} />
+                  </div>
+                  <div>
+                    <h3 className="teacher-journal__camera-title">Ambil Foto Dokumentasi Langsung</h3>
+                    <p className="teacher-journal__camera-desc mt-1">
+                      Wajib mengambil foto dokumentasi kelas secara langsung melalui kamera perangkat. Pemilihan dari galeri atau file manager dinonaktifkan.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => startCamera()}
+                    className="px-4 py-2 bg-[#FFDE00] hover:bg-[#F5C200] active:scale-95 text-black font-semibold text-xs rounded-lg flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                  >
+                    <Camera size={15} />
+                    <span>Buka Kamera Perangkat</span>
+                  </button>
+
+                  <div className="teacher-journal__camera-warning">
+                    <AlertTriangle size={13} />
+                    <span>Pengunggahan berkas galeri / disk dinonaktifkan untuk menjaga keaslian dokumentasi.</span>
+                  </div>
+
+                  {cameraError && (
+                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 text-center max-w-sm mt-1">
+                      {cameraError}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

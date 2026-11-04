@@ -4,19 +4,18 @@ import {
   AlertCircle,
   CheckCircle2,
   AlertTriangle,
-  Download,
   Info,
   RotateCw,
   Clock,
   Layers,
   BookOpen,
   Calendar,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
-import { getStorageUrl } from '../../utils/formatters';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -26,9 +25,7 @@ import {
 import {
   Badge,
   Button,
-  Modal,
   Select,
-  Table,
   SearchInput,
 } from '../../components/shared';
 import {
@@ -73,19 +70,8 @@ export default function TeacherSchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
-  // Perizinan Guru dari Backend
+  // Perizinan Guru dari Backend (untuk badge & banner status hari ini)
   const [teacherLeaves, setTeacherLeaves] = useState([]);
-  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [leaveReasonCategory, setLeaveReasonCategory] = useState('dinas_luar');
-  const [leaveReasonDetail, setLeaveReasonDetail] = useState('');
-  const [taskInstructions, setTaskInstructions] = useState('');
-  const [attachmentFile, setAttachmentFile] = useState(null);
-  const [taskAttachmentFile, setTaskAttachmentFile] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [leaveToast, setLeaveToast] = useState(false);
 
   // Ambil konfigurasi akademik aktif & template jam KBM
   const fetchSettings = useCallback(async () => {
@@ -328,62 +314,6 @@ export default function TeacherSchedulePage() {
     };
   }, [schedules]);
 
-  // Handle Pengajuan Izin Guru via Backend API
-  const handleSendLeave = async (e) => {
-    e.preventDefault();
-    setFormError('');
-    setFieldErrors({});
-
-    const categoryLabel =
-      leaveReasonCategory === 'sakit'
-        ? 'Sakit'
-        : leaveReasonCategory === 'dinas_luar'
-          ? 'Izin Dinas Luar'
-          : 'Izin Keperluan Pribadi';
-
-    const fullReason = leaveReasonDetail.trim()
-      ? `${categoryLabel}: ${leaveReasonDetail.trim()}`
-      : categoryLabel;
-
-    // Filter jadwal hari yang dipilih untuk didelegasikan
-    const todayDayNumber = DAY_TO_NUMBER[selectedDay] || 1;
-    const targetSchedules = schedules.filter(
-      (s) => s.day_of_week === todayDayNumber
-    );
-    const scheduleIds = targetSchedules.map((s) => s.id);
-
-    setIsSubmitting(true);
-    try {
-      const res = await leaveApi.submitTeacherLeaveRequest({
-        date: todayStr,
-        reason: fullReason,
-        schedule_ids: scheduleIds,
-        attachment: attachmentFile,
-        task_instruction: taskInstructions,
-        task_attachment: taskAttachmentFile,
-      });
-
-      if (res?.success) {
-        setIsLeaveModalOpen(false);
-        setLeaveToast(true);
-        setTimeout(() => setLeaveToast(false), 5000);
-        await fetchTeacherLeaves();
-      }
-    } catch (err) {
-      const errorMsg =
-        err.message ||
-        err.raw?.response?.data?.message ||
-        err.response?.data?.message ||
-        'Gagal mengajukan izin mengajar.';
-      setFormError(errorMsg);
-      setFieldErrors(
-        err.errors || err.raw?.response?.data?.errors || err.response?.data?.errors || {}
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Navigasi ke halaman form Jurnal & Presensi
   const handleOpenJournal = (item) => {
     navigate('/teacher/journal', {
@@ -423,84 +353,6 @@ export default function TeacherSchedulePage() {
     return [selectedDay];
   }, [isAllDaysView, selectedDay]);
 
-  // Kolom Riwayat Izin Mengajar
-  const historyColumns = [
-    {
-      key: 'no',
-      label: 'No',
-      align: 'center',
-      width: '50px',
-      renderCell: (_row, idx) => (
-        <span className="font-mono text-xs text-gray-400">
-          {String(idx + 1).padStart(2, '0')}
-        </span>
-      ),
-    },
-    {
-      key: 'date',
-      label: 'Tanggal Izin',
-      renderCell: (row) => (
-        <span className="font-mono text-xs font-semibold text-gray-800">
-          {row.date}
-        </span>
-      ),
-    },
-    {
-      key: 'reason',
-      label: 'Alasan & Keterangan',
-      renderCell: (row) => (
-        <div className="text-xs">
-          <strong className="text-gray-900 block">{row.reason}</strong>
-          {row.task_instruction && (
-            <span className="text-gray-500 block mt-0.5 italic">
-              Tugas: {row.task_instruction}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'documents',
-      label: 'Lampiran',
-      renderCell: (row) => (
-        <div className="flex items-center gap-1.5">
-          {row.attachment_path && (
-            <a
-              href={getStorageUrl(row.attachment_path)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
-            >
-              <Download size={11} /> Surat
-            </a>
-          )}
-          {row.task_attachment_path && (
-            <a
-              href={getStorageUrl(row.task_attachment_path)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 ml-1"
-            >
-              <Download size={11} /> Modul
-            </a>
-          )}
-          {!row.attachment_path && !row.task_attachment_path && (
-            <span className="text-[11px] text-gray-400 italic">-</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      renderCell: (row) => {
-        if (row.status === 'approved') return <Badge variant="success">Disetujui</Badge>;
-        if (row.status === 'rejected') return <Badge variant="error">Ditolak</Badge>;
-        return <Badge variant="warning">Menunggu</Badge>;
-      },
-    },
-  ];
-
   return (
     <div className="schedule-page teacher-schedule-page">
       {/* 1. Header Halaman Standar Waka */}
@@ -516,21 +368,10 @@ export default function TeacherSchedulePage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setIsHistoryModalOpen(true)}
+            icon={FileText}
+            onClick={() => navigate('/teacher/leave')}
           >
-            Riwayat Izin Saya
-          </Button>
-
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setFormError('');
-              setFieldErrors({});
-              setIsLeaveModalOpen(true);
-            }}
-          >
-            Ajukan Izin Hari Ini
+            Pengajuan Izin
           </Button>
 
           <Badge variant="neutral">
@@ -646,16 +487,6 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
-      {/* Alert Sukses Pengajuan Izin */}
-      {leaveToast && (
-        <div className="teacher-schedule__alert teacher-schedule__alert--success">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-          <span>
-            <strong>Izin berhasil diajukan!</strong> Pengajuan izin Anda hari ini telah tercatat di antrean verifikasi Kesiswaan/Piket beserta instruksi tugas titipan.
-          </span>
-        </div>
-      )}
-
       {/* Banner Status Izin Guru Aktif Hari Ini */}
       {todayActiveLeave && scheduleContext === 'my_schedule' && (
         <div className="teacher-schedule__alert teacher-schedule__alert--leave">
@@ -672,9 +503,9 @@ export default function TeacherSchedulePage() {
           <button
             type="button"
             className="teacher-schedule__alert-btn"
-            onClick={() => setIsHistoryModalOpen(true)}
+            onClick={() => navigate('/teacher/leave')}
           >
-            Lihat Detail Izin
+            Kelola di Menu Izin &rarr;
           </button>
         </div>
       )}
@@ -876,165 +707,6 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
-      {/* 6. Modal Pengajuan Izin Mengajar Guru */}
-      <Modal
-        isOpen={isLeaveModalOpen}
-        onClose={() => setIsLeaveModalOpen(false)}
-        title="Formulir Pengajuan Izin Mengajar & Delegasi Piket"
-        size="md"
-      >
-        <form onSubmit={handleSendLeave} className="space-y-4">
-          {formError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-              {formError}
-            </div>
-          )}
-
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
-            <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              Pengajuan izin ini otomatis mendelegasikan jam mengajar Anda hari ini ke{' '}
-              <strong>Tim Kesiswaan / Guru Piket</strong>. Pastikan Anda melampirkan surat dinas/sakit
-              serta modul penugasan siswa.
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Kategori Alasan Izin *
-            </label>
-            <Select
-              value={leaveReasonCategory}
-              onChange={(e) => setLeaveReasonCategory(e.target.value)}
-              options={[
-                { value: 'dinas_luar', label: 'Tugas Dinas Luar / Pelatihan' },
-                { value: 'sakit', label: 'Izin Sakit (Surat Dokter)' },
-                { value: 'pribadi', label: 'Keperluan Mendesak Pribadi' },
-              ]}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Detail Alasan Izin *
-            </label>
-            <textarea
-              className={`w-full p-2.5 text-xs border rounded-lg focus:outline-none focus:ring-1 ${
-                fieldErrors.reason
-                  ? 'border-red-400 focus:ring-red-400'
-                  : 'border-gray-300 focus:ring-gray-400'
-              }`}
-              rows={3}
-              placeholder="Jelaskan keperluan dinas luar atau alasan ketidakhadiran secara ringkas..."
-              value={leaveReasonDetail}
-              onChange={(e) => setLeaveReasonDetail(e.target.value)}
-              required
-            />
-            {fieldErrors.reason && (
-              <span className="text-[11px] text-red-600 mt-1 block">
-                {fieldErrors.reason[0]}
-              </span>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Instruksi Penugasan Siswa untuk Guru Piket *
-            </label>
-            <textarea
-              className={`w-full p-2.5 text-xs border rounded-lg focus:outline-none focus:ring-1 ${
-                fieldErrors.task_instruction
-                  ? 'border-red-400 focus:ring-red-400'
-                  : 'border-gray-300 focus:ring-gray-400'
-              }`}
-              rows={2}
-              placeholder="Instruksikan materi / latihan soal yang harus disampaikan guru piket..."
-              value={taskInstructions}
-              onChange={(e) => setTaskInstructions(e.target.value)}
-              required
-            />
-            {fieldErrors.task_instruction && (
-              <span className="text-[11px] text-red-600 mt-1 block">
-                {fieldErrors.task_instruction[0]}
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Surat Dispensasi / Tugas (PDF/JPG)
-              </label>
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setAttachmentFile(e.target.files[0] || null)}
-                className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Modul / Bahan Tugas Titipan
-              </label>
-              <input
-                type="file"
-                accept=".pdf,.docx,.jpg,.png,.zip"
-                onChange={(e) => setTaskAttachmentFile(e.target.files[0] || null)}
-                className="w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsLeaveModalOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isSubmitting}
-            >
-              Kirim Pengajuan Izin
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 7. Modal Riwayat Izin Mengajar Guru */}
-      <Modal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        title="Riwayat Pengajuan Izin Mengajar Guru"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-gray-500">
-            Daftar seluruh riwayat izin berhalangan hadir dan delegasi tugas piket yang telah Anda ajukan ke sistem.
-          </p>
-
-          <Table
-            columns={historyColumns}
-            data={teacherLeaves}
-            emptyMessage="Belum ada riwayat pengajuan izin mengajar yang tercatat."
-          />
-
-          <div className="flex justify-end pt-3 border-t border-gray-100">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsHistoryModalOpen(false)}
-            >
-              Tutup
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

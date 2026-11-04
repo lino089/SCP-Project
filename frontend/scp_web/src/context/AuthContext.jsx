@@ -161,7 +161,7 @@ export function AuthProvider({ children }) {
   const getHomeRoute = useCallback(() => {
     if (!user) return '/login';
     if (hasRole('waka')) return '/web/dashboard';
-    if (hasRole('teacher')) return '/teacher/schedule';
+    if (hasRole('teacher')) return '/teacher/dashboard';
     if (hasRole('student')) return '/student/home';
     if (hasRole('parent')) return '/parent/monitoring';
     return '/web/dashboard';

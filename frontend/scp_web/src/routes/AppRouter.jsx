@@ -16,8 +16,10 @@ const ScheduleImportPage = lazy(() => import('../pages/waka/ScheduleImportPage')
 const MasterDataPage = lazy(() => import('../pages/waka/MasterDataPage'));
 const GradePromotionPage = lazy(() => import('../pages/waka/GradePromotionPage'));
 const MonitoringRecapPage = lazy(() => import('../pages/waka/MonitoringRecapPage'));
+const TeacherDashboardPage = lazy(() => import('../pages/teacher/TeacherDashboardPage'));
 const TeacherSchedulePage = lazy(() => import('../pages/teacher/TeacherSchedulePage'));
 const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPage'));
+const TeacherLeavePage = lazy(() => import('../pages/teacher/TeacherLeavePage'));
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
 const StudentHomePage = lazy(() => import('../pages/student/StudentHomePage'));
@@ -70,7 +72,7 @@ export default function AppRouter() {
                 <RoleRoute
                   allowedRoles={['teacher', 'waka']}
                   requireKesiswaanOrWaliKelas
-                  redirectTo="/teacher/schedule"
+                  redirectTo="/teacher/dashboard"
                 />
               }
             >
@@ -79,8 +81,10 @@ export default function AppRouter() {
 
             {/* Standard Teacher Routes */}
             <Route element={<RoleRoute allowedRoles={['teacher']} />}>
+              <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
               <Route path="/teacher/schedule" element={<TeacherSchedulePage />} />
               <Route path="/teacher/journal" element={<TeacherJournalPage />} />
+              <Route path="/teacher/leave" element={<TeacherLeavePage />} />
               <Route path="/teacher/quiz" element={<TeacherQuizPage />} />
             </Route>
 

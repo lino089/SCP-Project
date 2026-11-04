@@ -10,6 +10,7 @@ import {
   FileQuestion,
   FileText,
   Home,
+  LayoutDashboard,
   UserCheck,
   Eye,
   User,
@@ -167,6 +168,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           </div>
 
           <NavLink
+            to="/teacher/dashboard"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <LayoutDashboard size={16} strokeWidth={1.5} />
+            <span>Dashboard</span>
+          </NavLink>
+
+          <NavLink
             to="/teacher/schedule"
             className={({ isActive }) =>
               `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
@@ -186,6 +198,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           >
             <BookOpen size={16} strokeWidth={1.5} />
             <span>Jurnal KBM &amp; Presensi</span>
+          </NavLink>
+
+          <NavLink
+            to="/teacher/leave"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <FileText size={16} strokeWidth={1.5} />
+            <span>Pengajuan Izin</span>
           </NavLink>
 
           <NavLink

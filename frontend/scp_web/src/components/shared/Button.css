@@ -15,6 +15,18 @@
   gap: var(--space-2);
 }
 
+.btn svg {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.btn > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
@@ -42,20 +54,20 @@
   border-radius: var(--radius-md);
 }
 
-/* Variants - Precision Style */
+/* Variants - Precision Style (Exness Fintech) */
 .btn--primary,
 .btn--accent {
-  background-color: #FFDE02;
-  color: #0F172A;
-  border-color: #FFDE02;
-  font-weight: 500;
+  background-color: #FFDE00;
+  color: #000000;
+  border-color: #FFDE00;
+  font-weight: 600;
 }
 
 .btn--primary:hover:not(:disabled),
 .btn--accent:hover:not(:disabled) {
   background-color: #FFE63B;
   border-color: #FFE63B;
-  color: #0F172A;
+  color: #000000;
 }
 
 .btn--primary:active:not(:disabled),
