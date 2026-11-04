@@ -87,8 +87,7 @@ export default function TeacherAssignmentModal({
           <div>
             <h4 className="font-semibold text-neutral-900">{teacher.name}</h4>
             <p className="text-xs text-neutral-500">
-              NIP: {teacher.nis_nip || teacher.nip || '-'} &bull; FET Staff ID:{' '}
-              {teacher.fet_staff_id || '-'}
+              NIP: {teacher.nis_nip || teacher.nip || '-'}
             </p>
           </div>
         </div>

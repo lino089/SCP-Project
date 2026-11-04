@@ -29,10 +29,8 @@ export default function InitialCredentialModal({
     if (isTeacher) {
       return `[Kredensial Akun - Guru Baru]
 Nama: ${teacher.name || '-'}
-ID Login (No. Telepon): ${teacher.phone_number || teacher.telp || '-'}
-NIP: ${teacher.nis_nip || teacher.nip || '-'}
-FET Staff ID: ${teacher.fet_staff_id || '-'}
-Kata Sandi Awal: ${password} (NIP Guru)
+ID Login (NIP): ${teacher.nis_nip || teacher.nip || '-'}
+Kata Sandi Awal: ${password}
 Status: Wajib Ganti Password saat login perdana.`;
     }
     return `[Kredensial Akun - Siswa & Orang Tua]
@@ -113,25 +111,13 @@ Status: Wajib Ganti Password saat login perdana.`;
             </div>
             <div className="credential-card__grid">
               <div className="credential-field">
-                <span className="credential-field__label">ID Login (No. Telepon)</span>
-                <span className="credential-field__value font-mono">
-                  {teacher.phone_number || teacher.telp || '-'}
-                </span>
-              </div>
-              <div className="credential-field">
-                <span className="credential-field__label">NIP</span>
+                <span className="credential-field__label">ID Login (NIP)</span>
                 <span className="credential-field__value font-mono">
                   {teacher.nis_nip || teacher.nip || '-'}
                 </span>
               </div>
-              <div className="credential-field">
-                <span className="credential-field__label">FET Staff ID</span>
-                <span className="credential-field__value font-mono">
-                  {teacher.fet_staff_id || '-'}
-                </span>
-              </div>
               <div className="credential-field credential-field--highlight">
-                <span className="credential-field__label">Kata Sandi Awal (NIP)</span>
+                <span className="credential-field__label">Kata Sandi Awal</span>
                 <div className="credential-field__password-box">
                   <span className="font-mono text-lg font-bold">{password}</span>
                 </div>

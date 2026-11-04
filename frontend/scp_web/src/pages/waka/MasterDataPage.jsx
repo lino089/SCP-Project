@@ -39,6 +39,7 @@ import {
 } from '../../services/masterDataApi';
 import InitialCredentialModal from './components/InitialCredentialModal';
 import TeacherAssignmentModal from './components/TeacherAssignmentModal';
+import TeacherAssignmentTab from './components/TeacherAssignmentTab';
 import DeleteConflictDialog from './components/DeleteConflictDialog';
 import DeleteConfirmationModal from './components/DeleteConfirmationModal';
 import './MasterData.css';
@@ -64,7 +65,7 @@ export default function MasterDataPage() {
   const [trashList, setTrashList] = useState([]);
   const [trashEntityFilter, setTrashEntityFilter] = useState('all');
   const [isRestoring, setIsRestoring] = useState(false);
-  const [tabCounts, setTabCounts] = useState({ kelas: 0, ruang: 0, mapel: 0, guru: 0, siswa: 0, trash: 0 });
+  const [tabCounts, setTabCounts] = useState({ kelas: 0, ruang: 0, mapel: 0, guru: 0, siswa: 0, penugasan: 0, trash: 0 });
   const [loadedTabs, setLoadedTabs] = useState(new Set());
 
   // Teacher Import & Template states
@@ -140,6 +141,7 @@ export default function MasterDataPage() {
           mapel: Number(res.data.subjects || 0),
           guru: Number(res.data.teachers || 0),
           siswa: Number(res.data.students || 0),
+          penugasan: Number(res.data.classes || 0),
           trash: Number(trashRes?.meta?.total ?? trashRes?.data?.meta?.total ?? 0),
         });
       }
@@ -201,6 +203,13 @@ export default function MasterDataPage() {
         }
         if (cRes?.data) setClassList(cRes.data);
         if (sRes?.data) setSubjectList(sRes.data);
+      } else if (tabId === 'penugasan') {
+        const [tRes, cRes] = await Promise.all([
+          teacherList.length ? Promise.resolve(null) : teacherApi.getTeachers({ per_page: 100 }),
+          classList.length ? Promise.resolve(null) : classApi.getClasses({ per_page: 100 }).catch(() => null),
+        ]);
+        if (tRes?.data) setTeacherList(tRes.data);
+        if (cRes?.data) setClassList(cRes.data);
       } else if (tabId === 'trash') {
         const res = await recycleBinApi.getTrash({ per_page: 200 });
         if (res?.data) {
@@ -409,6 +418,11 @@ export default function MasterDataPage() {
     }
   };
 
+  // Stable callback to update assignment tab count without unnecessary re-renders
+  const handleAssignmentCountUpdate = useCallback((cnt) => {
+    setTabCounts((prev) => (prev.penugasan === cnt ? prev : { ...prev, penugasan: cnt }));
+  }, []);
+
   // Tab definitions
   const tabs = useMemo(
     () => [
@@ -417,6 +431,7 @@ export default function MasterDataPage() {
       { id: 'mapel', label: 'Mata Pelajaran', count: tabCounts.mapel },
       { id: 'guru', label: 'Guru', count: tabCounts.guru },
       { id: 'siswa', label: 'Siswa', count: tabCounts.siswa },
+      { id: 'penugasan', label: 'Penugasan Guru', count: tabCounts.penugasan || 0 },
       { id: 'trash', label: 'Tempat Sampah', count: tabCounts.trash || 0 },
     ],
     [tabCounts]
@@ -449,7 +464,6 @@ export default function MasterDataPage() {
         setFormData({
           name: '',
           nip: '',
-          fet_staff_id: '',
           email: '',
           phone_number: '',
           subject_id: '',
@@ -495,7 +509,6 @@ export default function MasterDataPage() {
       setFormData({
         name: item.name || '',
         nip: item.nis_nip || item.nip || '',
-        fet_staff_id: item.fet_staff_id || '',
         email: item.email || '',
         phone_number: item.phone_number || item.telp || '',
         subject_id: item.subject_id ? String(item.subject_id) : (item.subject?.id ? String(item.subject.id) : ''),
@@ -561,10 +574,10 @@ export default function MasterDataPage() {
           const errors = {};
           if (!formData.name?.trim()) errors.name = ['Nama lengkap guru wajib diisi.'];
           if (!formData.nip?.trim()) errors.nip = ['NIP / ID Guru wajib diisi.'];
-          if (!formData.phone_number?.trim()) {
-            errors.phone_number = ['Nomor telepon wajib diisi sebagai ID login guru.'];
-          } else if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
-            errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+          if (formData.phone_number?.trim()) {
+            if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
+              errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+            }
           }
 
           if (Object.keys(errors).length > 0) {
@@ -576,9 +589,8 @@ export default function MasterDataPage() {
           const payload = {
             name: formData.name.trim(),
             nip: formData.nip.trim(),
-            fet_staff_id: formData.fet_staff_id ? formData.fet_staff_id.trim() : null,
             email: formData.email ? formData.email.trim() : null,
-            phone_number: formData.phone_number.trim(),
+            phone_number: formData.phone_number?.trim() || null,
             subject_id: formData.subject_id ? Number(formData.subject_id) : null,
           };
           try {
@@ -696,10 +708,10 @@ export default function MasterDataPage() {
           const errors = {};
           if (!formData.name?.trim()) errors.name = ['Nama lengkap guru wajib diisi.'];
           if (!formData.nip?.trim()) errors.nip = ['NIP / ID Guru wajib diisi.'];
-          if (!formData.phone_number?.trim()) {
-            errors.phone_number = ['Nomor telepon wajib diisi sebagai ID login guru.'];
-          } else if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
-            errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+          if (formData.phone_number?.trim()) {
+            if (!/^(\+62|62|0)8[1-9][0-9]{6,11}$/.test(formData.phone_number.trim().replace(/[-\s]/g, ''))) {
+              errors.phone_number = ['Format nomor telepon tidak valid. Gunakan format Indonesia (contoh: 081234567890).'];
+            }
           }
 
           if (Object.keys(errors).length > 0) {
@@ -711,9 +723,8 @@ export default function MasterDataPage() {
           const payload = {
             name: formData.name.trim(),
             nip: formData.nip?.trim() || null,
-            fet_staff_id: formData.fet_staff_id?.trim() || null,
             email: formData.email?.trim() || null,
-            phone_number: formData.phone_number.trim(),
+            phone_number: formData.phone_number?.trim() || null,
             subject_id: formData.subject_id ? Number(formData.subject_id) : null,
           };
 
@@ -981,11 +992,9 @@ export default function MasterDataPage() {
         if (!q) return true;
         const name = String(t.name || '').toLowerCase();
         const nip = String(t.nis_nip || t.nip || '').toLowerCase();
-        const fet = String(t.fet_staff_id || '').toLowerCase();
         return (
           name.includes(q) ||
-          nip.includes(q) ||
-          fet.includes(q)
+          nip.includes(q)
         );
       });
     }
@@ -1102,7 +1111,7 @@ export default function MasterDataPage() {
           name: item.name || `ID #${item.id}`,
           identifier:
             activeTab === 'guru'
-              ? item.nip || (item.fet_staff_id ? `FET: ${item.fet_staff_id}` : '-')
+              ? item.nip || item.nis_nip || '-'
               : item.nis || '-',
           reason: errMsg,
         });
@@ -1549,18 +1558,6 @@ export default function MasterDataPage() {
             ),
           },
           {
-            key: 'fet_staff_id',
-            label: 'FET Staff ID',
-            renderCell: (r) =>
-              r.fet_staff_id ? (
-                <code className="font-mono text-[11.5px] font-semibold text-gray-800 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                  {r.fet_staff_id}
-                </code>
-              ) : (
-                <span className="text-xs text-neutral-400 italic">Belum Ada</span>
-              ),
-          },
-          {
             key: 'assignments',
             label: 'Tugas Tambahan',
             renderCell: (r) => {
@@ -1872,7 +1869,7 @@ export default function MasterDataPage() {
             </>
           )}
 
-          {activeTab !== 'trash' && (
+          {activeTab !== 'trash' && activeTab !== 'penugasan' && (
             <Button variant="primary" onClick={handleOpenAdd}>
               Tambah {tabs.find((t) => t.id === activeTab)?.label}
             </Button>
@@ -1885,8 +1882,17 @@ export default function MasterDataPage() {
         <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
       </div>
 
-      {/* Toolbar (Search & Filter) */}
-      <div className="master-data__toolbar">
+      {/* Content Area */}
+      {activeTab === 'penugasan' ? (
+        <TeacherAssignmentTab
+          teacherList={teacherList}
+          classList={classList}
+          onTabCountUpdate={handleAssignmentCountUpdate}
+        />
+      ) : (
+        <>
+          {/* Toolbar (Search & Filter) */}
+          <div className="master-data__toolbar">
         <div className="master-data__search">
           <SearchInput
             placeholder={`Cari ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase()}...`}
@@ -2122,6 +2128,8 @@ export default function MasterDataPage() {
           />
         </div>
       )}
+        </>
+      )}
 
       {/* Form Modal (Create / Edit) */}
       <Modal
@@ -2256,16 +2264,8 @@ export default function MasterDataPage() {
                 required
               />
 
-              <Input
-                label="FET Staff ID"
-                placeholder="Kode Guru pada Timetable FET (Contoh: BIRAWAN)"
-                value={formData.fet_staff_id || ''}
-                onChange={(e) => setFormData({ ...formData, fet_staff_id: e.target.value })}
-                error={formErrors.fet_staff_id?.[0]}
-              />
-
               <Select
-                label="Mata Pelajaran yang Diampu"
+                label="Mata Pelajaran yang Diampu (Opsional)"
                 value={formData.subject_id || ''}
                 onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
                 error={formErrors.subject_id?.[0]}
@@ -2288,21 +2288,20 @@ export default function MasterDataPage() {
               />
 
               <Input
-                label="Nomor Telepon / WhatsApp (ID Login Guru)"
+                label="Nomor Telepon / WhatsApp (Opsional)"
                 type="tel"
                 placeholder="Contoh: 081234567890"
                 value={formData.phone_number || ''}
                 onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                 error={formErrors.phone_number?.[0]}
-                helperText="Wajib format Indonesia (08...), digunakan sebagai ID login guru"
-                required
+                helperText="Format nomor seluler Indonesia (08...)"
               />
 
               {modalType === 'create' && (
                 <div className="master-data-form__hint">
                   <Info size={16} className="text-gray-500 shrink-0 mt-0.5" />
                   <span>
-                    ID Login Guru adalah <strong>Nomor Telepon</strong> dan Kata Sandi Awal adalah <strong>NIP</strong> guru (wajib ganti kata sandi pada login pertama).
+                    ID Login Guru adalah <strong>NIP</strong> dan Kata Sandi Awal adalah <strong>GuruSCP@{'{4 angka terakhir NIP}'}!</strong> (wajib ganti kata sandi pada login pertama).
                   </span>
                 </div>
               )}
@@ -2481,8 +2480,8 @@ export default function MasterDataPage() {
               <span>Ketentuan Format Berkas Excel Guru:</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-blue-800">
-              <li>Header wajib: <strong>nip</strong> (wajib format teks/angka), <strong>name</strong>, <strong>no_telp</strong> (format 08...), <strong>fet_staff_id</strong> (kode staf pada FET), <strong>mata_pelajaran</strong> (mata pelajaran yang diampu).</li>
-              <li>Akun login guru menggunakan <strong>Nomor Telepon</strong> sebagai ID Login dan <strong>NIP</strong> sebagai kata sandi awal (wajib ganti kata sandi pada login pertama).</li>
+              <li>Header kolom: <strong>NO</strong>, <strong>NIP</strong> (18 digit PNS atau 16 digit NIK), <strong>NAMA</strong> (beserta gelar), <strong>MAPEL</strong> (mata pelajaran, opsional).</li>
+              <li>Akun login guru menggunakan <strong>NIP</strong> sebagai ID Login dan kata sandi awal berformat <strong>GuruSCP@{'{4 angka terakhir NIP}'}!</strong> (wajib ganti kata sandi pada login pertama).</li>
             </ul>
           </div>
 
@@ -2510,7 +2509,7 @@ export default function MasterDataPage() {
                 <span>Data Guru Berhasil Diimpor!</span>
               </div>
               <p className="text-xs text-emerald-700">
-                Sebanyak <strong>{teacherImportSuccess.imported_count}</strong> data guru telah berhasil diregistrasikan ke sistem beserta akun login dan ID staf FET.
+                Sebanyak <strong>{teacherImportSuccess.imported_count}</strong> data guru telah berhasil diregistrasikan ke sistem beserta akun login.
               </p>
             </div>
           )}
@@ -2788,7 +2787,7 @@ export default function MasterDataPage() {
                 </div>
                 <p className="text-xs text-neutral-500 font-mono mt-0.5">
                   {activeTab === 'guru'
-                    ? `NIP: ${detailItem.nip || detailItem.nis_nip || '-'} • Kode FET: ${detailItem.fet_staff_id || '-'}`
+                    ? `NIP: ${detailItem.nip || detailItem.nis_nip || '-'}`
                     : `NIS: ${detailItem.nis || detailItem.nis_nip || '-'} • NISN: ${detailItem.nisn || '-'}`}
                 </p>
               </div>

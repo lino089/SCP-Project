@@ -1,8 +1,8 @@
 /**
  * Helper Validasi Prasyarat Master Data (Pre-condition Gate)
  *
- * 1. checkPdfImportPrerequisites (SCP v4.5 Zero-Manual):
- *    Hanya mensyaratkan Siswa aktif dan Guru aktif dengan FET Staff ID.
+ * 1. checkPdfImportPrerequisites (SCP v4.6):
+ *    Mensyaratkan Siswa aktif dan Guru aktif.
  *    Master Ruangan dan Mata Pelajaran didaftarkan otomatis dari dokumen PDF.
  *
  * 2. checkManualSchedulePrerequisites / checkMasterDataPrerequisites:
@@ -11,7 +11,7 @@
  */
 
 /**
- * Validasi Prasyarat untuk Impor Berkas PDF Jadwal FET (SCP v4.5 Zero-Manual)
+ * Validasi Prasyarat untuk Impor Berkas PDF Jadwal FET (SCP v4.6)
  *
  * @param {Object} params
  * @param {Array} [params.students=[]] - Daftar siswa atau sampel siswa
@@ -29,13 +29,8 @@ export const checkPdfImportPrerequisites = ({
   const studentCount = totalStudents !== null ? totalStudents : (students?.length || 0);
   const teacherCount = totalTeachers !== null ? totalTeachers : (teachers?.length || 0);
 
-  const fetTeacherCount = Array.isArray(teachers)
-    ? teachers.filter((t) => t?.fet_staff_id && String(t.fet_staff_id).trim() !== '').length
-    : 0;
-
   const hasStudents = studentCount > 0;
   const hasTeachers = teacherCount > 0;
-  const hasFetStaffId = fetTeacherCount > 0;
 
   const missing = [];
   if (!hasStudents) {
@@ -43,8 +38,6 @@ export const checkPdfImportPrerequisites = ({
   }
   if (!hasTeachers) {
     missing.push('teachers');
-  } else if (!hasFetStaffId) {
-    missing.push('fet_staff_id');
   }
 
   const isReady = missing.length === 0;
@@ -54,7 +47,6 @@ export const checkPdfImportPrerequisites = ({
     const errorDetails = [];
     if (!hasStudents) errorDetails.push('Data Siswa aktif masih kosong');
     if (!hasTeachers) errorDetails.push('Data Guru aktif masih kosong');
-    else if (!hasFetStaffId) errorDetails.push('Belum ada guru yang memiliki FET Staff ID');
     message = `Prasyarat belum lengkap: ${errorDetails.join(', ')}.`;
   }
 
@@ -64,12 +56,10 @@ export const checkPdfImportPrerequisites = ({
     checks: {
       hasStudents,
       hasTeachers,
-      hasFetStaffId,
     },
     counts: {
       studentCount,
       teacherCount,
-      fetTeacherCount,
     },
     message,
   };
@@ -99,13 +89,8 @@ export const checkManualSchedulePrerequisites = ({
     missing.push('Master Mata Pelajaran');
   }
 
-  const hasFetTeachers =
-    teachers && teachers.some((t) => t?.fet_staff_id && String(t.fet_staff_id).trim() !== '');
-
   if (!teachers || teachers.length === 0) {
     missing.push('Master Guru / Tenaga Pendidik');
-  } else if (!hasFetTeachers) {
-    missing.push('Guru dengan Kode FET Staff ID (Wajib untuk Sinkronisasi Jadwal)');
   }
 
   const isReady = missing.length === 0;

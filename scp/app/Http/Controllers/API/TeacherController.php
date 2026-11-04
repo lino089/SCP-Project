@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Classes;
 use App\Models\Subject;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\TeacherAssignmentImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,25 +46,22 @@ class TeacherController extends Controller
 
             $writer->addRows([
                 [
+                    'no' => 1,
                     'nip' => '198001012010011002',
-                    'name' => 'Budi Santoso, S.Pd.',
-                    'no_telp' => '081234567801',
-                    'fet_staff_id' => '1',
-                    'mata_pelajaran' => 'Matematika',
+                    'nama' => 'Budi Santoso, S.Pd.',
+                    'mapel' => 'Matematika',
                 ],
                 [
+                    'no' => 2,
                     'nip' => '198502022015022003',
-                    'name' => 'Dewi Lestari, M.Pd.',
-                    'no_telp' => '081234567802',
-                    'fet_staff_id' => '14',
-                    'mata_pelajaran' => 'Bahasa Indonesia',
+                    'nama' => 'Dewi Lestari, M.Pd.',
+                    'mapel' => 'Bahasa Indonesia',
                 ],
                 [
+                    'no' => 3,
                     'nip' => '199003032020031004',
-                    'name' => 'Ahmad Fauzi, S.Kom.',
-                    'no_telp' => '081234567803',
-                    'fet_staff_id' => '25',
-                    'mata_pelajaran' => 'Pemrograman Web',
+                    'nama' => 'Ahmad Fauzi, S.Kom.',
+                    'mapel' => 'Rekayasa Perangkat Lunak',
                 ],
             ]);
 
@@ -91,76 +90,60 @@ class TeacherController extends Controller
         ]);
 
         $uploadedFile = $request->file('file');
-        $reader = SimpleExcelReader::create($uploadedFile->getRealPath(), 'xlsx')->trimHeaderRow()->headersToSnakeCase();
-        $headers = $reader->getHeaders();
+        $reader = SimpleExcelReader::create($uploadedFile->getRealPath(), 'xlsx')->noHeaderRow();
 
-        if (empty($headers)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Berkas Excel tidak memuat data guru atau header kosong.',
-                'errors' => null,
-            ], 422);
-        }
-
-        $hasSubjectHeader = in_array('mata_pelajaran', $headers) || in_array('mapel', $headers) || in_array('subject', $headers);
-        $hasPhoneHeader = in_array('no_telp', $headers) || in_array('no_telepon', $headers) || in_array('telp', $headers) || in_array('phone_number', $headers);
-
-        $requiredHeaders = ['nip', 'name', 'fet_staff_id'];
-        if (!$hasSubjectHeader) {
-            $requiredHeaders[] = 'mata_pelajaran';
-        }
-        if (!$hasPhoneHeader) {
-            $requiredHeaders[] = 'no_telp';
-        }
-
-        $missingHeaders = array_diff($requiredHeaders, $headers);
-
-        if (!empty($missingHeaders)) {
-            return response()->json([
-                'success' => false,
-                'message' => "Format berkas tidak valid. Kolom header " . implode(', ', $missingHeaders) . " wajib tersedia.",
-                'errors' => null,
-            ], 422);
-        }
-
-        $rows = $reader->getRows();
-        if ($rows->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Berkas Excel tidak memuat data guru.',
-                'errors' => null,
-            ], 422);
-        }
-
-        $rowNumber = 1;
+        $headerFound = false;
+        $headerRowNumber = 0;
+        $colMap = [];
+        $validTeachers = [];
         $errors = [];
         $seenNips = [];
-        $seenFetStaffIds = [];
-        $seenPhones = [];
-        $validTeachers = [];
+        $rowNumber = 0;
 
-        // Preload active NIPs, FET Staff IDs, and Phone Numbers to prevent N+1 queries
-        $existingNips = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
-        $existingFetStaffIds = User::whereNotNull('fet_staff_id')->whereNull('deleted_at')->pluck('fet_staff_id')->flip()->toArray();
-        $existingPhones = User::whereNotNull('phone_number')->whereNull('deleted_at')->pluck('phone_number')->flip()->toArray();
+        // Preload active non-deleted NIPs and their roles to prevent N+1 queries & safeguard Waka accounts
+        $existingUsers = User::whereNull('deleted_at')->pluck('role', 'nis_nip')->toArray();
 
-        foreach ($rows as $row) {
+        foreach ($reader->getRows() as $row) {
             $rowNumber++;
+            $values = array_values($row);
+            $normalized = array_map(fn($v) => strtolower(trim((string)$v)), $values);
 
-            $rawNip = isset($row['nip']) ? trim((string) $row['nip']) : '';
-            $rawName = isset($row['name']) ? trim((string) $row['name']) : '';
-            $rawFetId = isset($row['fet_staff_id']) ? trim((string) $row['fet_staff_id']) : '';
-            $rawPhone = isset($row['no_telp'])
-                ? trim((string) $row['no_telp'])
-                : (isset($row['no_telepon'])
-                    ? trim((string) $row['no_telepon'])
-                    : (isset($row['telp'])
-                        ? trim((string) $row['telp'])
-                        : (isset($row['phone_number']) ? trim((string) $row['phone_number']) : '')));
-            $normPhone = User::normalizePhoneNumber($rawPhone);
-            $rawSubject = isset($row['mata_pelajaran'])
-                ? trim((string) $row['mata_pelajaran'])
-                : (isset($row['mapel']) ? trim((string) $row['mapel']) : (isset($row['subject']) ? trim((string) $row['subject']) : ''));
+            if (!$headerFound) {
+                $nipIdx = array_search('nip', $normalized);
+                $nameIdx = array_search('nama', $normalized);
+                if ($nameIdx === false) {
+                    $nameIdx = array_search('name', $normalized);
+                }
+
+                if ($nipIdx !== false && $nameIdx !== false) {
+                    $headerFound = true;
+                    $headerRowNumber = $rowNumber;
+                    $colMap['nip'] = $nipIdx;
+                    $colMap['name'] = $nameIdx;
+
+                    $mapelIdx = array_search('mapel', $normalized);
+                    if ($mapelIdx === false) {
+                        $mapelIdx = array_search('mata_pelajaran', $normalized);
+                    }
+                    if ($mapelIdx === false) {
+                        $mapelIdx = array_search('subject', $normalized);
+                    }
+                    $colMap['mapel'] = $mapelIdx !== false ? $mapelIdx : null;
+
+                    $noIdx = array_search('no', $normalized);
+                    $colMap['no'] = $noIdx !== false ? $noIdx : null;
+                }
+                continue;
+            }
+
+            // Skip completely empty rows
+            if (empty(array_filter($values, fn($v) => trim((string)$v) !== ''))) {
+                continue;
+            }
+
+            $rawNip = isset($colMap['nip']) && isset($values[$colMap['nip']]) ? trim((string)$values[$colMap['nip']]) : '';
+            $rawName = isset($colMap['name']) && isset($values[$colMap['name']]) ? trim((string)$values[$colMap['name']]) : '';
+            $rawMapel = isset($colMap['mapel']) && isset($values[$colMap['mapel']]) ? trim((string)$values[$colMap['mapel']]) : '';
 
             // Validasi NIP
             if ($rawNip === '') {
@@ -175,12 +158,21 @@ class TeacherController extends Controller
                     'attribute' => 'nip',
                     'message' => "NIP '{$rawNip}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenNips[$rawNip]}).",
                 ];
-            } elseif (isset($existingNips[$rawNip])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'nip',
-                    'message' => "NIP '{$rawNip}' sudah terdaftar di sistem.",
-                ];
+            } elseif (isset($existingUsers[$rawNip])) {
+                $existingRole = $existingUsers[$rawNip];
+                if ($existingRole !== 'teacher') {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'nip',
+                        'message' => "NIP '{$rawNip}' terdaftar sebagai akun Administrator/Waka dan tidak dapat diubah.",
+                    ];
+                } else {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'attribute' => 'nip',
+                        'message' => "NIP '{$rawNip}' sudah terdaftar di sistem.",
+                    ];
+                }
             } else {
                 $seenNips[$rawNip] = $rowNumber;
             }
@@ -200,86 +192,47 @@ class TeacherController extends Controller
                 ];
             }
 
-            // Validasi Nomor Telepon
-            if ($rawPhone === '' || $normPhone === null) {
+            // Validasi Mata Pelajaran (opsional, maks 100 karakter jika diisi)
+            if ($rawMapel !== '' && mb_strlen($rawMapel) > 100) {
                 $errors[] = [
                     'row' => $rowNumber,
-                    'attribute' => 'no_telp',
-                    'message' => 'Kolom nomor telepon (no_telp) wajib diisi sebagai ID login guru.',
-                ];
-            } elseif (!preg_match('/^08[0-9]{8,13}$/', $normPhone)) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'no_telp',
-                    'message' => "Format nomor telepon '{$rawPhone}' tidak valid (wajib nomor seluler Indonesia yang valid, contoh: 081234567890).",
-                ];
-            } elseif (isset($seenPhones[$normPhone])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'no_telp',
-                    'message' => "Nomor telepon '{$normPhone}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenPhones[$normPhone]}).",
-                ];
-            } elseif (isset($existingPhones[$normPhone])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'no_telp',
-                    'message' => "Nomor telepon '{$normPhone}' sudah terdaftar di sistem.",
-                ];
-            } else {
-                $seenPhones[$normPhone] = $rowNumber;
-            }
-
-            // Validasi fet_staff_id
-            if ($rawFetId === '') {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'fet_staff_id',
-                    'message' => 'Kolom fet_staff_id wajib diisi.',
-                ];
-            } elseif (isset($seenFetStaffIds[$rawFetId])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'fet_staff_id',
-                    'message' => "ID staf FET '{$rawFetId}' duplikat di dalam berkas ini (pertama kali muncul di baris {$seenFetStaffIds[$rawFetId]}).",
-                ];
-            } elseif (isset($existingFetStaffIds[$rawFetId])) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'fet_staff_id',
-                    'message' => "ID staf FET '{$rawFetId}' sudah terdaftar di sistem.",
-                ];
-            } else {
-                $seenFetStaffIds[$rawFetId] = $rowNumber;
-            }
-
-            // Validasi Mata Pelajaran
-            if ($rawSubject === '') {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'mata_pelajaran',
-                    'message' => 'Kolom mata pelajaran wajib diisi.',
-                ];
-            } elseif (mb_strlen($rawSubject) > 100) {
-                $errors[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'mata_pelajaran',
+                    'attribute' => 'mapel',
                     'message' => 'Nama mata pelajaran tidak boleh melebihi 100 karakter.',
                 ];
             }
 
+            // Password Awal: Opsi 1 (GuruSCP@{4_digit_terakhir_NIP}!)
+            $last4 = substr($rawNip, -4);
+            $initialPassword = 'GuruSCP@' . $last4 . '!';
+
             $validTeachers[] = [
-                'subject_name' => $rawSubject,
+                'subject_name' => $rawMapel,
                 'data' => [
                     'name' => $rawName,
                     'role' => 'teacher',
                     'nis_nip' => $rawNip,
-                    'password' => Hash::make($rawNip, ['rounds' => 4]),
-                    'fet_staff_id' => $rawFetId,
+                    'password' => Hash::make($initialPassword),
                     'email' => null,
-                    'phone_number' => $normPhone,
+                    'phone_number' => null,
                     'must_change_password' => true,
                 ],
             ];
+        }
+
+        if (!$headerFound) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format berkas tidak valid. Kolom header NIP dan NAMA wajib tersedia.',
+                'errors' => null,
+            ], 422);
+        }
+
+        if (empty($validTeachers) && empty($errors)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Berkas Excel tidak memuat data guru.',
+                'errors' => null,
+            ], 422);
         }
 
         if (!empty($errors)) {
@@ -294,18 +247,22 @@ class TeacherController extends Controller
             $subjectCache = [];
             foreach ($validTeachers as $item) {
                 $subjectName = $item['subject_name'];
-                $key = mb_strtolower($subjectName);
+                $subjectId = null;
 
-                if (!isset($subjectCache[$key])) {
-                    $found = Subject::whereRaw('LOWER(name) = ?', [$key])->first();
-                    if (!$found) {
-                        $found = Subject::create(['name' => $subjectName]);
+                if ($subjectName !== '') {
+                    $key = mb_strtolower($subjectName);
+                    if (!isset($subjectCache[$key])) {
+                        $found = Subject::whereRaw('LOWER(name) = ?', [$key])->first();
+                        if (!$found) {
+                            $found = Subject::create(['name' => $subjectName]);
+                        }
+                        $subjectCache[$key] = $found;
                     }
-                    $subjectCache[$key] = $found;
+                    $subjectId = $subjectCache[$key]->id;
                 }
 
                 $teacherData = $item['data'];
-                $teacherData['subject_id'] = $subjectCache[$key]->id;
+                $teacherData['subject_id'] = $subjectId;
 
                 User::create($teacherData);
             }
@@ -338,8 +295,7 @@ class TeacherController extends Controller
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
             $query->where(function ($q) use ($search, $like) {
                 $q->where('name', $like, '%' . $search . '%')
-                    ->orWhere('nis_nip', $like, '%' . $search . '%')
-                    ->orWhere('fet_staff_id', $like, '%' . $search . '%');
+                    ->orWhere('nis_nip', $like, '%' . $search . '%');
             });
         }
 
@@ -359,7 +315,7 @@ class TeacherController extends Controller
     }
 
     /**
-     * Menambahkan akun guru baru (Kredensial Login: No. Telepon, Password Awal: NIP).
+     * Menambahkan akun guru baru (Kredensial Login: NIP, Password Awal: Opsi 1).
      */
     public function store(Request $request): JsonResponse
     {
@@ -385,26 +341,20 @@ class TeacherController extends Controller
                 Rule::unique('users', 'nis_nip')->whereNull('deleted_at'),
             ],
             'phone_number' => [
-                'required',
+                'nullable',
                 'string',
                 'regex:/^08[0-9]{8,13}$/',
                 Rule::unique('users', 'phone_number')->whereNull('deleted_at'),
             ],
-            'fet_staff_id' => [
-                'nullable',
-                'string',
-                'max:50',
-                Rule::unique('users', 'fet_staff_id')->whereNull('deleted_at'),
-            ],
             'email' => 'nullable|email|unique:users,email',
             'subject_id' => 'nullable|exists:subjects,id',
         ], [
-            'phone_number.required' => 'Nomor telepon guru wajib diisi sebagai ID login.',
             'phone_number.regex' => 'Format nomor telepon harus berupa nomor seluler Indonesia yang valid (contoh: 081234567890).',
             'phone_number.unique' => 'Nomor telepon sudah terdaftar di sistem.',
         ]);
 
         $nip = $request->input('nip') ?? $request->input('nis_nip');
+        $initialPassword = 'GuruSCP@' . substr($nip, -4) . '!';
 
         $teacher = User::create([
             'name' => $request->name,
@@ -413,8 +363,7 @@ class TeacherController extends Controller
             'email' => $request->input('email'),
             'phone_number' => $request->input('phone_number'),
             'subject_id' => $request->input('subject_id'),
-            'fet_staff_id' => $request->fet_staff_id,
-            'password' => Hash::make($nip),
+            'password' => Hash::make($initialPassword),
             'must_change_password' => true,
         ]);
 
@@ -425,7 +374,7 @@ class TeacherController extends Controller
             'message' => 'Akun guru berhasil dibuat.',
             'data' => [
                 'teacher' => $teacher,
-                'password' => $nip,
+                'password' => $initialPassword,
             ],
         ], 201);
     }
@@ -463,17 +412,10 @@ class TeacherController extends Controller
                 Rule::unique('users', 'nis_nip')->ignore($teacher->id)->whereNull('deleted_at'),
             ],
             'phone_number' => [
-                'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'regex:/^08[0-9]{8,13}$/',
                 Rule::unique('users', 'phone_number')->ignore($teacher->id)->whereNull('deleted_at'),
-            ],
-            'fet_staff_id' => [
-                'nullable',
-                'string',
-                'max:50',
-                Rule::unique('users', 'fet_staff_id')->ignore($teacher->id)->whereNull('deleted_at'),
             ],
             'email' => [
                 'nullable',
@@ -482,7 +424,6 @@ class TeacherController extends Controller
             ],
             'subject_id' => 'nullable|exists:subjects,id',
         ], [
-            'phone_number.required' => 'Nomor telepon guru wajib diisi.',
             'phone_number.regex' => 'Format nomor telepon harus berupa nomor seluler Indonesia yang valid (contoh: 081234567890).',
             'phone_number.unique' => 'Nomor telepon sudah terdaftar di sistem.',
         ]);
@@ -495,13 +436,10 @@ class TeacherController extends Controller
             $newNip = $request->input('nip') ?? $request->input('nis_nip');
             $data['nis_nip'] = $newNip;
             // Jika guru belum pernah ganti password mandiri (masih password awal),
-            // sinkronkan password ke NIP baru
+            // sinkronkan password ke format password awal NIP baru
             if ($teacher->must_change_password) {
-                $data['password'] = Hash::make($newNip, ['rounds' => 4]);
+                $data['password'] = Hash::make('GuruSCP@' . substr($newNip, -4) . '!');
             }
-        }
-        if ($request->has('fet_staff_id')) {
-            $data['fet_staff_id'] = $request->fet_staff_id;
         }
         if ($request->has('email')) {
             $data['email'] = $request->email;
@@ -570,12 +508,26 @@ class TeacherController extends Controller
         ]);
 
         if ($request->type === 'wali_kelas') {
-            $existing = TeacherAssignment::where('type', 'wali_kelas')
+            // 1. Validasi Ketat: Seorang guru hanya boleh mengampu maksimal 1 rombel kelas sebagai Wali Kelas
+            $existingTeacherWali = TeacherAssignment::where('type', 'wali_kelas')
+                ->where('user_id', $teacher->id)
+                ->where('class_id', '!=', $request->class_id)
+                ->first();
+
+            if ($existingTeacherWali) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Guru ini sudah menjadi wali kelas di kelas lain. Setiap guru hanya diperbolehkan mengampu maksimal 1 rombel kelas sebagai Wali Kelas.',
+                ], 422);
+            }
+
+            // 2. Validasi Ketat: Satu rombel kelas hanya boleh memiliki tepat 1 wali kelas aktif
+            $existingClassWali = TeacherAssignment::where('type', 'wali_kelas')
                 ->where('class_id', $request->class_id)
                 ->where('user_id', '!=', $teacher->id)
                 ->first();
 
-            if ($existing) {
+            if ($existingClassWali) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Kelas ini sudah memiliki wali kelas aktif.',
@@ -592,8 +544,72 @@ class TeacherController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Tugas tambahan berhasil diberikan.',
-            'data' => $assignment,
+            'data' => $assignment->load(['schoolClass:id,name,level', 'teacher:id,name,nis_nip']),
         ], 201);
+    }
+
+    /**
+     * Mengambil matriks pemetaan seluruh rombel kelas dengan Wali Kelas dan Petugas BK/Kesiswaan binaan.
+     * GET /api/teachers/assignments/matrix
+     */
+    public function getAssignmentMatrix(Request $request): JsonResponse
+    {
+        $classes = Classes::query()
+            ->orderBy('level')
+            ->orderBy('name')
+            ->with([
+                'teacherAssignments' => function ($q) {
+                    $q->with('teacher:id,name,nis_nip,email,phone_number');
+                },
+            ])
+            ->get();
+
+        $matrix = $classes->map(function ($cls) {
+            $assignments = $cls->teacherAssignments ?? collect();
+
+            $waliAssignment = $assignments->firstWhere('type', 'wali_kelas');
+            $wali = $waliAssignment?->teacher;
+            $kesiswaanAssignments = $assignments->where('type', 'kesiswaan')->values();
+
+            return [
+                'class_id' => $cls->id,
+                'class_name' => $cls->name,
+                'level' => $cls->level,
+                'wali_kelas' => $wali ? [
+                    'assignment_id' => $waliAssignment->id,
+                    'id' => $wali->id,
+                    'name' => $wali->name,
+                    'nis_nip' => $wali->nis_nip,
+                    'phone_number' => $wali->phone_number,
+                ] : null,
+                'kesiswaan' => $kesiswaanAssignments->map(function ($asgn) {
+                    $t = $asgn->teacher;
+                    if (!$t) return null;
+                    return [
+                        'assignment_id' => $asgn->id,
+                        'id' => $t->id,
+                        'name' => $t->name,
+                        'nis_nip' => $t->nis_nip,
+                        'phone_number' => $t->phone_number,
+                    ];
+                })->filter()->values()->toArray(),
+            ];
+        });
+
+        $totalClasses = $classes->count();
+        $classesWithWali = $matrix->filter(fn($item) => !empty($item['wali_kelas']))->count();
+        $classesWithKesiswaan = $matrix->filter(fn($item) => !empty($item['kesiswaan']))->count();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Matriks penugasan guru berhasil diambil.',
+            'data' => $matrix,
+            'summary' => [
+                'total_classes' => $totalClasses,
+                'classes_with_wali' => $classesWithWali,
+                'classes_with_kesiswaan' => $classesWithKesiswaan,
+            ],
+        ], 200);
     }
 
     /**
@@ -610,6 +626,64 @@ class TeacherController extends Controller
             'success' => true,
             'message' => 'Penugasan guru berhasil dicabut.',
             'data' => null,
+        ], 200);
+    }
+
+    /**
+     * Menganalisis berkas Excel penugasan dan menghasilkan pratinjau pemetaan (tanpa mengubah database).
+     * POST /api/teachers/assignments/import-preview
+     */
+    public function importPreview(Request $request, TeacherAssignmentImportService $importService): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx|max:5120',
+        ], [
+            'file.required' => 'Berkas Excel penugasan wajib diunggah.',
+            'file.mimes' => 'Format berkas harus berupa spreadsheet dengan ekstensi .xlsx.',
+            'file.max' => 'Ukuran berkas Excel tidak boleh melebihi 5 MB.',
+        ]);
+
+        $preview = $importService->generatePreview($request->file('file'));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Analisis berkas Excel penugasan berhasil.',
+            'preview_token' => $preview['preview_token'],
+            'expires_at' => $preview['expires_at'],
+            'summary' => $preview['summary'],
+            'data' => $preview['data'],
+        ], 200);
+    }
+
+    /**
+     * Menyimpan hasil konfirmasi pemetaan penugasan ke database secara atomik.
+     * POST /api/teachers/assignments/import-commit
+     */
+    public function importCommit(Request $request, TeacherAssignmentImportService $importService): JsonResponse
+    {
+        $request->validate([
+            'preview_token' => 'required|string',
+            'items' => 'required|array|min:1',
+            'items.*.class_id' => 'required|integer|exists:classes,id',
+            'items.*.wali_teacher_id' => 'required|integer|exists:users,id',
+            'items.*.bk_teacher_id' => 'required|integer|exists:users,id',
+        ], [
+            'preview_token.required' => 'Token pratinjau wajib disertakan.',
+            'items.required' => 'Daftar pemetaan penugasan kelas wajib dikirimkan.',
+            'items.*.class_id.exists' => 'Salah satu kelas yang dipilih tidak valid di database.',
+            'items.*.wali_teacher_id.exists' => 'Salah satu guru wali kelas yang dipilih tidak valid di database.',
+            'items.*.bk_teacher_id.exists' => 'Salah satu guru BK yang dipilih tidak valid di database.',
+        ]);
+
+        $result = $importService->commit(
+            $request->input('preview_token'),
+            $request->input('items')
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data penugasan Wali Kelas dan BK/Kesiswaan berhasil disimpan.',
+            'summary' => $result,
         ], 200);
     }
 }

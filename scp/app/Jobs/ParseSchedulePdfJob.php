@@ -227,32 +227,15 @@ class ParseSchedulePdfJob implements ShouldQueue
 
     protected function findTeacher($teachers, ?string $fetStaffId, ?string $teacherRaw): ?User
     {
-        // Priority 1: Primary lookup via fet_staff_id
-        if ($fetStaffId !== null && $fetStaffId !== '') {
-            $match = $teachers->first(fn ($t) => (string) $t->fet_staff_id === (string) $fetStaffId);
-            if ($match) {
-                return $match;
-            }
-        }
-
-        // Priority 2: Fallback to teacher name matching
-        // CRITICAL: If row specifies a fet_staff_id, NEVER match a teacher with a DIFFERENT non-empty fet_staff_id!
         if ($teacherRaw) {
             $cleanRaw = strtoupper(trim($teacherRaw));
 
-            $candidates = $teachers;
-            if ($fetStaffId !== null && $fetStaffId !== '') {
-                $candidates = $teachers->filter(function ($t) use ($fetStaffId) {
-                    return empty($t->fet_staff_id) || (string) $t->fet_staff_id === (string) $fetStaffId;
-                });
-            }
-
             // Exact match
-            $match = $candidates->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
+            $match = $teachers->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
             if ($match) return $match;
 
             // Substring match
-            $match = $candidates->first(
+            $match = $teachers->first(
                 fn ($t) => stripos($t->name, $cleanRaw) !== false || stripos($cleanRaw, $t->name) !== false
             );
             if ($match) return $match;
@@ -261,7 +244,7 @@ class ParseSchedulePdfJob implements ShouldQueue
             $cleanNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', $cleanRaw);
             $cleanNoTitle = trim($cleanNoTitle);
             if ($cleanNoTitle && $cleanNoTitle !== $cleanRaw) {
-                $match = $candidates->first(function ($t) use ($cleanNoTitle) {
+                $match = $teachers->first(function ($t) use ($cleanNoTitle) {
                     $tNameNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', strtoupper($t->name));
                     return stripos($tNameNoTitle, $cleanNoTitle) !== false || stripos($cleanNoTitle, $tNameNoTitle) !== false;
                 });

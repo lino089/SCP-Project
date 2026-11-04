@@ -89,12 +89,25 @@ export const recycleBinApi = {
   forceDeleteData: (entity, id, data) => api.delete(`/master/${entity}/${id}/force`, { data }),
 };
 
+export const teacherAssignmentApi = {
+  getAssignmentMatrix: () => api.get('/teachers/assignments/matrix'),
+  assignRole: (teacherId, data) => api.post(`/teachers/${teacherId}/assignments`, data),
+  revokeRole: (teacherId, assignmentId) => api.delete(`/teachers/${teacherId}/assignments/${assignmentId}`),
+  importPreview: (formData) =>
+    api.post('/teachers/assignments/import-preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }),
+  importCommit: (payload) => api.post('/teachers/assignments/import-commit', payload),
+};
+
 export default {
   summary: masterDataSummaryApi,
   classes: classApi,
   rooms: roomApi,
   subjects: subjectApi,
   teachers: teacherApi,
+  teacherAssignments: teacherAssignmentApi,
   students: studentApi,
   recycleBin: recycleBinApi,
 };

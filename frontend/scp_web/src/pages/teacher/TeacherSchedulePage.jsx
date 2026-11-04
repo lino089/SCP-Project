@@ -155,7 +155,6 @@ export default function TeacherSchedulePage() {
         room_id: s.room_id || s.room?.id,
         subject_id: s.subject_id || s.subject?.id,
         teacherName: s.teacher?.name || s.teacherName || user?.name || 'Guru',
-        fetStaffId: s.teacher?.fet_staff_id,
         className:
           s.school_class?.name ||
           s.schoolClass?.name ||
@@ -223,7 +222,6 @@ export default function TeacherSchedulePage() {
         room_id: s.room_id || s.room?.id,
         subject_id: s.subject_id || s.subject?.id,
         teacherName: s.teacher?.name || s.teacherName || 'Guru',
-        fetStaffId: s.teacher?.fet_staff_id,
         className:
           s.school_class?.name ||
           s.schoolClass?.name ||

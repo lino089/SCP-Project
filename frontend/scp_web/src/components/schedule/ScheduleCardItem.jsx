@@ -20,10 +20,9 @@ export default function ScheduleCardItem({
     (item?.class_id ? `Kelas #${item.class_id}` : '-');
   const roomName = item?.room?.name || item?.roomName || 'Ruang';
   const teacherName = item?.teacher?.name || item?.teacherName || 'Guru';
-  const fetStaffId = item?.teacher?.fet_staff_id || item?.fetStaffId;
   const duration = item?.duration_periods || item?.duration || 1;
 
-  const displayTeacher = fetStaffId ? `"${fetStaffId}. ${teacherName}"` : teacherName;
+  const displayTeacher = teacherName;
 
   return (
     <div

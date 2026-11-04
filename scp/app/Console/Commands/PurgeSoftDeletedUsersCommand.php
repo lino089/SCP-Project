@@ -65,7 +65,6 @@ class PurgeSoftDeletedUsersCommand extends Command
                 $user->email = "deleted_{$originalId}_{$timestamp}@archived.local";
                 $user->nis_nip = "DEL_{$originalId}_{$originalIdentifier}";
                 $user->name = "[Arsip] {$user->name}";
-                $user->fet_staff_id = null;
                 $user->google_id = null;
                 $user->phone_number = null;
                 $user->is_active = false;

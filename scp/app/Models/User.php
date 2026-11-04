@@ -27,7 +27,6 @@ use Laravel\Sanctum\HasApiTokens;
     'must_change_password',
     'class_id',
     'linked_student_id',
-    'fet_staff_id',
     'google_id',
     'phone_number',
     'graduation_date',
@@ -120,11 +119,60 @@ class User extends Authenticatable
     }
 
     /**
-     * Memeriksa apakah guru memiliki penugasan Kesiswaan
+     * Memeriksa apakah guru memiliki penugasan Kesiswaan (opsional: untuk kelas binaan tertentu)
      */
-    public function isKesiswaan(): bool
+    public function isKesiswaan(?int $classId = null): bool
     {
-        return $this->hasAssignment('kesiswaan');
+        if ($this->role !== 'teacher') {
+            return false;
+        }
+
+        $query = $this->assignments()->where('type', 'kesiswaan');
+        if ($classId !== null) {
+            $query->where(function ($q) use ($classId) {
+                $q->where('class_id', $classId)
+                  ->orWhereNull('class_id'); // Dukung penugasan global legacy
+            });
+        }
+
+        return $query->exists();
+    }
+
+    /**
+     * Mengambil daftar ID kelas yang dibina oleh Guru BK / Kesiswaan ini
+     *
+     * @return array<int>
+     */
+    public function getKesiswaanClassIds(): array
+    {
+        if ($this->role !== 'teacher') {
+            return [];
+        }
+
+        return $this->assignments()
+            ->where('type', 'kesiswaan')
+            ->whereNotNull('class_id')
+            ->pluck('class_id')
+            ->map(fn($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Mengambil ID kelas di mana guru ini bertindak sebagai Wali Kelas aktif
+     */
+    public function getWaliKelasClassId(): ?int
+    {
+        if ($this->role !== 'teacher') {
+            return null;
+        }
+
+        $classId = $this->assignments()
+            ->where('type', 'wali_kelas')
+            ->value('class_id');
+
+        return $classId !== null ? (int) $classId : null;
     }
 
     /**

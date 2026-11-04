@@ -221,7 +221,6 @@ export default function ScheduleManagementPage() {
         room_id: s.room_id || s.room?.id,
         subject_id: s.subject_id || s.subject?.id,
         teacherName: s.teacher?.name || s.teacherName || 'Guru',
-        fetStaffId: s.teacher?.fet_staff_id,
         className: s.school_class?.name || s.className || 'Kelas',
         level: s.school_class?.level || s.level || 10,
         roomName: s.room?.name || s.roomName || 'Ruang',
@@ -1136,9 +1135,7 @@ export default function ScheduleManagementPage() {
                                             </span>
                                           </div>
                                           <span className="schedule-card__teacher">
-                                            {item.fetStaffId
-                                              ? `"${item.fetStaffId}. ${item.teacherName}"`
-                                              : item.teacherName}
+                                            {item.teacherName}
                                           </span>
                                           <div className="schedule-card__badge-row">
                                             <span className="schedule-card__info-tag font-mono">
@@ -1319,7 +1316,7 @@ export default function ScheduleManagementPage() {
             value={String(formData.teacher_id)}
             options={teacherList.map((t) => ({
               value: String(t.id),
-              label: `${t.name} ${t.fet_staff_id ? `[FET: ${t.fet_staff_id}]` : ''}`,
+              label: `${t.name} ${t.nis_nip ? `[NIP: ${t.nis_nip}]` : ''}`,
             }))}
             onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
             required

@@ -148,7 +148,6 @@ export default function StudentSchedulePage() {
         room_id: s.room_id || s.room?.id,
         subject_id: s.subject_id || s.subject?.id,
         teacherName: s.teacher?.name || s.teacherName || 'Guru Pengampu',
-        fetStaffId: s.teacher?.fet_staff_id,
         className:
           s.school_class?.name ||
           s.schoolClass?.name ||
@@ -511,9 +510,7 @@ export default function StudentSchedulePage() {
                 <span className="schedule-detail-value flex items-center gap-1.5">
                   <User size={14} className="text-gray-400 shrink-0" />
                   <span>
-                    {selectedDetailSchedule.fetStaffId
-                      ? `"${selectedDetailSchedule.fetStaffId}. ${selectedDetailSchedule.teacherName}"`
-                      : selectedDetailSchedule.teacherName}
+                    {selectedDetailSchedule.teacherName}
                   </span>
                 </span>
               </div>

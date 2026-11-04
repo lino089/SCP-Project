@@ -1,0 +1,343 @@
+/* TeacherAssignment.css - Professional Styling for Teacher Assignment & Import Wizard */
+
+/* 1. Statistics Cards Grid */
+.assignment-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 640px) {
+  .assignment-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .assignment-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.assignment-stat-card {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.assignment-stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+}
+
+.assignment-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.assignment-stat-icon--primary {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.assignment-stat-icon--success {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.assignment-stat-icon--warning {
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+.assignment-stat-icon--info {
+  background-color: #f5f3ff;
+  color: #7c3aed;
+}
+
+.assignment-stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.assignment-stat-value {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.assignment-stat-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* 2. Sub-header Toolbar */
+.assignment-tab__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.assignment-tab__toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.assignment-tab__toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 3. Status Badges in Table */
+.assignment-badge-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: #9ca3af;
+  background-color: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px dashed #d1d5db;
+}
+
+.assignment-teacher-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assignment-teacher-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.assignment-teacher-nip {
+  font-size: 0.6875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #6b7280;
+}
+
+.assignment-kesiswaan-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assignment-kesiswaan-badge {
+  display: inline-flex;
+  flex-direction: column;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+/* 4. Edit Modal Specific */
+.assignment-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assignment-edit-class-header {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assignment-section-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assignment-helper-text {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.assignment-warning-pill {
+  font-size: 0.6875rem;
+  color: #b45309;
+  background-color: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+/* 5. Import Wizard Specific */
+.import-wizard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.import-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 36px 20px;
+  text-align: center;
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-dropzone:hover {
+  border-color: #3b82f6;
+  background-color: #f0f7ff;
+}
+
+.import-dropzone--active {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+.import-summary-banner {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 640px) {
+  .import-summary-banner {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.import-summary-item {
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  border: 1px solid transparent;
+}
+
+.import-summary-item--total {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.import-summary-item--exact {
+  background-color: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.import-summary-item--fuzzy {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.import-summary-item--notfound {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.import-table-container {
+  max-height: 440px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.import-table th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.import-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.import-table tr:hover {
+  background-color: #f8fafc;
+}
+
+.import-row--exact {
+  background-color: #ffffff;
+}
+
+.import-row--fuzzy {
+  background-color: #fffdf5;
+}
+
+.import-row--notfound {
+  background-color: #fff5f5;
+}
+
+.import-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.import-status-tag--exact {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.import-status-tag--fuzzy {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.import-status-tag--notfound {
+  background-color: #fee2e2;
+  color: #991b1b;
+}

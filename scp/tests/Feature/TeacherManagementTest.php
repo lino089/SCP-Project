@@ -37,7 +37,6 @@ class TeacherManagementTest extends TestCase
             'name' => 'Budi Santoso',
             'email' => 'budi@example.com',
             'nis_nip' => '198001012010011002',
-            'fet_staff_id' => 'BS01',
             'role' => 'teacher',
             'password' => Hash::make('password123'),
             'must_change_password' => false,
@@ -61,16 +60,16 @@ class TeacherManagementTest extends TestCase
             ->assertJson([
                 'success' => true,
             ])
-            ->assertJsonPath('data.0.fet_staff_id', 'BS01')
+            ->assertJsonPath('data.0.nis_nip', '198001012010011002')
             ->assertJsonPath('data.0.assignments.0.type', 'wali_kelas');
 
-        $searchResponse = $this->getJson('/api/teachers?search=BS01');
+        $searchResponse = $this->getJson('/api/teachers?search=Budi');
         $searchResponse->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.name', 'Budi Santoso');
     }
 
-    public function test_waka_can_create_teacher_with_fet_staff_id(): void
+    public function test_waka_can_create_teacher_with_nip_and_option_1_password(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -78,7 +77,6 @@ class TeacherManagementTest extends TestCase
             'name' => 'Dewi Lestari',
             'nip' => '198505052015022001',
             'phone_number' => '081234567891',
-            'fet_staff_id' => 'DL02',
         ]);
 
         $response->assertStatus(201)
@@ -87,15 +85,14 @@ class TeacherManagementTest extends TestCase
                 'data' => [
                     'teacher' => [
                         'name' => 'Dewi Lestari',
-                        'fet_staff_id' => 'DL02',
                         'role' => 'teacher',
                     ],
+                    'password' => 'GuruSCP@2001!',
                 ],
             ]);
 
         $this->assertDatabaseHas('users', [
             'nis_nip' => '198505052015022001',
-            'fet_staff_id' => 'DL02',
             'role' => 'teacher',
         ]);
     }
@@ -106,7 +103,6 @@ class TeacherManagementTest extends TestCase
 
         $response = $this->putJson('/api/teachers/' . $this->teacher->id, [
             'name' => 'Budi Santoso, M.Kom',
-            'fet_staff_id' => 'BS99',
         ]);
 
         $response->assertStatus(200)
@@ -114,14 +110,12 @@ class TeacherManagementTest extends TestCase
                 'success' => true,
                 'data' => [
                     'name' => 'Budi Santoso, M.Kom',
-                    'fet_staff_id' => 'BS99',
                 ],
             ]);
 
         $this->assertDatabaseHas('users', [
             'id' => $this->teacher->id,
             'name' => 'Budi Santoso, M.Kom',
-            'fet_staff_id' => 'BS99',
         ]);
     }
 
@@ -276,7 +270,7 @@ class TeacherManagementTest extends TestCase
         $this->deleteJson('/api/teachers/' . $this->teacher->id)->assertStatus(403);
     }
 
-    public function test_create_teacher_fails_without_phone_number(): void
+    public function test_create_teacher_succeeds_without_phone_number(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -285,8 +279,11 @@ class TeacherManagementTest extends TestCase
             'nip' => '198901012015011001',
         ]);
 
-        $response->assertStatus(422)
-            ->assertJsonValidationErrors(['phone_number']);
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('users', [
+            'nis_nip' => '198901012015011001',
+            'phone_number' => null,
+        ]);
     }
 
     public function test_create_teacher_fails_with_invalid_phone_format(): void

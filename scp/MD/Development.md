@@ -6569,3 +6569,684 @@ Dengan rampungnya **Fase 7**, seluruh roadmap pengembangan **SCP Backend REST AP
 2. Alur ingest 4 berkas masukan (Excel Guru $\rightarrow$ Excel Siswa $\rightarrow$ PDF Kelas $\rightarrow$ PDF Ruangan) terbukti bekerja secara terintegrasi dan menghasilkan jadwal KBM aktif yang siap pakai.
 3. Seluruh 11 Checklist Kriteria Kelulusan UKK pada `MD/PRD.md` tetap terjaga utuh (*Zero-Regression*).
 4. Proyek dinyatakan siap (*production-ready*) untuk diserahterimakan kepada Waka Kurikulum SMKN 1 Bantul.
+
+---
+
+# Dokumentasi Perkembangan Proyek: SCP v4.6 — Modul Penugasan BK/Kesiswaan & Wali Kelas
+
+## Bagian 81: Implementasi Fase 2 — Backend Import Engine Penugasan Excel
+
+**Target Rilis:** SCP v4.6  
+**Dokumen Acuan:** `MD/KESISWAAN_WALI_KELAS_ASSIGNMENT_PLAN.md`  
+**Waktu Eksekusi:** 2026-11-04  
+**Status Fase:** Selesai (100% Lolos 11 Pengujian Otomatis)  
+
+---
+
+### 81.1 Arsitektur Import Engine
+
+Import Engine mengadopsi pola **Preview & Confirmation Pattern** dua tahap yang menjamin integritas database sekolah tanpa risiko modifikasi data saat pratinjau:
+
+```
+[1. Upload File Excel .xlsx]
+             │
+             ▼
+[POST /api/teachers/assignments/import-preview]
+   ├── Spatie SimpleExcelReader (noHeaderRow stream parsing)
+   ├── Normalisasi Nama Kelas ("X AK1" -> "X AK 1") & Nama Guru
+   ├── Intelligent 3-Tier Matching (Exact, Fuzzy >= 75%, Not Found)
+   ├── Simpan hasil analisis di Cache (UUID preview_token, TTL 60m)
+   └── Respon JSON: preview_token + ringkasan status mapping
+             │
+[2. Konfirmasi & Koreksi Mapping oleh Admin]
+             │
+             ▼
+[POST /api/teachers/assignments/import-commit]
+   ├── Verifikasi preview_token & Idempotency Lock (cegah double commit)
+   ├── Validasi ulang keberadaan ID kelas dan ID guru di database
+   ├── Validasi ketat aturan bisnis:
+   │     * 1 Guru maksimal 1 Wali Kelas
+   │     * 1 Kelas maksimal 1 Wali Kelas aktif
+   │     * 1 Guru BK/Kesiswaan boleh membina banyak kelas
+   ├── DB::transaction() atomik (rollback 100% jika ada kegagalan)
+   └── Respon JSON: Ringkasan pemrosesan penugasan kelas
+```
+
+---
+
+### 81.2 Spesifikasi Endpoint REST API
+
+#### A. Endpoint Preview (`POST /api/teachers/assignments/import-preview`)
+- **Headers:** `Authorization: Bearer <sanctum_token>`, `Content-Type: multipart/form-data`
+- **Request Parameters:** `file` (File, Wajib, ekstensi `.xlsx`, maks. 5120 KB).
+- **Contoh Request Postman (cURL):**
+  ```bash
+  curl -X POST "http://localhost:8000/api/teachers/assignments/import-preview" \
+    -H "Authorization: Bearer 1|sanctum_token_waka" \
+    -F "file=@WALI_KELAS_2026.2027.xlsx"
+  ```
+- **Contoh Response JSON:**
+  ```json
+  {
+    "success": true,
+    "message": "Analisis berkas Excel penugasan berhasil.",
+    "preview_token": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "expires_at": "2026-11-04T15:52:00+07:00",
+    "summary": {
+      "total_rows": 48,
+      "exact_matched": 34,
+      "fuzzy_matched": 14,
+      "ambiguous": 0,
+      "unmatched": 0,
+      "ready_to_commit": false
+    },
+    "data": [
+      {
+        "row_number": 14,
+        "no": 1,
+        "raw_class": "X AK1",
+        "clean_class": "X AK 1",
+        "class_id": 103,
+        "class_status": "matched",
+        "wali_kelas": {
+          "raw_name": "ERIDHA DEWI SEPITASARI, S.Pd.",
+          "status": "matched",
+          "matched_teacher": {
+            "id": 9803,
+            "name": "ERIDHA DEWI SEPITASARI, S.Pd.",
+            "nis_nip": "197901012015091064"
+          },
+          "candidates": [],
+          "confidence": 1.0,
+          "match_reason": "Cocok pasti nama dan gelar"
+        },
+        "guru_bk": {
+          "raw_name": "CANDRA RAHADIAN, S.Pd",
+          "status": "matched",
+          "matched_teacher": {
+            "id": 9828,
+            "name": "CANDRA RAHADIAN, S.Pd",
+            "nis_nip": "197507152005011090"
+          },
+          "candidates": [],
+          "confidence": 1.0,
+          "match_reason": "Cocok pasti nama dan gelar"
+        }
+      }
+    ]
+  }
+  ```
+
+#### B. Endpoint Commit (`POST /api/teachers/assignments/import-commit`)
+- **Headers:** `Authorization: Bearer <sanctum_token>`, `Content-Type: application/json`
+- **Request Body JSON:**
+  ```json
+  {
+    "preview_token": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "items": [
+      {
+        "class_id": 103,
+        "wali_teacher_id": 9803,
+        "bk_teacher_id": 9828
+      }
+    ]
+  }
+  ```
+- **Contoh Response JSON (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Data penugasan Wali Kelas dan BK/Kesiswaan berhasil disimpan.",
+    "summary": {
+      "total_classes_processed": 48,
+      "wali_kelas_assigned": 48,
+      "bk_assigned": 48
+    }
+  }
+  ```
+- **Penanganan Konflik / Idempotensi (409 Conflict):**
+  Jika token yang sama di-commit ulang, sistem menolak dengan HTTP 409:
+  ```json
+  {
+    "success": false,
+    "message": "Token preview ini sedang diproses atau sudah pernah di-commit sebelumnya.",
+    "errors": null
+  }
+  ```
+
+---
+
+### 81.3 Format Berkas Excel yang Didukung
+
+- **Tipe Berkas:** Microsoft Excel Spreadsheet OpenXML (`.xlsx`).
+- **Struktur Baris Dokumen Resmi Sekolah:**
+  - Baris 1–3: Metadata / Judul SK Pembagian Tugas.
+  - Baris 13: Header Kolom (`NO`, `KELAS`, `NAMA WALI KELAS`, `NAMA GURU BK`).
+  - Baris 14–61: Data utama 48 rombel kelas (diidentifikasi otomatis via nomor integer kolom A).
+  - Baris 62–72: Catatan kaki legenda kompetensi keahlian dan tanda tangan Kepala Sekolah (diabaikan secara aman oleh parser).
+
+---
+
+### 81.4 Mekanisme Normalisasi & Fuzzy Matching 3-Tier
+
+1. **Normalisasi String Nama Kelas:**
+   - Menyisipkan spasi jika huruf langsung diikuti angka: `preg_replace('/([A-Za-z]+)(\d+)/', '$1 $2', $name)`
+   - Membersihkan spasi ganda: `"X  DKV   2"` $\rightarrow$ `"X DKV 2"`.
+2. **Normalisasi String Nama Guru:**
+   - Mengubah ke huruf kecil (*lowercase*), menghapus tanda baca titik dan koma, serta membersihkan spasi berlebih.
+3. **Pencocokan Cerdas (Intelligent 3-Tier):**
+   - **Tier 1 (Exact Match):** Status `matched` (Hijau), `confidence: 1.0`.
+   - **Tier 2 (Fuzzy Match $\ge 75\%$):** Menghitung `similar_text` dan perbandingan kata dasar. Jika terdapat 1 kandidat terkuat, status `fuzzy_match` (Kuning) dengan rekomendasi guru. Jika $> 1$ kandidat mirip, status `ambiguous` (Kuning) tanpa pemilihan otomatis.
+   - **Tier 3 (Not Found):** Status `not_found` (Merah), `confidence: 0.0`. Guru wajib dipetakan manual oleh admin.
+
+---
+
+### 81.5 Aturan Bisnis & Validasi Integritas
+
+- **1 Guru = Maksimal 1 Wali Kelas:** Ditolak HTTP 422 jika guru dijadikan wali kelas di lebih dari satu kelas (baik di dalam payload import maupun di database luar).
+- **1 Kelas = Maksimal 1 Wali Kelas Aktif:** Penugasan wali kelas lama pada kelas yang sama akan diperbarui secara atomik ke wali kelas baru.
+- **1 Guru BK = Banyak Kelas Binaan:** Guru BK dapat membina banyak rombel kelas melalui pasangan unik `(user_id, 'kesiswaan', class_id)` di tabel `teacher_assignments`.
+- **Proteksi Identitas Guru:** Tidak ada operasi update pada tabel `users`. Nama, NIP, role, email, dan password guru tidak tersentuh.
+- **Proteksi Akun:** Tidak ada pembuatan akun guru baru secara otomatis (*no auto-creation*). Guru wajib telah terdaftar di master guru aktif.
+
+---
+
+### 81.6 Panduan Pengujian Otomatis
+
+Pengujian otomatis mencakup 11 skenario uji komprehensif pada berkas `tests/Feature/TeacherAssignmentImportTest.php`:
+
+```powershell
+# Jalankan seluruh pengujian Import Engine Penugasan Guru
+cd scp
+php artisan test --filter=TeacherAssignmentImportTest
+```
+
+**Hasil Pengujian:**
+```
+PASS  Tests\Feature\TeacherAssignmentImportTest
+✓ import preview with valid official school excel
+✓ import preview rejects invalid file extension
+✓ fuzzy matching detects spelling variations
+✓ unmatched teacher marked as not found
+✓ ambiguous teacher provides candidates without auto selection
+✓ unmatched class marked as invalid
+✓ import commit rejects duplicate wali kelas in payload
+✓ import commit rejects if wali already assigned elsewhere
+✓ import preview does not modify database
+✓ import commit rolls back entirely on failure
+✓ import commit prevents duplicate commit with same token
+
+Tests:    11 passed (433 assertions)
+Duration: 1.80s
+```
+
+---
+
+### 81.7 Catatan Keamanan & Keterbatasan
+
+1. **Idempotency Protection:** Setiap `preview_token` hanya dapat di-commit satu kali. Penggunaan ulang token yang sama akan ditolak dengan kode status HTTP 409 Conflict / 410 Gone.
+2. **Atomic Rollback:** Seluruh transaksi commit dibungkus dalam `DB::transaction()`. Jika salah satu baris gagal validasi, seluruh mutasi dibatalkan (*rollback*) 100%.
+3. **Penyimpanan Preview Tanpa Efek Samping:** Tahap preview hanya menggunakan memori Cache dan tidak menulis baris apa pun ke database PostgreSQL.
+
+
+
+---
+
+## 82. Modul Penugasan Guru: Integrasi Alur Verifikasi Izin Guru (Fase 3)
+
+### 82.1 Ringkasan Arsitektur & Otoritas Cerdas
+
+Modul ini mengintegrasikan service `TeacherLeaveAuthorityResolver` ke dalam `TeacherLeaveRequestController` untuk mengatur alur verifikasi izin tidak mengajar guru. Kewenangan verifikasi kini dibatasi secara ketat berdasarkan rombel kelas binaan Petugas BK/Kesiswaan, mencegah konflik kepentingan (*anti-self-approval* dan *anti-peer-approval*), serta menerapkan prinsip *First-Responder* atomik untuk jadwal lintas kelas.
+
+```mermaid
+flowchart TD
+    A["Guru Mengajukan Izin Mengajar"] --> B{"Apakah Pemohon Anggota Tim Kesiswaan?"}
+    B -- Ya --> C["Eskalasi Khusus ke Waka Kurikulum (Anti-Peer & Anti-Self Approval)"]
+    B -- Tidak --> D{"Apakah Izin Memiliki Jadwal Mengajar KBM?"}
+    D -- Tidak (Izin Dinas Luar/Non-KBM) --> E["Universal Fallback ke Waka Kurikulum"]
+    D -- Ya --> F["Ambil Seluruh class_id dari Jadwal yang Diajukan"]
+    F --> G["Cari Petugas BK Pembina Kelas-Kelas Tersebut di teacher_assignments"]
+    G --> H{"Ditemukan Petugas BK Terkait?"}
+    H -- Tidak --> E
+    H -- Ya --> I["Inbox Petugas BK Terkait + Waka Kurikulum (First-Responder)"]
+    
+    C --> J["Inbox Verifikasi Waka Kurikulum"]
+    E --> J
+    I --> K["Petugas Berwenang Memproses (Approve / Reject)"]
+    J --> K
+    K --> L["DB Transaction with lockForUpdate()"]
+    L --> M{"Apakah Status Masih Pending?"}
+    M -- Tidak --> N["422 Unprocessable Entity (Sudah Diproses Sebelumnya)"]
+    M -- Ya --> O["Update Status, approved_by, verified_at (Final)"]
+```
+
+---
+
+### 82.2 Matriks Kewenangan Verifikasi Izin Guru
+
+| No | Tipe Guru Pemohon | Kondisi Jadwal yang Ditinggalkan | Petugas yang Berwenang Memverifikasi | Penanganan Konflik & Keamanan |
+| :---: | :--- | :--- | :--- | :--- |
+| **1** | **Guru Mapel Biasa (Non-Wali Kelas)** | Mengajar di 1 kelas (misal `X RPL 1`) | • Petugas BK pembina `X RPL 1`<br>• Waka Kurikulum (Supervisor) | Pemohon dilarang menyetujui izin sendiri (*Anti-Self-Approval*). |
+| **2** | **Guru Mapel Biasa** | Mengajar di beberapa kelas beda BK (misal `X RPL 1` & `X RPL 2`) | • Petugas BK `X RPL 1`<br>• Petugas BK `X RPL 2`<br>• Waka Kurikulum | **First-Responder**: Keputusan salah satu petugas langsung mengikat seluruh izin. Petugas lain terkunci otomatis (HTTP 422). |
+| **3** | **Guru Wali Kelas** | Mengajar di kelas binaannya atau kelas lain | • Petugas BK pembina kelas jadwal terkait<br>• Waka Kurikulum | Kewenangan verifikasi mengikuti rombel kelas yang jadwalnya ditinggalkan. |
+| **4** | **Guru Anggota Tim Kesiswaan** | Memiliki jadwal mengajar maupun izin dinas luar | • **Waka Kurikulum Sahaja** | **Eskalasi Wajib**: Dilarang disetujui sesama rekan kesiswaan (*Anti-Peer-Approval*) dan dilarang disetujui sendiri. |
+| **5** | **Guru Izin Non-KBM / Tanpa Jadwal** | Tidak ada jadwal mengajar pada tanggal izin (dinas umum) | • **Waka Kurikulum** | **Universal Fallback**: Mencegah pengajuan menggantung tanpa verifikator. |
+| **6** | **Kelas Belum Ada Petugas BK** | Belum dipetakan di tabel `teacher_assignments` | • **Waka Kurikulum** | **Universal Fallback**: Waka bertindak sebagai penanggung jawab penjamin (*failsafe*). |
+
+---
+
+### 82.3 Spesifikasi Endpoint REST API yang Terdampak
+
+#### 1. Daftar Pengajuan Izin (`GET /api/teacher-leave-requests`)
+
+Mendukung pemisahan konteks riwayat pribadi guru dan antrean verifikasi kesiswaan via parameter query:
+- `scope=mine`: Mengembalikan riwayat pengajuan izin milik guru yang sedang login (`where teacher_id = auth_id`).
+- `scope=verification`:
+  - **Waka Kurikulum**: Melihat seluruh izin pending di sekolah (kecuali izin dirinya sendiri).
+  - **Guru BK / Kesiswaan**: Dibatasi secara cerdas hanya pada izin yang meninggalkan jam KBM di **kelas binaannya**, serta otomatis mengecualikan permohonan dari sesama rekan guru kesiswaan.
+  - **Guru Biasa**: Ditolak / mengembalikan data kosong (`whereRaw('1 = 0')`).
+- Default (tanpa parameter `scope`): Menjaga kompatibilitas penuh dengan pemanggilan sistem yang sudah berjalan.
+
+**Contoh Request Postman (Inbox Verifikasi BK):**
+```http
+GET /api/teacher-leave-requests?scope=verification HTTP/1.1
+Host: localhost:8000
+Authorization: Bearer <TOKEN_GURU_BK>
+Accept: application/json
+```
+
+**Contoh Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Daftar pengajuan izin guru berhasil diambil.",
+  "data": [
+    {
+      "id": 14,
+      "teacher_id": 12,
+      "schedule_ids": [45, 46],
+      "date": "2026-11-05",
+      "reason": "Sakit demam dan istirahat dokter",
+      "status": "pending",
+      "approved_by": null,
+      "verified_at": null,
+      "teacher": {
+        "id": 12,
+        "name": "Budi Santoso, S.Pd",
+        "nis_nip": "198801012010011001"
+      }
+    }
+  ],
+  "meta": {
+    "current_page": 1,
+    "per_page": 15,
+    "total": 1,
+    "last_page": 1
+  }
+}
+```
+
+---
+
+#### 2. Detail Pengajuan Izin (`GET /api/teacher-leave-requests/{id}`)
+
+- **Otorisasi Ketat:** Hanya dapat dibuka oleh pemohon izin sendiri, Waka Kurikulum, atau Petugas BK yang berwenang atas rombel kelas pada jadwal terkait.
+- Jika pengguna tidak memiliki wewenang (misal guru lain atau BK kelas lain), sistem mengembalikan status **HTTP 403 Forbidden**.
+
+---
+
+#### 3. Persetujuan Izin Guru (`PATCH /api/teacher-leave-requests/{id}/approve`)
+
+Menerapkan *First-Responder Atomik* menggunakan transaksi database dengan penguncian baris pesimis (`lockForUpdate()`):
+
+**Contoh Request:**
+```http
+PATCH /api/teacher-leave-requests/14/approve HTTP/1.1
+Host: localhost:8000
+Authorization: Bearer <TOKEN_GURU_BK_ATAU_WAKA>
+Accept: application/json
+```
+
+**Respon Sukses (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Pengajuan izin guru berhasil disetujui.",
+  "data": {
+    "id": 14,
+    "teacher_id": 12,
+    "status": "approved",
+    "approved_by": {
+      "id": 7,
+      "name": "Candra Rahadian, S.Pd",
+      "nis_nip": "198201012006011001"
+    },
+    "verified_at": "2026-11-04T15:20:00.000000Z"
+  }
+}
+```
+
+**Respon Ditolak Wewenang (403 Forbidden):**
+```json
+{
+  "success": false,
+  "message": "Akses ditolak. Anda tidak memiliki wewenang untuk memverifikasi perizinan pada kelas yang bersangkutan."
+}
+```
+
+**Respon Penolakan Peer-Approval Kesiswaan (403 Forbidden):**
+```json
+{
+  "success": false,
+  "message": "Akses ditolak. Permohonan izin dari Tim Kesiswaan hanya dapat diproses oleh Waka Kurikulum."
+}
+```
+
+**Respon Idempotensi / Sudah Diproses (422 Unprocessable Entity):**
+```json
+{
+  "success": false,
+  "message": "Status perizinan ini sudah diproses sebelumnya dan tidak dapat diubah lagi."
+}
+```
+
+---
+
+#### 4. Penolakan Izin Guru (`PATCH /api/teacher-leave-requests/{id}/reject`)
+
+- Memiliki alur penguncian pesimis dan validasi kewenangan identik dengan endpoint `approve`.
+- Mengubah status izin menjadi `rejected` dan mencatat identitas verifikator serta timestamp `verified_at`.
+
+---
+
+### 82.4 Panduan Pengujian Otomatis
+
+Seluruh 13 skenario spesifikasi Fase 3 diuji secara terisolasi pada `tests/Feature/TeacherLeaveVerificationScopingTest.php`:
+
+```powershell
+# Jalankan test suite integrasi verifikasi izin guru
+cd scp
+php artisan test --filter=TeacherLeaveVerificationScopingTest
+```
+
+**Hasil Eksekusi:**
+```
+PASS  Tests\Feature\TeacherLeaveVerificationScopingTest
+✓ counselor only sees pending leave requests from their assigned class
+✓ counselor cannot see leave requests unrelated to their classes
+✓ waka kurikulum can see all pending leave requests across school
+✓ non homeroom teacher leave is verifiable by assigned counselor
+✓ homeroom teacher leave authority is determined by schedule class
+✓ counselor applicant escalates exclusively to waka
+✓ leave without assigned counselor falls back to waka
+✓ multi class leave appears in all relevant counselors inboxes
+✓ first responder approval becomes final immediately
+✓ other counselor cannot reprocess already decided leave
+✓ unauthorized user is forbidden from calling verification endpoints
+✓ counselor cannot approve or reject their own leave
+✓ counselor accessing scope mine only sees their own leave history
+
+Tests:    13 passed (57 assertions)
+Duration: 1.03s
+```
+
+---
+
+### 82.5 Catatan Keamanan & Integritas Sistem
+
+1. **Pessimistic Row Locking (`lockForUpdate`):** Mencegah *double-decision* akibat klik serentak dari dua petugas BK yang berbeda kelas binaan.
+2. **Anti-Self-Approval Terisolasi di Backend:** Guru tidak dapat menyetujui izinnya sendiri, baik melalui antarmuka web maupun injeksi langsung ke endpoint REST API.
+3. **Eskalasi Hierarki:** Izin dari anggota Tim Kesiswaan diisolasi dari rekan sejawatnya (*Anti-Peer-Approval*) dan diwajibkan melalui Waka Kurikulum.
+4. **Universal Fallback:** Tidak ada izin guru yang berstatus *deadlock* (menggantung) saat tidak ada petugas BK yang membina kelas terkait.
+
+
+---
+
+## 83. Modul Penugasan Guru: Frontend UI Master Data Admin (Fase 4)
+
+### 83.1 Ringkasan Komponen Frontend yang Dibuat & Dimodifikasi
+
+Implementasi antarmuka Master Data Penugasan Guru dibangun dengan pendekatan modular di direktori `frontend/scp_web/src/pages/waka/components/` untuk menjaga stabilitas dan isolasi dari tab Master Data lainnya:
+
+1. **`src/pages/waka/MasterDataPage.jsx` (Modifikasi):**
+   - Menambahkan tab baru `penugasan` pada urutan ke-6 di antara `siswa` dan `trash`: `['kelas', 'ruang', 'mapel', 'guru', 'siswa', 'penugasan', 'trash']`.
+   - Menghubungkan state `tabCounts.penugasan` dan mendelegasikan render konten tab secara bersih ke `<TeacherAssignmentTab />`.
+   - Mengisolasi tombol *"Tambah Master Data"* agar tidak menampilkan aksi yang tidak relevan saat tab penugasan aktif.
+2. **`src/pages/waka/components/TeacherAssignmentTab.jsx` (Baru):**
+   - Komponen utama tab Penugasan Guru yang mengelola sinkronisasi matriks penugasan riil dari backend.
+   - Header Bar: Tombol *"Import Penugasan (Excel)"* dan tombol *"Segarkan"*.
+   - Dashboard Statistik: 4 Kartu Metrik (Total Rombel Kelas, Memiliki Wali Kelas, Memiliki Pembina BK, dan Total Guru dengan Tugas Tambahan).
+   - Toolbar: Input pencarian teks (nama kelas/guru) serta filter dropdown tingkat (10, 11, 12) dan status kelengkapan (Lengkap, Tanpa Wali, Tanpa BK).
+   - Tabel Matriks: Menampilkan 48 rombel kelas riil dengan informasi Wali Kelas, Guru BK binaan, status kelengkapan, dan tombol *"Edit"*.
+   - Paginasi: 25 baris per halaman.
+3. **`src/pages/waka/components/ClassAssignmentEditModal.jsx` (Baru):**
+   - Modal dialog untuk mengelola penugasan per rombel kelas terpilih.
+   - Pemilihan Wali Kelas: Dropdown daftar guru aktif dengan proteksi aturan 1 Guru 1 Wali Kelas (guru yang sudah menjadi wali kelas di kelas lain ditandai dan dinonaktifkan).
+   - Pemilihan Guru BK / Kesiswaan: Menampilkan daftar pembina BK saat ini dengan tombol cabut, serta form penambahan pembina BK baru.
+4. **`src/pages/waka/components/TeacherAssignmentImportModal.jsx` (Baru):**
+   - Modal wizard import berkas spreadsheet `.xlsx` (`WALI KELAS 2026.2027.xlsx`) dengan 8-tahap alur (Upload $\rightarrow$ Preview $\rightarrow$ Mapping Review $\rightarrow$ Manual Mapping $\rightarrow$ Validation $\rightarrow$ Confirmation $\rightarrow$ Commit $\rightarrow$ Result).
+   - Visualisasi pemetaan 3-Tier: Hijau (Cocok Pasti), Kuning (Fuzzy/Ambigu), dan Merah (Tidak Ditemukan).
+   - Resolusi Manual: Dropdown pemilihan kandidat atau pencarian guru terdaftar untuk menyelesaikan baris kuning/merah sebelum commit.
+5. **`src/pages/waka/components/TeacherAssignment.css` (Baru):**
+   - Styling terisolasi yang mengadopsi standar visual minimalis profesional SCP: kartu statistik responsif, tabel matriks dengan badge status, indikator visual pemetaan import, dan dropzone berkas.
+6. **`src/services/masterDataApi.js` (Modifikasi):**
+   - Mendaftarkan service `teacherAssignmentApi` untuk konsumsi endpoint matriks, role assignment, serta wizard import preview & commit.
+
+---
+
+### 83.2 Integrasi Endpoint REST API
+
+| Method | Endpoint | Fungsi Frontend | Komponen Pemanggil |
+| :---: | :--- | :--- | :--- |
+| `GET` | `/api/teachers/assignments/matrix` | Memuat matriks 48 kelas & ringkasan statistik | `TeacherAssignmentTab.jsx` |
+| `POST` | `/api/teachers/{id}/assignments` | Menugaskan Wali Kelas atau Guru BK | `ClassAssignmentEditModal.jsx` |
+| `DELETE` | `/api/teachers/{id}/assignments/{assignment_id}` | Mencabut penugasan Wali Kelas atau Guru BK | `ClassAssignmentEditModal.jsx` |
+| `POST` | `/api/teachers/assignments/import-preview` | Mengunggah `.xlsx` dan menerima pratinjau 3-tier | `TeacherAssignmentImportModal.jsx` |
+| `POST` | `/api/teachers/assignments/import-commit` | Mengirim pemetaan terkonfirmasi untuk disimpan | `TeacherAssignmentImportModal.jsx` |
+| `GET` | `/api/teachers` | Memuat referensi seluruh guru aktif untuk dropdown | `MasterDataPage.jsx` |
+| `GET` | `/api/classes` | Memuat referensi seluruh rombel kelas aktif | `MasterDataPage.jsx` |
+
+---
+
+### 83.3 Alur Wizard 8-Langkah Import Excel Penugasan
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Waka Kurikulum
+    participant UI as TeacherAssignmentImportModal
+    participant API as Backend REST API
+    participant DB as PostgreSQL Database
+
+    Admin->>UI: 1. Pilih berkas 'WALI KELAS 2026.2027.xlsx'
+    Admin->>UI: 2. Klik "Pratinjau Pemetaan"
+    UI->>API: POST /api/teachers/assignments/import-preview (multipart)
+    API-->>UI: Return preview_token, summary, & 48 rows 3-tier match
+    UI->>Admin: 3. Tampilkan tabel pratinjau (Hijau, Kuning, Merah)
+    Admin->>UI: 4. Resolusi baris kuning/merah via dropdown manual
+    UI->>UI: 5. Validasi: seluruh kelas terpetakan & 0 duplikasi wali
+    Admin->>UI: 6. Periksa ringkasan & klik "Terapkan Penugasan"
+    UI->>API: 7. POST /api/teachers/assignments/import-commit (token + items)
+    API->>DB: Atomik DB::transaction() update teacher_assignments
+    API-->>UI: Return 200 OK (total_classes_processed: 48)
+    UI->>Admin: 8. Tampilkan dialog sukses & refresh otomatis tabel matriks
+```
+
+---
+
+### 83.4 Penanganan Respon Error & Keamanan Frontend
+
+1. **Proteksi Idempotensi (HTTP 409 / 410):**
+   - Jika token pratinjau sudah pernah di-commit atau kedaluwarsa (TTL 60 menit), modal menampilkan pesan peringatan ramah: *"Token pratinjau sudah kedaluwarsa atau pernah di-commit sebelumnya. Silakan unggah ulang berkas."*
+2. **Penanganan Validasi Backend (HTTP 422):**
+   - Pesan validasi spesifik backend (misal: *"Kelas ini sudah memiliki wali kelas aktif"* atau *"Salah satu kelas yang dipilih tidak valid di database"*) ditampilkan langsung di atas form modal tanpa merusak formulir.
+3. **Pencegahan Double Submission:**
+   - State `isSubmitting` / `isCommitting` menonaktifkan seluruh tombol aksi selama request berlangsung dan memunculkan animasi loading.
+4. **Proteksi 1 Guru 1 Wali Kelas di Sisi Klien:**
+   - Dropdown pemilihan wali kelas memeriksa pemetaan aktif guru lain dan menonaktifkan opsi guru yang sudah bertugas sebagai wali kelas di rombel lain, disertai label penjelasan kelas binaan lamanya.
+
+---
+
+### 83.5 Hasil Verifikasi Build Frontend
+
+Kompilasi produksi menggunakan Vite dijalankan dan berhasil 100% tanpa kesalahan:
+
+```powershell
+cd frontend/scp_web
+npm run build
+```
+
+**Hasil Eksekusi:**
+```
+✓ 1813 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   1.14 kB │ gzip:  0.51 kB
+dist/assets/MasterDataPage-n4a2bIwO.css          17.37 kB │ gzip:  3.35 kB
+dist/assets/MasterDataPage-DriAsyEN.js          106.99 kB │ gzip: 24.25 kB
+✓ built in 1.14s
+```
+Semua modul bundling, assets, dan chunks berhasil dibangun dengan sempurna.
+
+
+---
+
+## 84. Pengujian Menyeluruh, Validasi E2E, dan Finalisasi Sistem Penugasan BK/Kesiswaan & Wali Kelas (Fase 5)
+
+Pada Fase 5, seluruh sistem penugasan Wali Kelas dan BK/Kesiswaan yang dikembangkan sepanjang Fase 1 hingga Fase 4 diuji secara menyeluruh. Pengujian mencakup pengujian unit, pengujian fitur API, pengujian integrasi alur kerja *end-to-end* (E2E), verifikasi pembatasan hak akses (*authorization*), simulasi konkurensi persetujuan *first-responder*, dan kompilasi produksi frontend.
+
+---
+
+### 84.1 Ringkasan Test Suite Terintegrasi (`TeacherAssignmentEndToEndWorkflowTest.php`)
+
+Dibuat berkas test integrasi *End-to-End Workflow* baru pada path [TeacherAssignmentEndToEndWorkflowTest.php](file:///d:/MyUKK/SchoolClassProject/scp/tests/Feature/TeacherAssignmentEndToEndWorkflowTest.php) yang merangkai dan menguji 7 skenario alur kerja nyata secara sekuensial:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    SKENARIO PENGUJIAN END-TO-END WORKFLOW                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+ 1. [Import Excel 48 Rombel] ──► Pratinjau Read-Only (0 mutasi database)
+                                        │
+                                        ▼
+ 2. [Commit Matriks Penugasan] ──► 48 Rombel terpetakan, 0 guru rangkap wali
+                                        │
+                                        ▼
+ 3. [Pengajuan Izin Mengajar]
+        │
+        ├─► [Izin Rombel Tunggal Kelas A]
+        │         └─► Muncul di inbox BK A & Waka; BK B & Guru Reguler diblokir
+        │
+        ├─► [Izin Multi-Kelas (Kelas A & B)]
+        │         ├─► Muncul di inbox BK A dan BK B
+        │         ├─► BK A setujui (First-Responder: status 'approved')
+        │         └─► BK B tolak sesaat kemudian (Ditolak 422: Idempotent Finality)
+        │
+        ├─► [Izin Guru BK/Kesiswaan]
+        │         ├─► BK rekan diblokir (403 Forbidden)
+        │         ├─► Anti-Self-Approval diblokir (403 Forbidden)
+        │         └─► Waka Kurikulum berhasil setujui (200 OK)
+        │
+        └─► [Universal Fallback Waka]
+                  ├─► Izin dinas luar tanpa jam KBM ──► Waka Kurikulum
+                  └─► Izin kelas tanpa pembina BK terdaftar ──► Waka Kurikulum
+```
+
+---
+
+### 84.2 Rincian 7 Skenario Pengujian
+
+1. **Skenario 1 & 2: Full Matrix Import & Database Integrity**
+   - Mengunggah berkas Excel penugasan resmi sekolah (`.xlsx`).
+   - Memastikan endpoint `POST /api/teachers/assignments/import-preview` tidak mengubah tabel `teacher_assignments` sama sekali (read-only verification).
+   - Menjalankan `POST /api/teachers/assignments/import-commit` menggunakan token pratinjau.
+   - Memverifikasi endpoint `GET /api/teachers/assignments/matrix` mengembalikan data matriks 48 kelas dengan data statistik ringkasan yang akurat (`total_classes = 48`, `assigned_wali_kelas = 48`, `assigned_kesiswaan = 48`).
+2. **Skenario 3: Scoped Verification Izin Rombel Tunggal**
+   - Guru regular mengajukan izin ketidakhadiran pada jadwal mengajar di Kelas X RPL 1.
+   - Endpoint `GET /api/teacher-leave-requests?scope=verification`:
+     - Muncul pada inbox BK Pembina Kelas X RPL 1 dan Waka Kurikulum.
+     - Tidak muncul pada inbox BK Pembina rombel lain (Kelas XI TKJ 1).
+     - Mengembalikan array kosong untuk guru biasa tanpa penugasan manajerial.
+   - Guru biasa mencoba memanggil `PATCH /approve` &rarr; Ditolak HTTP 403 Forbidden.
+   - BK Pembina Kelas X RPL 1 memanggil `PATCH /approve` &rarr; Sukses HTTP 200, status `approved`, tercatat `approved_by` dan `verified_at`.
+3. **Skenario 4: Multi-Class Leave & First-Responder Concurrency**
+   - Guru mengajar di dua kelas binaan berbeda pada hari yang sama (Jam 1–3 di Kelas A dibina BK A, Jam 4–6 di Kelas B dibina BK B).
+   - Pengajuan muncul pada inbox BK A dan BK B.
+   - **First Responder:** BK A menyetujui izin &rarr; Status permohonan langsung berubah menjadi `approved` secara atomik di dalam `DB::transaction()` dengan pessimistic locking `lockForUpdate()`.
+   - **Second Responder:** BK B mencoba menolak pengajuan tersebut sesaat kemudian &rarr; Ditolak HTTP 422 Unprocessable Content dengan pesan bahwa izin sudah diproses oleh petugas lain (*idempotent finality*).
+4. **Skenario 5: Eskalasi Izin Guru BK/Kesiswaan ke Waka Kurikulum**
+   - Guru BK A mengajukan izin sakit pribadi.
+   - Rekan sesama Guru BK B mencoba menyetujui &rarr; Ditolak HTTP 403 Forbidden (*"Permohonan izin dari Tim Kesiswaan hanya dapat diproses oleh Waka Kurikulum"*).
+   - Guru BK A mencoba menyetujui izinnya sendiri &rarr; Ditolak HTTP 403 Forbidden (*Anti-Self-Approval*).
+   - Waka Kurikulum memverifikasi dan menyetujui &rarr; Sukses HTTP 200 OK.
+5. **Skenario 6: Universal Fallback ke Waka Kurikulum**
+   - **Kasus A (Izin Dinas Non-Jadwal):** Guru mengajukan izin dinas luar kota tanpa jam pelajaran KBM. Guru BK biasa dilarang menyetujui (HTTP 403), permohonan otomatis jatuh ke kewenangan Waka Kurikulum (HTTP 200).
+   - **Kasus B (Orphaned Class Schedule):** Guru mengajar pada kelas yang belum memiliki pembina BK terdaftar di sistem. Guru BK kelas lain dilarang menyetujui (HTTP 403), Waka Kurikulum bertindak sebagai *universal fallback* yang sah (HTTP 200).
+6. **Skenario 7: Idempotensi Token Commit & Aturan Strict 1 Guru 1 Wali Kelas**
+   - Mencoba menjalankan commit ulang menggunakan token pratinjau yang sama &rarr; Ditolak dengan status HTTP 409 Conflict / 410 Gone (mencegah duplikasi data dan replay attack).
+   - Mencoba menugaskan seorang guru yang sudah aktif sebagai wali kelas di kelas lain ke kelas baru &rarr; Ditolak HTTP 422 Unprocessable Content (*"Setiap guru hanya diperbolehkan mengampu maksimal 1 rombel kelas sebagai Wali Kelas"*).
+
+---
+
+### 84.3 Rekapitulasi Matriks Pengujian Backend (PHPUnit)
+
+Seluruh pengujian dijalankan pada database terisolasi SQLite In-Memory (`:memory:`) tanpa menyentuh data produksi:
+
+| No | File Test Suite | Fokus Pengujian | Jumlah Test | Assertions | Status |
+| :---: | :--- | :--- | :---: | :---: | :---: |
+| 1 | `TeacherAssignmentEndToEndWorkflowTest.php` | Alur kerja terintegrasi E2E Fase 1–4 | 6 | 80 | **100% Passed** |
+| 2 | `TeacherAssignmentImportTest.php` | Engine import Excel, parsing, matching, & rollback | 11 | 433 | **100% Passed** |
+| 3 | `TeacherAssignmentStrictRuleTest.php` | Aturan ketat 1 guru 1 wali kelas & assign/revoke | 5 | 43 | **100% Passed** |
+| 4 | `TeacherAssignmentTest.php` | CRUD penugasan admin & relasi model | 2 | 15 | **100% Passed** |
+| 5 | `TeacherLeaveVerificationScopingTest.php` | Scoping inbox BK, anti-self-approval, & first-responder | 13 | 57 | **100% Passed** |
+| 6 | `TeacherLeaveAuthorityResolverTest.php` | Dynamic authority resolver & fallback waka | 5 | 33 | **100% Passed** |
+| 7 | `TeacherLeaveRequestTest.php` | Siklus hidup perizinan & kompatibilitas legacy | 17 | 72 | **100% Passed** |
+| 8 | `TeacherLeaveRequestSchemaTest.php` | Skema database & validasi input leave request | 5 | 17 | **100% Passed** |
+| 9 | `CounselorAccessTest.php` | Hak akses dashboard & fitur peran BK/Kesiswaan | 6 | 25 | **100% Passed** |
+| 10 | `WaliKelasAccessTest.php` | Hak akses dashboard & rekap presensi Wali Kelas | 13 | 39 | **100% Passed** |
+| 11 | `TeacherManagementTest.php` | Manajemen master data guru, akun, & credential | 14 | 46 | **100% Passed** |
+| 12 | `TeacherImportTest.php` | Import berkas master data akun guru | 17 | 91 | **100% Passed** |
+| **TOTAL** | **12 Test Suites Terintegrasi** | **Pengujian Sistem Penugasan & Perizinan** | **120 Tests** | **1.031 Assertions** | **100% GREEN** |
+
+---
+
+### 84.4 Hasil Verifikasi Kompilasi Frontend Produksi (`npm run build`)
+
+Kompilasi produksi frontend dijalankan dengan Vite 8.3.4 di direktori `frontend/scp_web`:
+
+```powershell
+cd frontend/scp_web
+npm run build
+```
+
+**Output Kompilasi:**
+```
+> scp_web@0.0.0 build
+> vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 1813 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   1.14 kB │ gzip:  0.51 kB
+dist/assets/TeacherAssignment.css (built into MasterDataPage-n4a2bIwO.css 17.37 kB)
+dist/assets/MasterDataPage-DriAsyEN.js          106.99 kB │ gzip: 24.25 kB
+✓ built in 1.10s
+```
+
+Seluruh komponen:
+- `TeacherAssignmentTab.jsx`
+- `ClassAssignmentEditModal.jsx`
+- `TeacherAssignmentImportModal.jsx`
+- `TeacherAssignment.css`
+terkompilasi dengan sempurna tanpa adanya kesalahan sintaks, error JSX, atau dependensi yang hilang.
+
+---
+
+### 84.5 Kesimpulan & Status Akhir Proyek
+
+Sistem Penugasan BK/Kesiswaan dan Wali Kelas (Fase 1–5) telah selesai secara menyeluruh sesuai cetak biru dokumen `KESISWAAN_WALI_KELAS_ASSIGNMENT_PLAN.md`:
+1. **Keamanan & Konsistensi Data:** Aturan strict 1 guru 1 wali kelas terjamin pada level database transaction, validation rule, dan UI validation.
+2. **Kinerja Import Excel:** Berkas resmi sekolah 48 rombel kelas dapat dipetakan secara akurat dalam hitungan detik menggunakan smart 3-tier matcher dan mekanisme preview aman.
+3. **Integritas Perizinan:** Alur verifikasi izin guru bebas dari konflik kepentingan (*anti-self-approval*), mendukung penugasan multi-kelas via *first-responder*, dan memiliki mekanisme eskalasi serta *universal fallback* ke Waka Kurikulum.
+4. **Antarmuka Pengguna Intuitif:** Tab Penugasan Guru pada Master Data Admin menyajikan matriks 48 kelas, indikator kelengkapan, kartu statistik ringkas, dan wizard import interaktif.

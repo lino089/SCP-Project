@@ -27,12 +27,11 @@ class MasterDataPrerequisiteService
 
     /**
      * Memeriksa kelayakan Master Data untuk upload & import PDF FET (/api/schedule-imports).
-     * Pada SCP v4.5, hanya mensyaratkan:
+     * Pada SCP v4.6, mensyaratkan:
      * 1. Minimal 1 siswa aktif (role=student, deleted_at is null)
      * 2. Minimal 1 guru aktif (role=teacher, deleted_at is null)
-     * 3. Minimal 1 guru aktif memiliki fet_staff_id (fet_staff_id is not null and != '')
      * Kelas dibuat otomatis saat impor siswa, sedangkan Ruangan & Mata Pelajaran
-     * didaftarkan otomatis oleh worker ParseSchedulePdfJob pada Fase 6.
+     * didaftarkan otomatis oleh worker ParseSchedulePdfJob.
      *
      * @return array{is_valid: bool, missing: array, errors: array}
      */
@@ -40,11 +39,6 @@ class MasterDataPrerequisiteService
     {
         $hasStudents = User::where('role', 'student')->whereNull('deleted_at')->exists();
         $hasTeachers = User::where('role', 'teacher')->whereNull('deleted_at')->exists();
-        $hasTeachersWithFetId = User::where('role', 'teacher')
-            ->whereNull('deleted_at')
-            ->whereNotNull('fet_staff_id')
-            ->where('fet_staff_id', '!=', '')
-            ->exists();
 
         $missing = [];
         $errors = [];
@@ -57,9 +51,6 @@ class MasterDataPrerequisiteService
         if (!$hasTeachers) {
             $missing[] = 'teachers';
             $errors['teachers'] = ['Master data guru masih kosong. Waka wajib mengimpor data guru terlebih dahulu.'];
-        } elseif (!$hasTeachersWithFetId) {
-            $missing[] = 'fet_staff_id';
-            $errors['fet_staff_id'] = ['Belum ada guru yang memiliki nomor staf FET (fet_staff_id). Waka wajib melengkapi fet_staff_id guru untuk import PDF.'];
         }
 
         return [

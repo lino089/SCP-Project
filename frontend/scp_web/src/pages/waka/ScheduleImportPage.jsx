@@ -71,7 +71,8 @@ function mapImportRow(r) {
     period_number: r.period_number || raw.period_number || 1,
     duration_periods: r.duration_periods || raw.duration_periods || 1,
     className: r.matched_class?.name || raw.kelas_mentah || r.className || 'Kelas Belum Terpetakan',
-    teacherFetId: r.matched_teacher?.fet_staff_id || raw.fet_staff_id || r.teacherFetId || '-',
+    teacherNip: r.matched_teacher?.nis_nip || r.matched_teacher?.nip || '-',
+    teacherFetId: '-',
     teacherName: r.matched_teacher?.name || raw.guru_mentah || r.teacherName || 'Guru Belum Terpetakan',
     subjectName: r.matched_subject?.name || raw.mapel_mentah || r.subjectName || 'Mata Pelajaran Belum Terpetakan',
     roomName: r.matched_room?.name || raw.ruang_final || r.roomName || 'Ruang Belum Terpetakan',
@@ -514,7 +515,7 @@ export default function ScheduleImportPage() {
     setEditingRow(row);
     const matchingClass = classList.find((c) => c.name.toLowerCase() === row.className.toLowerCase());
     const matchingTeacher = teacherList.find(
-      (t) => String(t.fet_staff_id).toLowerCase() === String(row.teacherFetId).toLowerCase()
+      (t) => t.id === row.matched_teacher_id || t.name.toLowerCase() === (row.teacherName || '').toLowerCase()
     );
     const matchingRoom = roomList.find((r) => r.name.toLowerCase() === row.roomName.toLowerCase());
     const matchingSubject = subjectList.find(
@@ -562,7 +563,7 @@ export default function ScheduleImportPage() {
                 ...r,
                 className: selectedClass?.name || r.className,
                 teacherName: selectedTeacher?.name || r.teacherName,
-                teacherFetId: selectedTeacher?.fet_staff_id || r.teacherFetId,
+                teacherNip: selectedTeacher?.nis_nip || selectedTeacher?.nip || r.teacherNip,
                 roomName: selectedRoom?.name || r.roomName,
                 subjectName: selectedSubject?.name || r.subjectName,
                 status: 'Matched',
@@ -699,11 +700,13 @@ export default function ScheduleImportPage() {
     },
     {
       key: 'teacher',
-      label: 'Guru & FET ID',
+      label: 'Guru Pengampu',
       renderCell: (r) => (
         <div className="flex flex-col">
           <span className="text-xs text-gray-900 font-medium">{r.teacherName}</span>
-          <span className="font-mono text-[11px] text-gray-400">ID: {r.teacherFetId}</span>
+          {r.teacherNip && r.teacherNip !== '-' && (
+            <span className="font-mono text-[11px] text-gray-400">NIP: {r.teacherNip}</span>
+          )}
         </div>
       ),
     },
@@ -1009,9 +1012,6 @@ export default function ScheduleImportPage() {
                     Teks Kelas: <code>{editingRow.raw_data?.kelas_mentah || editingRow.className}</code>
                   </div>
                   <div>
-                    Teks FET ID Guru: <code>{editingRow.raw_data?.fet_staff_id || editingRow.teacherFetId}</code>
-                  </div>
-                  <div>
                     Teks Guru: <code>{editingRow.raw_data?.guru_mentah || editingRow.teacherName}</code>
                   </div>
                   <div>
@@ -1042,7 +1042,7 @@ export default function ScheduleImportPage() {
                 value={String(resolvedForm.teacher_id)}
                 options={teacherList.map((t) => ({
                   value: String(t.id),
-                  label: `${t.name} ${t.fet_staff_id ? `[FET: ${t.fet_staff_id}]` : ''}`,
+                  label: `${t.name} ${t.nis_nip ? `[NIP: ${t.nis_nip}]` : ''}`,
                 }))}
                 onChange={(e) => setResolvedForm({ ...resolvedForm, teacher_id: e.target.value })}
               />

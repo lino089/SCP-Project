@@ -106,6 +106,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // 9.3 Master Data Teachers & Assignments
         Route::get('/teachers/import-template', [TeacherController::class, 'downloadTemplate']);
         Route::post('/teachers/import', [TeacherController::class, 'import']);
+        Route::get('/teachers/assignments/matrix', [TeacherController::class, 'getAssignmentMatrix']);
+        Route::post('/teachers/assignments/import-preview', [TeacherController::class, 'importPreview']);
+        Route::post('/teachers/assignments/import-commit', [TeacherController::class, 'importCommit']);
         Route::post('/teachers', [TeacherController::class, 'store']);
         Route::put('/teachers/{id}', [TeacherController::class, 'update']);
         Route::delete('/teachers/{id}', [TeacherController::class, 'destroy']);

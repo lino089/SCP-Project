@@ -207,8 +207,6 @@ class MasterDataPrerequisiteRuleTest extends TestCase
 
     public function test_pdf_import_upload_is_rejected_when_students_are_empty(): void
     {
-        // Guru memiliki fet_staff_id, tapi siswa kosong
-        $this->teacher->update(['fet_staff_id' => '34']);
         User::where('role', 'student')->delete();
 
         Sanctum::actingAs($this->waka);
@@ -258,42 +256,12 @@ class MasterDataPrerequisiteRuleTest extends TestCase
         $this->assertEquals(0, ScheduleImport::count());
     }
 
-    public function test_pdf_import_upload_is_rejected_when_teachers_lack_fet_staff_id(): void
+    public function test_pdf_import_upload_is_allowed_when_only_students_and_teachers_exist(): void
     {
-        // Siswa dan guru ada, tapi belum ada guru dengan fet_staff_id
-        // Tabel classes, rooms, dan subject tidak perlu diisi (Fase 5)
-        $this->teacher->update(['fet_staff_id' => null]);
-
-        Sanctum::actingAs($this->waka);
-
-        $response = $this->postJson('/api/schedule-imports', [
-            'cycle_type' => 1,
-            'file_kelas' => UploadedFile::fake()->create('jadwal_kelas.pdf', 100, 'application/pdf'),
-            'file_ruangan' => UploadedFile::fake()->create('jadwal_ruangan.pdf', 100, 'application/pdf'),
-        ]);
-
-        $response->assertStatus(422)
-            ->assertJson([
-                'success' => false,
-                'message' => 'Master Data belum lengkap. Waka wajib mengisi Master Data terlebih dahulu sebelum dapat menginput jadwal.',
-            ]);
-
-        $this->assertContains('fet_staff_id', $response->json('meta.missing_entities'));
-        $this->assertArrayHasKey('fet_staff_id', $response->json('errors'));
-
-        Queue::assertNothingPushed();
-        $this->assertEquals(0, ScheduleImport::count());
-    }
-
-    public function test_pdf_import_upload_is_allowed_when_only_students_and_teachers_with_fet_exist(): void
-    {
-        // Fase 5: Classes, Rooms, dan Subject sengaja dibiarkan KOSONG (0 data)
+        // SCP v4.6: Classes, Rooms, dan Subject tidak perlu dibuat di awal (didaftarkan otomatis oleh parser)
         $this->assertEquals(0, Classes::count());
         $this->assertEquals(0, Rooms::count());
         $this->assertEquals(0, Subject::count());
-
-        // Pastikan hanya Siswa dan Guru ber-FET yang tersedia
-        $this->teacher->update(['fet_staff_id' => '34']);
 
         Sanctum::actingAs($this->waka);
 
@@ -377,7 +345,6 @@ class MasterDataPrerequisiteRuleTest extends TestCase
         $class = Classes::create(['name' => 'X RPL 1', 'level' => 10]);
         $room = Rooms::create(['name' => 'Lab Komputer 1', 'capacity' => 36]);
         $subject = Subject::create(['name' => 'Pemrograman Web']);
-        $this->teacher->update(['fet_staff_id' => '34']);
 
         $import = ScheduleImport::create([
             'waka_id' => $this->waka->id,

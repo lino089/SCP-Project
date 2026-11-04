@@ -51,7 +51,7 @@ class RecycleBinController extends Controller
         // 1. Guru
         if ($normalized === 'all' || $normalized === 'teacher') {
             $teachers = User::where('role', 'teacher')->onlyTrashed()->get()->map(function ($t) {
-                return $this->formatTrashItem($t, 'guru', $t->nis_nip ?: ($t->fet_staff_id ? "FET: {$t->fet_staff_id}" : '-'));
+                return $this->formatTrashItem($t, 'guru', $t->nis_nip ?: '-');
             });
             $items = $items->concat($teachers);
         }

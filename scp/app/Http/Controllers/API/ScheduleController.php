@@ -65,7 +65,7 @@ class ScheduleController extends Controller
                 ->where('day_of_week', $dayOfWeek)
                 ->with([
                     'schoolClass:id,name,level',
-                    'teacher:id,name,nis_nip,fet_staff_id',
+                    'teacher:id,name,nis_nip',
                     'room:id,name,capacity',
                     'subject:id,name',
                     'journals' => function ($q) use ($now) {
@@ -142,7 +142,7 @@ class ScheduleController extends Controller
             ->where('cycle_type', $cycle)
             ->with([
                 'schoolClass:id,name,level',
-                'teacher:id,name,nis_nip,fet_staff_id',
+                'teacher:id,name,nis_nip',
                 'room:id,name,capacity',
                 'subject:id,name',
                 'journals' => fn ($jq) => $jq->whereDate('date', $todayDate),
