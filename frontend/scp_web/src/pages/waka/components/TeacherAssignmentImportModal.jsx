@@ -188,6 +188,38 @@ export default function TeacherAssignmentImportModal({
     };
   }, [previewRows, manualMappings]);
 
+  // 4b. Pengelompokan Baris: Belum Lengkap (Atas) vs Sudah Lengkap (Bawah)
+  const { incompleteRows, completeRows } = useMemo(() => {
+    const incomplete = [];
+    const complete = [];
+
+    previewRows.forEach((row, idx) => {
+      const rowKey = row.row_number || row.no || (idx + 1);
+      const map = manualMappings[rowKey] || {};
+
+      const hasClass = Boolean(map.class_id || row.class_id);
+      const hasWali = Boolean(map.wali_teacher_id);
+      const hasBk = Boolean(map.bk_teacher_id);
+
+      const isRowComplete = hasClass && hasWali && hasBk;
+
+      const item = {
+        ...row,
+        originalIndex: row.no || (idx + 1),
+        rowKey,
+        isRowComplete,
+      };
+
+      if (!isRowComplete) {
+        incomplete.push(item);
+      } else {
+        complete.push(item);
+      }
+    });
+
+    return { incompleteRows: incomplete, completeRows: complete };
+  }, [previewRows, manualMappings]);
+
   // 5. Commit Import Handler
   const handleCommit = async () => {
     if (!validationState.isValid || !previewToken) return;
@@ -224,6 +256,118 @@ export default function TeacherAssignmentImportModal({
     } finally {
       setIsCommitting(false);
     }
+  };
+
+  // Helper render baris penugasan kelas secara seragam
+  const renderAssignmentRow = (row, isPriority = false) => {
+    const rowKey = row.rowKey;
+    const waliMatch = row.wali_kelas || {};
+    const bkMatch = row.guru_bk || {};
+    const isClassMatched = row.class_status === 'matched' && Boolean(row.class_id);
+
+    const currentWaliId = manualMappings[rowKey]?.wali_teacher_id;
+    const currentBkId = manualMappings[rowKey]?.bk_teacher_id;
+
+    const isWaliMissing = !currentWaliId;
+    const isBkMissing = !currentBkId;
+
+    return (
+      <tr key={rowKey} className={isPriority ? 'import-row--incomplete' : 'import-row--complete'}>
+        <td className="text-center font-mono text-xs text-neutral-500 font-semibold">
+          {row.originalIndex}
+        </td>
+
+        {/* Kelas */}
+        <td>
+          <div className="font-semibold text-neutral-900">{row.raw_class}</div>
+          {isClassMatched ? (
+            <span className="import-status-tag import-status-tag--exact">
+              ✓ {row.clean_class}
+            </span>
+          ) : (
+            <span className="import-status-tag import-status-tag--notfound">
+              ✕ Kelas Tidak Ditemukan
+            </span>
+          )}
+        </td>
+
+        {/* Wali Kelas */}
+        <td>
+          <div className="text-[11px] text-neutral-500 mb-1 font-medium truncate" title={waliMatch.raw_name || ''}>
+            Excel: <span className="text-neutral-700 font-semibold">{waliMatch.raw_name || <span className="italic text-neutral-400">Kosong</span>}</span>
+          </div>
+
+          <select
+            className={`import-select-control ${isWaliMissing ? 'import-select-control--error' : ''}`}
+            value={currentWaliId || ''}
+            onChange={(e) => handleSelectWaliForCandidate(rowKey, e.target.value)}
+          >
+            <option value="">-- Pilih Guru Wali Kelas --</option>
+            {Array.isArray(waliMatch.candidates) && waliMatch.candidates.length > 0 && (
+              <optgroup label="Rekomendasi Pencocokan">
+                {waliMatch.candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.nis_nip ? `(${c.nis_nip})` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {waliMatch.matched_teacher?.id &&
+              !waliMatch.candidates?.some((c) => c.id === waliMatch.matched_teacher.id) &&
+              !teacherList.some((t) => t.id === waliMatch.matched_teacher.id) && (
+                <option value={waliMatch.matched_teacher.id}>
+                  {waliMatch.matched_teacher.name} ({waliMatch.matched_teacher.nis_nip || 'NIP -'})
+                </option>
+              )}
+            <optgroup label="Seluruh Guru Terdaftar">
+              {teacherList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.nis_nip || 'NIP -'})
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </td>
+
+        {/* Guru BK / Kesiswaan */}
+        <td>
+          <div className="text-[11px] text-neutral-500 mb-1 font-medium truncate" title={bkMatch.raw_name || ''}>
+            Excel: <span className="text-neutral-700 font-semibold">{bkMatch.raw_name || <span className="italic text-neutral-400">Kosong</span>}</span>
+          </div>
+
+          <select
+            className={`import-select-control ${isBkMissing ? 'import-select-control--error' : ''}`}
+            value={currentBkId || ''}
+            onChange={(e) => handleSelectBkForCandidate(rowKey, e.target.value)}
+          >
+            <option value="">-- Pilih Guru BK / Kesiswaan --</option>
+            {Array.isArray(bkMatch.candidates) && bkMatch.candidates.length > 0 && (
+              <optgroup label="Rekomendasi Pencocokan">
+                {bkMatch.candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.nis_nip ? `(${c.nis_nip})` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {bkMatch.matched_teacher?.id &&
+              !bkMatch.candidates?.some((c) => c.id === bkMatch.matched_teacher.id) &&
+              !teacherList.some((t) => t.id === bkMatch.matched_teacher.id) && (
+                <option value={bkMatch.matched_teacher.id}>
+                  {bkMatch.matched_teacher.name} ({bkMatch.matched_teacher.nis_nip || 'NIP -'})
+                </option>
+              )}
+            <optgroup label="Seluruh Guru Terdaftar">
+              {teacherList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.nis_nip || 'NIP -'})
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -348,22 +492,20 @@ export default function TeacherAssignmentImportModal({
             {/* Summary Stat Banner */}
             <div className="import-summary-banner">
               <div className="import-summary-item import-summary-item--total">
-                <span className="text-lg font-bold block">{previewSummary?.total_rows ?? previewRows.length}</span>
+                <span className="text-lg font-bold block">{previewRows.length}</span>
                 <span className="text-[11px] text-neutral-600 uppercase font-semibold">Total Rombel</span>
               </div>
               <div className="import-summary-item import-summary-item--exact">
-                <span className="text-lg font-bold block">{previewSummary?.exact_matched ?? 0}</span>
-                <span className="text-[11px] uppercase font-semibold">Cocok Pasti</span>
+                <span className="text-lg font-bold block">{completeRows.length}</span>
+                <span className="text-[11px] uppercase font-semibold">Sudah Lengkap</span>
               </div>
               <div className="import-summary-item import-summary-item--fuzzy">
-                <span className="text-lg font-bold block">
-                  {(previewSummary?.fuzzy_matched || 0) + (previewSummary?.ambiguous || 0)}
-                </span>
-                <span className="text-[11px] uppercase font-semibold">Perlu Konfirmasi</span>
+                <span className="text-lg font-bold block">{incompleteRows.length}</span>
+                <span className="text-[11px] uppercase font-semibold">Belum Lengkap</span>
               </div>
               <div className="import-summary-item import-summary-item--notfound">
-                <span className="text-lg font-bold block">{previewSummary?.unmatched ?? 0}</span>
-                <span className="text-[11px] uppercase font-semibold">Tidak Ditemukan</span>
+                <span className="text-lg font-bold block">{validationState.unmappedClasses}</span>
+                <span className="text-[11px] uppercase font-semibold">Kelas Tak Terdaftar</span>
               </div>
             </div>
 
@@ -375,24 +517,29 @@ export default function TeacherAssignmentImportModal({
               </div>
             )}
 
-            {!validationState.isValid && (
+            {!validationState.isValid ? (
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg flex items-start gap-2">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
                 <div>
-                  <strong>Pemetaan Belum Lengkap:</strong>
+                  <strong>Pemetaan Belum Lengkap (Perlu Tindakan):</strong>
                   {validationState.unmappedClasses > 0 && (
                     <span className="block">&bull; Terdapat {validationState.unmappedClasses} kelas yang tidak terdaftar di database.</span>
                   )}
                   {validationState.unmappedWali > 0 && (
-                    <span className="block">&bull; Terdapat {validationState.unmappedWali} kelas tanpa pemetaan Wali Kelas.</span>
+                    <span className="block">&bull; Terdapat {validationState.unmappedWali} kelas tanpa pemetaan Wali Kelas (cek tabel bagian atas).</span>
                   )}
                   {validationState.unmappedBk > 0 && (
-                    <span className="block">&bull; Terdapat {validationState.unmappedBk} kelas tanpa pemetaan Guru BK.</span>
+                    <span className="block">&bull; Terdapat {validationState.unmappedBk} kelas tanpa pemetaan Guru BK/Kesiswaan (cek tabel bagian atas).</span>
                   )}
                   {validationState.duplicateWaliIds.length > 0 && (
-                    <span className="block font-semibold">&bull; Ada guru yang ditugaskan sebagai Wali Kelas di lebih dari satu kelas! Harap koreksi manual.</span>
+                    <span className="block font-semibold text-red-700">&bull; Ada guru yang ditugaskan sebagai Wali Kelas di lebih dari satu kelas! Harap koreksi manual.</span>
                   )}
                 </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                <span>Seluruh rombel ({previewRows.length} Kelas) telah terpetakan dengan lengkap dan siap diterapkan ke database.</span>
               </div>
             )}
 
@@ -402,139 +549,59 @@ export default function TeacherAssignmentImportModal({
                 <thead>
                   <tr>
                     <th style={{ width: '45px' }}>No</th>
-                    <th style={{ width: '140px' }}>Rombel Excel</th>
+                    <th style={{ width: '130px' }}>Rombel Excel</th>
                     <th>Pemetaan Wali Kelas</th>
                     <th>Pemetaan Guru BK / Kesiswaan</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((row, idx) => {
-                    const rowKey = row.row_number || row.no || (idx + 1);
-                    const waliMatch = row.wali_kelas || {};
-                    const bkMatch = row.guru_bk || {};
-                    const isClassMatched = row.class_status === 'matched' && Boolean(row.class_id);
-
-                    const isWaliExact = waliMatch.status === 'matched' && waliMatch.matched_teacher?.id;
-                    const isBkExact = bkMatch.status === 'matched' && bkMatch.matched_teacher?.id;
-                    const isAllExact = isClassMatched && isWaliExact && isBkExact;
-
-                    const rowClass = isAllExact
-                      ? 'import-row--exact'
-                      : !isClassMatched || waliMatch.status === 'not_found' || bkMatch.status === 'not_found'
-                      ? 'import-row--notfound'
-                      : 'import-row--fuzzy';
-
-                    const currentWaliId = manualMappings[rowKey]?.wali_teacher_id;
-                    const currentBkId = manualMappings[rowKey]?.bk_teacher_id;
-
-                    return (
-                      <tr key={rowKey} className={rowClass}>
-                        <td className="text-center font-mono text-xs text-neutral-400">
-                          {row.no || idx + 1}
-                        </td>
-
-                        {/* Kelas */}
-                        <td>
-                          <div className="font-semibold text-neutral-900">{row.raw_class}</div>
-                          {isClassMatched ? (
-                            <span className="import-status-tag import-status-tag--exact">
-                              ✓ {row.clean_class}
-                            </span>
-                          ) : (
-                            <span className="import-status-tag import-status-tag--notfound">
-                              ✕ Kelas Tidak Ditemukan
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Wali Kelas */}
-                        <td>
-                          <div className="text-xs text-neutral-700 mb-1 font-medium">
-                            {waliMatch.raw_name || <span className="italic text-neutral-400">Kosong</span>}
-                          </div>
-
-                          {isWaliExact && currentWaliId === waliMatch.matched_teacher?.id ? (
+                  {/* SEKSI 1: Rombel yang Belum Lengkap (Ditaruh Paling Atas) */}
+                  {incompleteRows.length > 0 && (
+                    <>
+                      <tr className="import-section-header-row">
+                        <td colSpan={4}>
+                          <div className="import-section-header import-section-header--incomplete">
                             <div className="flex items-center gap-2">
-                              <span className="import-status-tag import-status-tag--exact">
-                                ✓ {waliMatch.matched_teacher?.name} ({waliMatch.matched_teacher?.nis_nip || 'NIP -'})
-                              </span>
-                              <button
-                                type="button"
-                                className="text-[11px] text-blue-600 hover:underline cursor-pointer ml-1"
-                                onClick={() => handleSelectWaliForCandidate(rowKey, '')}
-                              >
-                                Ubah
-                              </button>
+                              <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
+                              <span>Perlu Tindakan / Belum Lengkap ({incompleteRows.length} Rombel)</span>
                             </div>
-                          ) : (
-                            <select
-                              className="text-xs p-1.5 border border-amber-300 rounded bg-white w-full max-w-xs outline-none focus:ring-1 focus:ring-amber-500"
-                              value={currentWaliId || ''}
-                              onChange={(e) => handleSelectWaliForCandidate(rowKey, e.target.value)}
-                            >
-                              <option value="">-- Pilih Guru Wali Kelas --</option>
-                              {Array.isArray(waliMatch.candidates) &&
-                                waliMatch.candidates.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    ⭐ {c.name} ({c.similarity ? Math.round(c.similarity) + '%' : 'Kandidat'})
-                                  </option>
-                                ))}
-                              <optgroup label="Seluruh Guru Terdaftar">
-                                {teacherList.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name} ({t.nis_nip || 'NIP -'})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
-                          )}
-                        </td>
-
-                        {/* Guru BK */}
-                        <td>
-                          <div className="text-xs text-neutral-700 mb-1 font-medium">
-                            {bkMatch.raw_name || <span className="italic text-neutral-400">Kosong</span>}
+                            <span className="text-[11px] font-normal normal-case text-amber-800">
+                              Wajib dilengkapi segera sebelum penugasan dapat diterapkan
+                            </span>
                           </div>
-
-                          {isBkExact && currentBkId === bkMatch.matched_teacher?.id ? (
-                            <div className="flex items-center gap-2">
-                              <span className="import-status-tag import-status-tag--exact">
-                                ✓ {bkMatch.matched_teacher?.name} ({bkMatch.matched_teacher?.nis_nip || 'NIP -'})
-                              </span>
-                              <button
-                                type="button"
-                                className="text-[11px] text-blue-600 hover:underline cursor-pointer ml-1"
-                                onClick={() => handleSelectBkForCandidate(rowKey, '')}
-                              >
-                                Ubah
-                              </button>
-                            </div>
-                          ) : (
-                            <select
-                              className="text-xs p-1.5 border border-amber-300 rounded bg-white w-full max-w-xs outline-none focus:ring-1 focus:ring-blue-500"
-                              value={currentBkId || ''}
-                              onChange={(e) => handleSelectBkForCandidate(rowKey, e.target.value)}
-                            >
-                              <option value="">-- Pilih Guru BK --</option>
-                              {Array.isArray(bkMatch.candidates) &&
-                                bkMatch.candidates.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    ⭐ {c.name} ({c.similarity ? Math.round(c.similarity) + '%' : 'Kandidat'})
-                                  </option>
-                                ))}
-                              <optgroup label="Seluruh Guru Terdaftar">
-                                {teacherList.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name} ({t.nis_nip || 'NIP -'})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
-                          )}
                         </td>
                       </tr>
-                    );
-                  })}
+                      {incompleteRows.map((row) => renderAssignmentRow(row, true))}
+                    </>
+                  )}
+
+                  {/* SEKSI 2: Rombel yang Sudah Lengkap */}
+                  {completeRows.length > 0 && (
+                    <>
+                      <tr className="import-section-header-row">
+                        <td colSpan={4}>
+                          <div className="import-section-header import-section-header--complete">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
+                              <span>Sudah Terpetakan Lengkap ({completeRows.length} Rombel)</span>
+                            </div>
+                            <span className="text-[11px] font-normal normal-case text-neutral-500">
+                              Dapat disesuaikan kembali jika diperlukan
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {completeRows.map((row) => renderAssignmentRow(row, false))}
+                    </>
+                  )}
+
+                  {previewRows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-8 text-neutral-400">
+                        Tidak ada data rombel yang dimuat.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

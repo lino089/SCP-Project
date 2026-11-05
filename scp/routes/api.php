@@ -141,6 +141,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/schedule-imports', [ScheduleImportController::class, 'store']);
         Route::get('/schedule-imports/{id}', [ScheduleImportController::class, 'show']);
         Route::patch('/schedule-imports/{id}/rows/{row_id}', [ScheduleImportController::class, 'resolveRow']);
+        Route::post('/schedule-imports/{id}/resolve-teachers-bulk', [ScheduleImportController::class, 'resolveTeachersBulk']);
         Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);
         Route::delete('/schedule-imports/{id}', [ScheduleImportController::class, 'destroy']);
     });

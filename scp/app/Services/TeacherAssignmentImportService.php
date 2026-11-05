@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Classes;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\TeacherMatcherService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -323,80 +324,75 @@ class TeacherAssignmentImportService
      */
     private function matchTeacher(string $rawName, $dbTeachers): array
     {
-        $cleanTarget = $this->normalizeTeacherName($rawName);
+        $matcher = new TeacherMatcherService();
+        $result = $matcher->match($dbTeachers, $rawName);
 
-        // Tier 1: Exact Match (Normalisasi)
-        foreach ($dbTeachers as $t) {
-            if ($this->normalizeTeacherName($t->name) === $cleanTarget) {
-                return [
-                    'raw_name' => $rawName,
-                    'status' => 'matched',
-                    'matched_teacher' => [
-                        'id' => $t->id,
-                        'name' => $t->name,
-                        'nis_nip' => $t->nis_nip,
-                    ],
-                    'candidates' => [],
-                    'confidence' => 1.0,
-                    'match_reason' => 'Cocok pasti nama dan gelar',
-                ];
-            }
+        if ($result['status'] === 'exact' && $result['matched_teacher']) {
+            $t = $result['matched_teacher'];
+            return [
+                'raw_name' => $rawName,
+                'status' => 'matched',
+                'matched_teacher' => [
+                    'id' => $t->id,
+                    'name' => $t->name,
+                    'nis_nip' => $t->nis_nip,
+                ],
+                'candidates' => [],
+                'confidence' => 1.0,
+                'match_reason' => 'Cocok pasti nama dan gelar',
+            ];
         }
 
-        // Tier 2: Fuzzy Similarity Matching
-        $candidates = [];
-
-        foreach ($dbTeachers as $t) {
-            $dbClean = $this->normalizeTeacherName($t->name);
-
-            // Hitung persentase kemiripan teks
-            similar_text($cleanTarget, $dbClean, $percent);
-
-            // Cek apakah nama dasar (tanpa gelar) terkandung
-            $wordsTarget = explode(' ', $cleanTarget);
-            $wordsDb = explode(' ', $dbClean);
-            $commonWords = array_intersect($wordsTarget, $wordsDb);
-            $commonRatio = count($wordsTarget) > 0 ? (count($commonWords) / count($wordsTarget)) * 100 : 0;
-
-            $score = max($percent, $commonRatio);
-
-            if ($score >= self::SIMILARITY_THRESHOLD) {
-                $candidates[] = [
-                    'teacher' => [
-                        'id' => $t->id,
-                        'name' => $t->name,
-                        'nis_nip' => $t->nis_nip,
-                    ],
-                    'similarity' => round($score, 1),
-                ];
-            }
-        }
-
-        // Urutkan kandidat berdasarkan skor tertinggi
-        usort($candidates, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
+        $candidates = $result['candidates'];
 
         if (count($candidates) === 1) {
-            // Tepat 1 kandidat kuat -> fuzzy_match (Kuning)
             $top = $candidates[0];
             return [
                 'raw_name' => $rawName,
                 'status' => 'fuzzy_match',
-                'matched_teacher' => $top['teacher'],
-                'candidates' => [$top['teacher']],
+                'matched_teacher' => [
+                    'id' => $top['id'],
+                    'name' => $top['name'],
+                    'nis_nip' => $top['nis_nip'],
+                ],
+                'candidates' => [
+                    [
+                        'id' => $top['id'],
+                        'name' => $top['name'],
+                        'nis_nip' => $top['nis_nip'],
+                    ]
+                ],
                 'confidence' => round($top['similarity'] / 100, 2),
-                'match_reason' => "Rekomendasi kemiripan nama ({$top['similarity']}%)",
+                'match_reason' => $top['match_reason'] ?? "Rekomendasi kemiripan nama ({$top['similarity']}%)",
             ];
         }
 
         if (count($candidates) > 1) {
-            // Lebih dari 1 kandidat -> ambiguous (Kuning, tidak auto-select)
+            $top = $candidates[0];
+            $second = $candidates[1];
+            // Jika kandidat pertama memiliki skor dominan (misal >= 95% dan selisih >= 15% dari kandidat kedua),
+            // tetapkan status fuzzy_match dengan auto-select kandidat pertama
+            $isDominantWinner = ($top['similarity'] >= 95.0 && ($top['similarity'] - $second['similarity']) >= 15.0);
+
+            $formattedCandidates = array_map(fn($c) => [
+                'id' => $c['id'],
+                'name' => $c['name'],
+                'nis_nip' => $c['nis_nip'],
+            ], $candidates);
+
             return [
                 'raw_name' => $rawName,
-                'status' => 'ambiguous',
-                'matched_teacher' => null,
-                'candidates' => array_column($candidates, 'teacher'),
-                'confidence' => round($candidates[0]['similarity'] / 100, 2),
-                'match_reason' => 'Ditemukan ' . count($candidates) . ' kandidat dengan kemiripan nama',
+                'status' => $isDominantWinner ? 'fuzzy_match' : 'ambiguous',
+                'matched_teacher' => $isDominantWinner ? [
+                    'id' => $top['id'],
+                    'name' => $top['name'],
+                    'nis_nip' => $top['nis_nip'],
+                ] : null,
+                'candidates' => $formattedCandidates,
+                'confidence' => round($top['similarity'] / 100, 2),
+                'match_reason' => $isDominantWinner
+                    ? ($top['match_reason'] ?? "Rekomendasi kemiripan nama ({$top['similarity']}%)")
+                    : ('Ditemukan ' . count($candidates) . ' kandidat dengan kemiripan nama'),
             ];
         }
 

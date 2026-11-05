@@ -15,6 +15,7 @@ import {
   Ban,
   RotateCcw,
   Check,
+  Sparkles,
 } from 'lucide-react';
 import {
   Button,
@@ -74,6 +75,8 @@ function mapImportRow(r) {
     teacherNip: r.matched_teacher?.nis_nip || r.matched_teacher?.nip || '-',
     teacherFetId: '-',
     teacherName: r.matched_teacher?.name || raw.guru_mentah || r.teacherName || 'Guru Belum Terpetakan',
+    teacherRawName: raw.guru_mentah || raw.teacher || null,
+    teacherCandidates: raw.teacher_candidates || [],
     subjectName: r.matched_subject?.name || raw.mapel_mentah || r.subjectName || 'Mata Pelajaran Belum Terpetakan',
     roomName: r.matched_room?.name || raw.ruang_final || r.roomName || 'Ruang Belum Terpetakan',
     status: normalizedStatus,
@@ -146,12 +149,19 @@ export default function ScheduleImportPage() {
 
   // Resolution modal state
   const [editingRow, setEditingRow] = useState(null);
+  const [applyToSameTeacher, setApplyToSameTeacher] = useState(true);
   const [resolvedForm, setResolvedForm] = useState({
     class_id: '',
     teacher_id: '',
     room_id: '',
     subject_id: '',
   });
+
+  // Bulk teacher resolution state
+  const [isBulkTeacherModalOpen, setIsBulkTeacherModalOpen] = useState(false);
+  const [bulkTeacherMappings, setBulkTeacherMappings] = useState({});
+  const [isSubmittingBulkTeachers, setIsSubmittingBulkTeachers] = useState(false);
+  const [bulkTeacherFeedback, setBulkTeacherFeedback] = useState(null);
 
   // Commit / Password modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -472,6 +482,75 @@ export default function ScheduleImportPage() {
     return { total: rows.length, matched, unmatched, conflict, ignored };
   }, [rows, ignoredRowIds]);
 
+  // Group unmapped teachers from PDF that have candidates
+  const unmappedTeachersWithCandidates = useMemo(() => {
+    const map = new Map();
+    rows.forEach((r) => {
+      const isIgnored = ignoredRowIds.has(r.id) || r.is_excluded;
+      if (!r.matched_teacher_id && !isIgnored) {
+        const rawName = r.teacherRawName || r.raw_data?.guru_mentah || r.raw_data?.teacher;
+        if (rawName && rawName.trim() !== '') {
+          if (!map.has(rawName)) {
+            map.set(rawName, {
+              raw_teacher_name: rawName,
+              count: 0,
+              candidates: r.teacherCandidates || r.raw_data?.teacher_candidates || [],
+            });
+          }
+          map.get(rawName).count += 1;
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [rows, ignoredRowIds]);
+
+  const handleOpenBulkTeacherModal = () => {
+    const initial = {};
+    unmappedTeachersWithCandidates.forEach((item) => {
+      const candidateId = item.candidates?.[0]?.id || teacherList[0]?.id || '';
+      initial[item.raw_teacher_name] = String(candidateId);
+    });
+    setBulkTeacherMappings(initial);
+    setBulkTeacherFeedback(null);
+    setIsBulkTeacherModalOpen(true);
+  };
+
+  const handleSaveBulkTeachers = async () => {
+    const currentId = activeBatchId || uploadedBatchId;
+    if (!currentId || isNaN(Number(currentId))) return;
+
+    const mappings = Object.entries(bulkTeacherMappings)
+      .filter(([_, teacherId]) => Boolean(teacherId))
+      .map(([raw_teacher_name, teacher_id]) => ({
+        raw_teacher_name,
+        teacher_id: Number(teacher_id),
+      }));
+
+    if (mappings.length === 0) return;
+
+    setIsSubmittingBulkTeachers(true);
+    setBulkTeacherFeedback(null);
+
+    try {
+      const res = await scheduleImportApi.resolveTeachersBulk(currentId, { mappings });
+      if (res?.data) {
+        const detailRes = await scheduleImportApi.getImportDetail(currentId);
+        if (detailRes?.data?.rows) {
+          setRows(detailRes.data.rows.map(mapImportRow));
+        }
+        setIsBulkTeacherModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Gagal menyelaraskan guru massal:', err);
+      setBulkTeacherFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'Gagal menyimpan penyelarasan guru.',
+      });
+    } finally {
+      setIsSubmittingBulkTeachers(false);
+    }
+  };
+
   // Toggle ignore
   const handleToggleIgnore = async (rowId) => {
     const nextIgnored = new Set(ignoredRowIds);
@@ -522,12 +601,18 @@ export default function ScheduleImportPage() {
       (s) => s.name.toLowerCase() === row.subjectName.toLowerCase()
     );
 
+    const topCandidateId =
+      !row.matched_teacher_id && row.teacherCandidates && row.teacherCandidates.length > 0
+        ? row.teacherCandidates[0].id
+        : null;
+
     setResolvedForm({
       class_id: row.matched_class_id || matchingClass?.id || classList[0]?.id || '',
-      teacher_id: row.matched_teacher_id || matchingTeacher?.id || teacherList[0]?.id || '',
+      teacher_id: row.matched_teacher_id || topCandidateId || matchingTeacher?.id || teacherList[0]?.id || '',
       room_id: row.matched_room_id || matchingRoom?.id || roomList[0]?.id || '',
       subject_id: row.matched_subject_id || matchingSubject?.id || subjectList[0]?.id || '',
     });
+    setApplyToSameTeacher(true);
   };
 
   const handleSaveResolution = async () => {
@@ -547,10 +632,18 @@ export default function ScheduleImportPage() {
           matched_room_id: selectedRoom?.id,
           matched_subject_id: selectedSubject?.id,
           exclude: false,
+          apply_to_same_teacher_raw: applyToSameTeacher,
         });
         if (res?.data) {
-          const updated = mapImportRow(res.data);
-          setRows((prev) => prev.map((r) => (r.id === editingRow.id ? updated : r)));
+          if (applyToSameTeacher && res?.meta?.applied_bulk_count > 0) {
+            const detailRes = await scheduleImportApi.getImportDetail(currentId);
+            if (detailRes?.data?.rows) {
+              setRows(detailRes.data.rows.map(mapImportRow));
+            }
+          } else {
+            const updated = mapImportRow(res.data);
+            setRows((prev) => prev.map((r) => (r.id === editingRow.id ? updated : r)));
+          }
         }
       } catch (err) {
         console.error('Gagal menyimpan resolusi baris:', err);
@@ -701,14 +794,25 @@ export default function ScheduleImportPage() {
     {
       key: 'teacher',
       label: 'Guru Pengampu',
-      renderCell: (r) => (
-        <div className="flex flex-col">
-          <span className="text-xs text-gray-900 font-medium">{r.teacherName}</span>
-          {r.teacherNip && r.teacherNip !== '-' && (
-            <span className="font-mono text-[11px] text-gray-400">NIP: {r.teacherNip}</span>
-          )}
-        </div>
-      ),
+      renderCell: (r) => {
+        const hasSuggestion = !r.matched_teacher_id && r.teacherCandidates && r.teacherCandidates.length > 0;
+        const topCandidate = hasSuggestion ? r.teacherCandidates[0] : null;
+
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-xs text-gray-900 font-medium">{r.teacherName}</span>
+            {r.teacherNip && r.teacherNip !== '-' && (
+              <span className="font-mono text-[11px] text-gray-400">NIP: {r.teacherNip}</span>
+            )}
+            {hasSuggestion && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5">
+                <Sparkles size={11} className="text-amber-600 shrink-0" />
+                <span>Saran: {topCandidate.name} ({topCandidate.similarity}%)</span>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'subject',
@@ -877,6 +981,34 @@ export default function ScheduleImportPage() {
           </div>
         </div>
 
+        {/* Banner Penyelarasan Massal Guru PDF */}
+        {unmappedTeachersWithCandidates.length > 0 && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 rounded-lg text-amber-700 shrink-0">
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-950 m-0">
+                  Ditemukan {unmappedTeachersWithCandidates.length} Guru di PDF dengan Ejaan atau Gelar Berbeda
+                </h3>
+                <p className="text-xs text-amber-800 mt-0.5 mb-0">
+                  Terdapat {unmappedTeachersWithCandidates.reduce((acc, curr) => acc + curr.count, 0)} jam pelajaran yang belum terpetakan namun memiliki rekomendasi kemiripan di Master Guru. Anda dapat menyelaraskannya sekaligus dengan satu klik.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="shrink-0 bg-amber-600 hover:bg-amber-700 border-amber-700 text-white font-medium cursor-pointer"
+              icon={Wrench}
+              onClick={handleOpenBulkTeacherModal}
+            >
+              Cocokkan {unmappedTeachersWithCandidates.length} Guru Sekaligus
+            </Button>
+          </div>
+        )}
+
         {/* Filter Tabs & Full-Page Table Section */}
         <div className="review-import-table-section">
           <div className="review-import-table-header">
@@ -1037,6 +1169,50 @@ export default function ScheduleImportPage() {
                 onChange={(e) => setResolvedForm({ ...resolvedForm, class_id: e.target.value })}
               />
 
+              {/* Rekomendasi Kandidat Guru jika tersedia */}
+              {editingRow.teacherCandidates && editingRow.teacherCandidates.length > 0 && (
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg flex flex-col gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                    <Sparkles size={14} className="text-amber-600" />
+                    <span>Rekomendasi Kemiripan Nama Guru (Master Data):</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {editingRow.teacherCandidates.map((c) => {
+                      const isSelected = String(resolvedForm.teacher_id) === String(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          className={`flex items-center justify-between p-2 rounded-md border text-xs transition-colors ${
+                            isSelected
+                              ? 'bg-amber-100/80 border-amber-400 font-medium text-amber-950'
+                              : 'bg-white border-amber-200 hover:bg-amber-50 text-gray-800'
+                          }`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-900">{c.name}</span>
+                            <span className="text-[11px] text-gray-500 font-mono">
+                              {c.nis_nip ? `NIP: ${c.nis_nip}` : 'NIP: -'} &bull; Kemiripan:{' '}
+                              <strong className="text-amber-700">{c.similarity}%</strong> ({c.match_reason})
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setResolvedForm({ ...resolvedForm, teacher_id: String(c.id) })}
+                            className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-600 text-white cursor-default'
+                                : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100'
+                            }`}
+                          >
+                            {isSelected ? '✓ Terpilih' : 'Pilih Guru Ini'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <Select
                 label="Petakan ke Guru Pengampu"
                 value={String(resolvedForm.teacher_id)}
@@ -1046,6 +1222,38 @@ export default function ScheduleImportPage() {
                 }))}
                 onChange={(e) => setResolvedForm({ ...resolvedForm, teacher_id: e.target.value })}
               />
+
+              {/* Opsi Terapkan ke semua baris dengan teks mentah yang sama */}
+              {(() => {
+                const rawName = editingRow.teacherRawName || editingRow.raw_data?.guru_mentah || editingRow.raw_data?.teacher;
+                const sameCount = rows.filter(
+                  (r) =>
+                    r.id !== editingRow.id &&
+                    !r.matched_teacher_id &&
+                    (r.teacherRawName || r.raw_data?.guru_mentah || r.raw_data?.teacher) === rawName
+                ).length;
+
+                if (sameCount === 0) return null;
+
+                return (
+                  <label className="flex items-start gap-2 cursor-pointer text-xs text-gray-700 bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-200">
+                    <input
+                      type="checkbox"
+                      checked={applyToSameTeacher}
+                      onChange={(e) => setApplyToSameTeacher(e.target.checked)}
+                      className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                    />
+                    <div>
+                      <span className="font-semibold text-indigo-950">
+                        Terapkan pilihan guru ini ke semua ({sameCount}) baris jadwal lain
+                      </span>
+                      <p className="text-[11px] text-indigo-800 m-0">
+                        Baris dengan teks mentah <code className="bg-indigo-100/70 px-1 py-0.5 rounded font-mono">"{rawName}"</code> akan otomatis menggunakan guru yang dipilih ini.
+                      </p>
+                    </div>
+                  </label>
+                );
+              })()}
 
               <Select
                 label="Petakan ke Mata Pelajaran"
@@ -1101,6 +1309,114 @@ export default function ScheduleImportPage() {
           confirmVariant="danger"
           loading={isCancelling}
         />
+
+        {/* Modal Penyelarasan Massal Guru PDF */}
+        <Modal
+          isOpen={isBulkTeacherModalOpen}
+          onClose={() => {
+            if (!isSubmittingBulkTeachers) {
+              setIsBulkTeacherModalOpen(false);
+              setBulkTeacherFeedback(null);
+            }
+          }}
+          title="Penyelarasan Nama Guru dari Dokumen PDF"
+          size="lg"
+          footer={
+            <div className="flex items-center justify-end gap-2 w-full">
+              <Button
+                variant="secondary"
+                disabled={isSubmittingBulkTeachers}
+                onClick={() => setIsBulkTeacherModalOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="primary"
+                icon={Check}
+                loading={isSubmittingBulkTeachers}
+                onClick={handleSaveBulkTeachers}
+              >
+                Terapkan Semua Padanan ({unmappedTeachersWithCandidates.reduce((acc, curr) => acc + curr.count, 0)} Jam Pelajaran)
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4 text-xs">
+            {bulkTeacherFeedback && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg">
+                {bulkTeacherFeedback.message}
+              </div>
+            )}
+
+            <p className="text-gray-600 m-0">
+              Dokumen PDF jadwal mencantumkan nama guru dengan sedikit perbedaan ejaan atau gelar. Tentukan padanan guru yang benar dari Master Data di bawah ini. Sekali diterapkan, seluruh jam pelajaran terkait akan langsung terpetakan otomatis.
+            </p>
+
+            <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-1">
+              {unmappedTeachersWithCandidates.map((item) => {
+                const currentVal = bulkTeacherMappings[item.raw_teacher_name] || '';
+                return (
+                  <div
+                    key={item.raw_teacher_name}
+                    className="p-3 bg-gray-50/70 border border-gray-200 rounded-lg flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">
+                          {item.raw_teacher_name}
+                        </span>
+                        <Badge variant="neutral">{item.count} Jam Pelajaran</Badge>
+                      </div>
+                    </div>
+
+                    {item.candidates && item.candidates.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-gray-500 font-medium">Saran Kemiripan:</span>
+                        {item.candidates.map((c) => {
+                          const isSelected = String(currentVal) === String(c.id);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() =>
+                                setBulkTeacherMappings((prev) => ({
+                                  ...prev,
+                                  [item.raw_teacher_name]: String(c.id),
+                                }))
+                              }
+                              className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-amber-600 text-white border-amber-700'
+                                  : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'
+                              }`}
+                            >
+                              {c.name} ({c.similarity}%)
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <Select
+                      label="Petakan ke Master Guru"
+                      value={String(currentVal)}
+                      options={teacherList.map((t) => ({
+                        value: String(t.id),
+                        label: `${t.name} ${t.nis_nip ? `[NIP: ${t.nis_nip}]` : ''}`,
+                      }))}
+                      onChange={(e) =>
+                        setBulkTeacherMappings((prev) => ({
+                          ...prev,
+                          [item.raw_teacher_name]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
       </div>
     );
   }

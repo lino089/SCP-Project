@@ -224,11 +224,12 @@ export default function TeacherQuizPage() {
   };
 
   // Polling ringan untuk generator soal AI jika diproses asinkron di queue backend
-  const pollForQuizQuestions = async (quizId, maxAttempts = 5, delayMs = 1500) => {
+  const pollForQuizQuestions = async (quizId, maxAttempts = 15, delayMs = 1500) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const qRes = await quizApi.getQuizQuestions(quizId);
-        const questionsList = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
+        const raw = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
+        const questionsList = Array.isArray(raw) ? raw : (raw?.questions || []);
         if (Array.isArray(questionsList) && questionsList.length > 0) {
           return questionsList;
         }
@@ -239,9 +240,14 @@ export default function TeacherQuizPage() {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
-    const finalRes = await quizApi.getQuizQuestions(quizId);
-    const finalList = finalRes?.data?.questions || finalRes?.data || finalRes?.questions || [];
-    return Array.isArray(finalList) ? finalList : [];
+    try {
+      const finalRes = await quizApi.getQuizQuestions(quizId);
+      const rawFinal = finalRes?.data?.questions || finalRes?.data || finalRes?.questions || [];
+      const finalList = Array.isArray(rawFinal) ? rawFinal : (rawFinal?.questions || []);
+      return Array.isArray(finalList) ? finalList : [];
+    } catch {
+      return [];
+    }
   };
 
   // 2. Generator Metode 1: Prompt AI
@@ -274,12 +280,25 @@ export default function TeacherQuizPage() {
       const res = await quizApi.generatePrompt(currentQuiz.id, payload);
 
       if (res?.status === 202 || res?.success || res?.data) {
-        setGenProgressMsg('Menyusun butir soal dari AI ke dalam skema kuis...');
-        const questionsList = await pollForQuizQuestions(currentQuiz.id);
-        setQuizQuestions(questionsList);
-        setIsGenModalOpen(false);
-        setIsPreviewModalOpen(true);
-        showToast('Soal kuis berhasil dihasilkan oleh AI! Silakan review sebelum dipublikasikan.', 'success');
+        // Cek apakah soal langsung dikembalikan dalam payload response
+        const directQuestions = Array.isArray(res?.data?.questions) ? res.data.questions : null;
+        let questionsList = directQuestions && directQuestions.length > 0 ? directQuestions : null;
+
+        if (!questionsList) {
+          setGenProgressMsg('Menyusun butir soal dari AI ke dalam skema kuis...');
+          questionsList = await pollForQuizQuestions(currentQuiz.id);
+        }
+
+        if (Array.isArray(questionsList) && questionsList.length > 0) {
+          setQuizQuestions(questionsList);
+          setIsGenModalOpen(false);
+          setIsPreviewModalOpen(true);
+          loadData();
+          showToast('Soal kuis berhasil dihasilkan oleh AI! Silakan review sebelum dipublikasikan.', 'success');
+        } else {
+          loadData();
+          showToast('AI tidak menghasilkan butir soal atau proses belum selesai. Silakan periksa status kuis atau coba lagi.', 'error');
+        }
       }
     } catch (err) {
       showToast(err.message || err.response?.data?.message || 'Gagal memproses prompt AI.', 'error');
@@ -306,12 +325,24 @@ export default function TeacherQuizPage() {
 
       const res = await quizApi.extractDocument(currentQuiz.id, formData);
       if (res?.status === 202 || res?.success || res?.data) {
-        setGenProgressMsg('Mengekstrak butir soal materi via AI...');
-        const questionsList = await pollForQuizQuestions(currentQuiz.id);
-        setQuizQuestions(questionsList);
-        setIsGenModalOpen(false);
-        setIsPreviewModalOpen(true);
-        showToast('Dokumen berhasil diekstrak oleh AI! Periksa butir soal yang memerlukan peninjauan.', 'success');
+        const directQuestions = Array.isArray(res?.data?.questions) ? res.data.questions : null;
+        let questionsList = directQuestions && directQuestions.length > 0 ? directQuestions : null;
+
+        if (!questionsList) {
+          setGenProgressMsg('Mengekstrak butir soal materi via AI...');
+          questionsList = await pollForQuizQuestions(currentQuiz.id);
+        }
+
+        if (Array.isArray(questionsList) && questionsList.length > 0) {
+          setQuizQuestions(questionsList);
+          setIsGenModalOpen(false);
+          setIsPreviewModalOpen(true);
+          loadData();
+          showToast('Dokumen berhasil diekstrak oleh AI! Periksa butir soal yang memerlukan peninjauan.', 'success');
+        } else {
+          loadData();
+          showToast('AI tidak dapat mengekstrak soal dari dokumen atau format dokumen tidak sesuai.', 'error');
+        }
       }
     } catch (err) {
       showToast(err.message || err.response?.data?.message || 'Gagal mengekstrak dokumen materi.', 'error');
@@ -391,14 +422,22 @@ export default function TeacherQuizPage() {
   // Edit Butir Soal pada Preview
   const handleStartEditQuestion = (q) => {
     let optionsArr = ['', '', '', ''];
-    if (Array.isArray(q.options)) {
-      optionsArr = q.options;
-    } else if (q.options && typeof q.options === 'object') {
+    let opts = q.options;
+    if (typeof opts === 'string') {
+      try {
+        opts = JSON.parse(opts);
+      } catch {
+        opts = null;
+      }
+    }
+    if (Array.isArray(opts)) {
+      optionsArr = [opts[0] || '', opts[1] || '', opts[2] || '', opts[3] || ''];
+    } else if (opts && typeof opts === 'object') {
       optionsArr = [
-        q.options.A || '',
-        q.options.B || '',
-        q.options.C || '',
-        q.options.D || '',
+        opts.A || '',
+        opts.B || '',
+        opts.C || '',
+        opts.D || '',
       ];
     }
     setEditingQuestion({
@@ -642,6 +681,9 @@ export default function TeacherQuizPage() {
       key: 'status',
       label: 'Status Kuis',
       renderCell: (row) => {
+        if (row.status === 'generating') {
+          return <Badge variant="neutral" dot>Sedang Diproses AI</Badge>;
+        }
         if (row.status === 'draft_review') {
           return <Badge variant="warning" dot>Draft Review</Badge>;
         }
@@ -656,6 +698,18 @@ export default function TeacherQuizPage() {
       label: 'Aksi Pengelolaan',
       align: 'right',
       renderCell: (row) => {
+        if (row.status === 'generating') {
+          return (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RotateCw}
+              onClick={() => handleOpenPreviewModal(row)}
+            >
+              Cek Status / Review
+            </Button>
+          );
+        }
         if (row.status === 'draft_review') {
           return (
             <Button
@@ -1210,12 +1264,25 @@ export default function TeacherQuizPage() {
                   <p className="question-text">{q.question_text}</p>
 
                   {/* Options (for Multiple Choice) */}
-                  {q.question_type === 'multiple_choice' && q.options && (
-                    <div className="options-grid">
-                      {Array.isArray(q.options)
-                        ? q.options.map((opt, optIdx) => {
-                            const optLetter = ['A', 'B', 'C', 'D'][optIdx] || String(optIdx);
-                            const isCorrect = q.correct_answer === optLetter;
+                  {q.question_type === 'multiple_choice' && q.options && (() => {
+                    let parsedOptions = q.options;
+                    if (typeof parsedOptions === 'string') {
+                      try {
+                        parsedOptions = JSON.parse(parsedOptions);
+                      } catch {
+                        parsedOptions = null;
+                      }
+                    }
+                    if (!parsedOptions) return null;
+
+                    const normCorrect = String(q.correct_answer || '').trim().toUpperCase();
+
+                    if (Array.isArray(parsedOptions)) {
+                      return (
+                        <div className="options-grid">
+                          {parsedOptions.map((opt, optIdx) => {
+                            const optLetter = ['A', 'B', 'C', 'D', 'E'][optIdx] || String(optIdx);
+                            const isCorrect = normCorrect === optLetter || normCorrect.startsWith(optLetter + '.') || normCorrect.startsWith(optLetter + ' ');
                             return (
                               <div
                                 key={optIdx}
@@ -1228,24 +1295,32 @@ export default function TeacherQuizPage() {
                                 )}
                               </div>
                             );
-                          })
-                        : Object.entries(q.options).map(([optLetter, optText]) => {
-                            const isCorrect = q.correct_answer === optLetter;
-                            return (
-                              <div
-                                key={optLetter}
-                                className={`option-item ${isCorrect ? 'option-item--correct' : ''}`}
-                              >
-                                <span className="option-letter">{optLetter}.</span>
-                                <span className="option-label">{optText}</span>
-                                {isCorrect && (
-                                  <span className="option-correct-badge">Kunci Jawaban</span>
-                                )}
-                              </div>
-                            );
                           })}
-                    </div>
-                  )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="options-grid">
+                        {Object.entries(parsedOptions).map(([optLetter, optText]) => {
+                          const normOptKey = String(optLetter).trim().toUpperCase();
+                          const isCorrect = normCorrect === normOptKey || normCorrect.startsWith(normOptKey + '.') || normCorrect.startsWith(normOptKey + ' ');
+                          return (
+                            <div
+                              key={optLetter}
+                              className={`option-item ${isCorrect ? 'option-item--correct' : ''}`}
+                            >
+                              <span className="option-letter">{optLetter}.</span>
+                              <span className="option-label">{optText}</span>
+                              {isCorrect && (
+                                <span className="option-correct-badge">Kunci Jawaban</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {/* Rubric (for Essay) */}
                   {q.question_type === 'essay' && (

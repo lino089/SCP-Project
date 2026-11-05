@@ -671,4 +671,108 @@ class ScheduleImportTest extends TestCase
             'deleted_at' => null,
         ]);
     }
+
+    public function test_resolve_row_applies_bulk_to_same_raw_teacher_name(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'preview_ready',
+        ]);
+
+        $row1 = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => null,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+            'match_status' => 'unmatched',
+            'raw_data' => ['guru_mentah' => 'MUHAMMAD FAUZI, S.Pd.'],
+        ]);
+
+        $row2 = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => null,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+            'day_of_week' => 2,
+            'period_number' => 3,
+            'duration_periods' => 2,
+            'match_status' => 'unmatched',
+            'raw_data' => ['guru_mentah' => 'MUHAMMAD FAUZI, S.Pd.'],
+        ]);
+
+        $response = $this->patchJson("/api/schedule-imports/{$import->id}/rows/{$row1->id}", [
+            'matched_teacher_id' => $this->teacher->id,
+            'apply_to_same_teacher_raw' => true,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('meta.applied_bulk_count', 1);
+
+        $this->assertEquals($this->teacher->id, $row1->fresh()->matched_teacher_id);
+        $this->assertEquals($this->teacher->id, $row2->fresh()->matched_teacher_id);
+        $this->assertEquals('matched', $row1->fresh()->match_status);
+        $this->assertEquals('matched', $row2->fresh()->match_status);
+    }
+
+    public function test_resolve_teachers_bulk_maps_multiple_raw_teachers(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'preview_ready',
+        ]);
+
+        $row1 = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => null,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 2,
+            'match_status' => 'unmatched',
+            'raw_data' => ['guru_mentah' => 'MUHAMMAD FAUZI, S.Pd.'],
+        ]);
+
+        $row2 = ScheduleImportRow::create([
+            'import_id' => $import->id,
+            'matched_class_id' => $this->class->id,
+            'matched_teacher_id' => null,
+            'matched_room_id' => $this->room->id,
+            'matched_subject_id' => $this->subject->id,
+            'day_of_week' => 2,
+            'period_number' => 3,
+            'duration_periods' => 2,
+            'match_status' => 'unmatched',
+            'raw_data' => ['guru_mentah' => 'MUHAMMAD FAUZI, S.Pd.'],
+        ]);
+
+        $response = $this->postJson("/api/schedule-imports/{$import->id}/resolve-teachers-bulk", [
+            'mappings' => [
+                [
+                    'raw_teacher_name' => 'MUHAMMAD FAUZI, S.Pd.',
+                    'teacher_id' => $this->teacher->id,
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.updated_rows', 2);
+
+        $this->assertEquals($this->teacher->id, $row1->fresh()->matched_teacher_id);
+        $this->assertEquals($this->teacher->id, $row2->fresh()->matched_teacher_id);
+        $this->assertEquals('matched', $row1->fresh()->match_status);
+        $this->assertEquals('matched', $row2->fresh()->match_status);
+    }
 }

@@ -78,11 +78,13 @@ SYS;
         $rawResponse = $this->sendChatCompletion($messages, 0.4);
         $questions = $this->cleanAndParseJson($rawResponse);
 
-        if (!is_array($questions) || empty($questions)) {
+        $normalized = $this->normalizeQuestionsArray($questions);
+
+        if (empty($normalized)) {
             throw new Exception("AI tidak menghasilkan butir soal dalam format JSON yang valid.");
         }
 
-        return $questions;
+        return $normalized;
     }
 
     /**
@@ -120,11 +122,13 @@ SYS;
         $rawResponse = $this->sendChatCompletion($messages, 0.2);
         $questions = $this->cleanAndParseJson($rawResponse);
 
-        if (!is_array($questions) || empty($questions)) {
+        $normalized = $this->normalizeQuestionsArray($questions);
+
+        if (empty($normalized)) {
             throw new Exception("AI tidak berhasil mengekstrak butir soal dari dokumen ke dalam format JSON.");
         }
 
-        return $questions;
+        return $normalized;
     }
 
     /**
@@ -190,7 +194,18 @@ SYS;
 
         if ($ext === 'pdf') {
             $scriptPath = base_path('script/pdf_doc_extractor.py');
-            $process = new Process(['python', $scriptPath, $filePath]);
+
+            $pythonBinary = 'python';
+            $venvWindows = base_path('.venv/Scripts/python.exe');
+            $venvUnix = base_path('.venv/bin/python');
+
+            if (file_exists($venvWindows)) {
+                $pythonBinary = $venvWindows;
+            } elseif (file_exists($venvUnix)) {
+                $pythonBinary = $venvUnix;
+            }
+
+            $process = new Process([$pythonBinary, $scriptPath, $filePath]);
             $process->setTimeout(60);
             $process->run();
 
@@ -260,23 +275,98 @@ SYS;
     {
         $cleaned = trim($rawContent);
 
-        // Hapus pembungkus markdown ```json ... ``` atau ``` ... ```
-        if (preg_match('/^```(?:json)?\s*(.*?)\s*```$/s', $cleaned, $matches)) {
+        // 1. Ekstrak konten di dalam blok ```json ... ``` atau ``` ... ``` jika ada (tanpa jangkar ketat ^ dan $)
+        if (preg_match('/```(?:json)?\s*([\s\S]*?)\s*```/i', $cleaned, $matches)) {
             $cleaned = trim($matches[1]);
         }
 
-        // Jika masih terdapat teks di luar JSON array [...] atau object {...}
-        if (preg_match('/(\[.*\]|\{.*\})/s', $cleaned, $extracted)) {
-            $cleaned = trim($extracted[1]);
-        }
-
+        // 2. Coba decode langsung
         $decoded = json_decode($cleaned, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Log::error("JSON Parse Error in AIService: " . json_last_error_msg() . " | Raw: " . substr($rawContent, 0, 500));
-            throw new Exception("Gagal mem-parsing format JSON dari AI: " . json_last_error_msg());
+        if (json_last_error() === JSON_ERROR_NONE && !is_null($decoded)) {
+            return $decoded;
         }
 
-        return $decoded;
+        // 3. Jika decode langsung gagal, cari array [...] atau object {...} terluar
+        if (preg_match('/(\[[\s\S]*\]|\{[\s\S]*\})/s', $cleaned, $extracted)) {
+            $extractedJson = trim($extracted[1]);
+            $decoded = json_decode($extractedJson, true);
+            if (json_last_error() === JSON_ERROR_NONE && !is_null($decoded)) {
+                return $decoded;
+            }
+        }
+
+        Log::error("JSON Parse Error in AIService: " . json_last_error_msg() . " | Raw: " . substr($rawContent, 0, 500));
+        throw new Exception("Gagal mem-parsing format JSON dari AI: " . json_last_error_msg());
+    }
+
+    /**
+     * Menormalkan dan memvalidasi array butir soal dari hasil respons AI.
+     * Mendukung variasi format object pembungkus ({questions: [...]}) dan variasi key field.
+     *
+     * @return array<int, array{question_text: string, question_type: string, options: ?array, correct_answer: string}>
+     */
+    public function normalizeQuestionsArray(mixed $rawDecoded): array
+    {
+        if (!is_array($rawDecoded)) {
+            return [];
+        }
+
+        // Buka pembungkus objek jika AI mengembalikan {"questions": [...]} atau {"soal": [...]}
+        $items = $rawDecoded;
+        if (isset($rawDecoded['questions']) && is_array($rawDecoded['questions'])) {
+            $items = $rawDecoded['questions'];
+        } elseif (isset($rawDecoded['soal']) && is_array($rawDecoded['soal'])) {
+            $items = $rawDecoded['soal'];
+        } elseif (isset($rawDecoded['data']) && is_array($rawDecoded['data'])) {
+            $items = $rawDecoded['data'];
+        }
+
+        if (!is_array($items) || empty($items)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($items as $q) {
+            if (!is_array($q)) continue;
+
+            $text = $q['question_text'] ?? $q['pertanyaan'] ?? $q['question'] ?? $q['soal'] ?? '';
+            $qType = $q['question_type'] ?? $q['tipe'] ?? $q['type'] ?? 'multiple_choice';
+
+            if (!in_array($qType, ['multiple_choice', 'essay'])) {
+                $qType = (!empty($q['options']) || !empty($q['pilihan'])) ? 'multiple_choice' : 'essay';
+            }
+
+            $opts = $q['options'] ?? $q['pilihan'] ?? null;
+            // Jika options berupa list array numerik [0=>..., 1=>...], ubah ke object ['A'=>..., 'B'=>...]
+            if (is_array($opts) && array_is_list($opts) && count($opts) >= 2) {
+                $letters = ['A', 'B', 'C', 'D', 'E'];
+                $mappedOpts = [];
+                foreach ($opts as $idx => $optVal) {
+                    $key = $letters[$idx] ?? (string)$idx;
+                    $mappedOpts[$key] = (string)$optVal;
+                }
+                $opts = $mappedOpts;
+            }
+
+            $ans = $q['correct_answer'] ?? $q['jawaban'] ?? $q['kunci'] ?? $q['answer'] ?? '';
+            if ($qType === 'multiple_choice') {
+                // Bersihkan kunci jawaban jika AI mengembalikan "A. Pilihan" atau "A)" -> ambil "A"
+                if (preg_match('/^\s*([A-E])\b/i', (string)$ans, $m)) {
+                    $ans = strtoupper($m[1]);
+                }
+            }
+
+            $normalized[] = [
+                'question_text' => trim((string)$text),
+                'question_type' => $qType,
+                'options' => $qType === 'essay' ? null : $opts,
+                'correct_answer' => trim((string)$ans),
+                'needs_review' => (bool) ($q['needs_review'] ?? false),
+                'review_note' => $q['review_note'] ?? null,
+            ];
+        }
+
+        return $normalized;
     }
 }

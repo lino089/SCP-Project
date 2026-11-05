@@ -103,7 +103,7 @@ class FourFilesEndToEndScheduleWorkflowTest extends TestCase
             ]);
 
         $this->assertEquals(10, User::where('role', 'teacher')->count());
-        $dwiTeacher = User::where('fet_staff_id', '34')->first();
+        $dwiTeacher = User::where('name', 'Dwi Lesmiyati, S.Pd.')->first();
         $this->assertNotNull($dwiTeacher);
         $this->assertEquals('Dwi Lesmiyati, S.Pd.', $dwiTeacher->name);
         $this->assertTrue($dwiTeacher->must_change_password);

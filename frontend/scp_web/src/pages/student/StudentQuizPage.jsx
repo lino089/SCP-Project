@@ -481,11 +481,22 @@ export default function StudentQuizPage() {
                   <p className="cbt-question-text">{currentQ.question_text}</p>
 
                   {/* Multiple Choice Options */}
-                  {currentQ.question_type === 'multiple_choice' && currentQ.options && (
-                    <div className="cbt-options-list">
-                      {Array.isArray(currentQ.options)
-                        ? currentQ.options.map((opt, optIdx) => {
-                            const letter = ['A', 'B', 'C', 'D'][optIdx] || String(optIdx);
+                  {currentQ.question_type === 'multiple_choice' && currentQ.options && (() => {
+                    let parsedOptions = currentQ.options;
+                    if (typeof parsedOptions === 'string') {
+                      try {
+                        parsedOptions = JSON.parse(parsedOptions);
+                      } catch {
+                        parsedOptions = null;
+                      }
+                    }
+                    if (!parsedOptions) return null;
+
+                    if (Array.isArray(parsedOptions)) {
+                      return (
+                        <div className="cbt-options-list">
+                          {parsedOptions.map((opt, optIdx) => {
+                            const letter = ['A', 'B', 'C', 'D', 'E'][optIdx] || String(optIdx);
                             const isSelected = studentAnswers[currentQ.id] === letter;
                             return (
                               <label
@@ -504,29 +515,36 @@ export default function StudentQuizPage() {
                                 <span className="cbt-option-text">{opt}</span>
                               </label>
                             );
-                          })
-                        : Object.entries(currentQ.options).map(([letter, optText]) => {
-                            const isSelected = studentAnswers[currentQ.id] === letter;
-                            return (
-                              <label
-                                key={letter}
-                                className={`cbt-option-card ${isSelected ? 'cbt-option-card--selected' : ''}`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`question_${currentQ.id}`}
-                                  value={letter}
-                                  checked={isSelected}
-                                  onChange={() => handleAnswerChange(currentQ.id, letter)}
-                                  className="sr-only"
-                                />
-                                <span className="cbt-option-radio">{letter}</span>
-                                <span className="cbt-option-text">{optText}</span>
-                              </label>
-                            );
                           })}
-                    </div>
-                  )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="cbt-options-list">
+                        {Object.entries(parsedOptions).map(([letter, optText]) => {
+                          const isSelected = studentAnswers[currentQ.id] === letter;
+                          return (
+                            <label
+                              key={letter}
+                              className={`cbt-option-card ${isSelected ? 'cbt-option-card--selected' : ''}`}
+                            >
+                              <input
+                                type="radio"
+                                name={`question_${currentQ.id}`}
+                                value={letter}
+                                checked={isSelected}
+                                onChange={() => handleAnswerChange(currentQ.id, letter)}
+                                className="sr-only"
+                              />
+                              <span className="cbt-option-radio">{letter}</span>
+                              <span className="cbt-option-text">{optText}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {/* Essay Textarea */}
                   {currentQ.question_type === 'essay' && (

@@ -132,6 +132,7 @@ class ScheduleImportController extends Controller
             'matched_room_id' => 'nullable|exists:rooms,id',
             'matched_subject_id' => 'nullable|exists:subjects,id',
             'exclude' => 'nullable|boolean',
+            'apply_to_same_teacher_raw' => 'nullable|boolean',
         ]);
 
         if (!empty($validated['exclude'])) {
@@ -160,8 +161,95 @@ class ScheduleImportController extends Controller
         }
 
         $row->resolved_by_waka = true;
+        $this->evaluateRowStatus($row, $import);
+        $row->save();
 
-        // Check if all 4 entities are now populated
+        // Optional bulk-apply to other rows with same raw teacher name
+        $appliedBulkCount = 0;
+        $currentRawTeacher = $row->raw_data['guru_mentah'] ?? $row->raw_data['teacher'] ?? null;
+        if (!empty($validated['apply_to_same_teacher_raw']) && !empty($validated['matched_teacher_id']) && $currentRawTeacher) {
+            $otherRows = $import->rows()
+                ->where('id', '!=', $row->id)
+                ->whereNull('matched_teacher_id')
+                ->get();
+
+            foreach ($otherRows as $otherRow) {
+                $otherRaw = $otherRow->raw_data['guru_mentah'] ?? $otherRow->raw_data['teacher'] ?? null;
+                if ($otherRaw === $currentRawTeacher) {
+                    $otherRow->matched_teacher_id = $validated['matched_teacher_id'];
+                    $otherRow->resolved_by_waka = true;
+                    $this->evaluateRowStatus($otherRow, $import);
+                    $otherRow->save();
+                    $appliedBulkCount++;
+                }
+            }
+        }
+
+        $message = $appliedBulkCount > 0
+            ? "Baris import berhasil diupdate dan diterapkan ke {$appliedBulkCount} baris lain dengan guru yang sama."
+            : 'Baris import berhasil diupdate.';
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
+            'meta' => [
+                'applied_bulk_count' => $appliedBulkCount,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Bulk resolve raw teacher names from PDF into master teacher IDs.
+     * POST /api/schedule-imports/{id}/resolve-teachers-bulk
+     */
+    public function resolveTeachersBulk(Request $request, $id)
+    {
+        $import = ScheduleImport::findOrFail($id);
+
+        if ($import->status === 'confirmed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import yang sudah dikonfirmasi tidak dapat diubah.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'mappings' => 'required|array|min:1',
+            'mappings.*.raw_teacher_name' => 'required|string',
+            'mappings.*.teacher_id' => 'required|exists:users,id',
+        ]);
+
+        $mappings = collect($validated['mappings'])->pluck('teacher_id', 'raw_teacher_name')->toArray();
+
+        $rows = $import->rows()->whereNull('matched_teacher_id')->get();
+        $updatedCount = 0;
+
+        foreach ($rows as $row) {
+            $rawTeacher = $row->raw_data['guru_mentah'] ?? $row->raw_data['teacher'] ?? null;
+            if ($rawTeacher && isset($mappings[$rawTeacher])) {
+                $row->matched_teacher_id = $mappings[$rawTeacher];
+                $row->resolved_by_waka = true;
+                $this->evaluateRowStatus($row, $import);
+                $row->save();
+                $updatedCount++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menyelaraskan {$updatedCount} baris jadwal untuk guru yang dipilih.",
+            'data' => [
+                'updated_rows' => $updatedCount,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Evaluates whether row has all 4 entities and checks anti-collision conflicts.
+     */
+    protected function evaluateRowStatus(ScheduleImportRow $row, ScheduleImport $import): void
+    {
         if (
             $row->matched_class_id &&
             $row->matched_teacher_id &&
@@ -224,14 +312,6 @@ class ScheduleImportController extends Controller
         } else {
             $row->match_status = 'unmatched';
         }
-
-        $row->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Baris import berhasil diupdate.',
-            'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
-        ], 200);
     }
 
     /**

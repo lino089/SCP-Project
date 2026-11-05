@@ -50,10 +50,9 @@ class ParseSchedulePdfJobTest extends TestCase
         ]);
 
         $teacher = User::create([
-            'name' => 'Dwi Lesmiyati',
+            'name' => 'DWI LESMIYATI, S.Pd.',
             'email' => 'dwi.lesmiyati@example.com',
             'nis_nip' => '197501012000012001',
-            'fet_staff_id' => '34',
             'role' => 'teacher',
             'password' => Hash::make('password123'),
             'must_change_password' => false,
@@ -234,10 +233,9 @@ class ParseSchedulePdfJobTest extends TestCase
 
         // Hanya sediakan guru ber-fet_staff_id (prasyarat Fase 5)
         $teacher = User::create([
-            'name' => 'Dwi Lesmiyati',
+            'name' => 'DWI LESMIYATI, S.Pd.',
             'email' => 'dwi.lesmiyati@example.com',
             'nis_nip' => '197501012000012001',
-            'fet_staff_id' => '34',
             'role' => 'teacher',
             'password' => Hash::make('password123'),
             'must_change_password' => false,

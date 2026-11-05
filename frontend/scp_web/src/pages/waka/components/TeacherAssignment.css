@@ -341,3 +341,81 @@
   background-color: #fee2e2;
   color: #991b1b;
 }
+
+/* 6. Section Partitioning & Unified Dropdown Controls */
+.import-section-header-row td {
+  padding: 0 !important;
+  border-bottom: none !important;
+}
+
+.import-section-header {
+  padding: 8px 14px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.import-section-header--incomplete {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.import-section-header--complete {
+  background-color: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.import-row--incomplete {
+  background-color: #fffdf5;
+  border-left: 3px solid #f59e0b;
+}
+
+.import-row--incomplete:hover {
+  background-color: #fffbeb;
+}
+
+.import-row--complete {
+  background-color: #ffffff;
+}
+
+.import-row--complete:hover {
+  background-color: #f8fafc;
+}
+
+.import-select-control {
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  width: 100%;
+  max-width: 320px;
+  outline: none;
+  font-weight: 500;
+  color: #1e293b;
+  transition: all 0.15s ease;
+}
+
+.import-select-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.import-select-control--error {
+  border-color: #f59e0b;
+  background-color: #fffdf5;
+}
+
+.import-select-control--error:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 1px #d97706;
+}
+

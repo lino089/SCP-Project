@@ -23,7 +23,10 @@ export const scheduleImportApi = {
   getScheduleImport: (id) => api.get(`/schedule-imports/${id}`),
 
   resolveImportRow: (importId, rowId, data) =>
-    api.patch(`/schedule-imports/${importId}/rows/${rowId}`, data), // { matched_class_id, matched_teacher_id, matched_room_id, matched_subject_id, exclude: boolean }
+    api.patch(`/schedule-imports/${importId}/rows/${rowId}`, data), // { matched_class_id, matched_teacher_id, matched_room_id, matched_subject_id, exclude: boolean, apply_to_same_teacher_raw?: boolean }
+
+  resolveTeachersBulk: (importId, data) =>
+    api.post(`/schedule-imports/${importId}/resolve-teachers-bulk`, data), // { mappings: [{ raw_teacher_name, teacher_id }] }
 
   confirmImport: (importId, data) =>
     api.post(`/schedule-imports/${importId}/confirm`, data), // { password }

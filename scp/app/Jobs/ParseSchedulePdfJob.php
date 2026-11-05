@@ -15,6 +15,7 @@ use App\Models\Room;
 use App\Models\Classes;
 use App\Models\Schedule;
 use App\Services\ScheduleConflictService;
+use App\Services\TeacherMatcherService;
 use Symfony\Component\Process\Process;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -113,15 +114,20 @@ class ParseSchedulePdfJob implements ShouldQueue
 
         // Track intra-batch slots for conflict detection: key = "day-period"
         $batchSlots = [];
+        $teacherMatcher = new TeacherMatcherService();
 
         foreach ($parseData as $row) {
             $matchedClass = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
-            $matchedTeacher = $this->findTeacher(
-                $allTeachers,
-                $row['fet_staff_id'] ?? null,
-                $row['guru_mentah'] ?? null
-            );
-            $matchedSubject = $this->findSubject($allSubjects, $row['mapel_mentah'] ?? null);
+            
+            $rawTeacher = $row['guru_mentah'] ?? $row['teacher'] ?? null;
+            $teacherResult = $teacherMatcher->match($allTeachers, $rawTeacher);
+            $matchedTeacher = $teacherResult['matched_teacher'];
+            if (!empty($teacherResult['candidates'])) {
+                $row['teacher_candidates'] = $teacherResult['candidates'];
+            }
+
+            $teacherForSubject = $matchedTeacher ?? (!empty($teacherResult['candidates']) ? $allTeachers->firstWhere('id', $teacherResult['candidates'][0]['id']) : null);
+            $matchedSubject = $this->findSubject($allSubjects, $row['mapel_mentah'] ?? null, $teacherForSubject);
             $matchedRoom = $this->findRoom($allRooms, $row['ruang_final'] ?? null);
 
             $day = (int) ($row['day_of_week'] ?? 1);
@@ -227,55 +233,68 @@ class ParseSchedulePdfJob implements ShouldQueue
 
     protected function findTeacher($teachers, ?string $fetStaffId, ?string $teacherRaw): ?User
     {
-        if ($teacherRaw) {
-            $cleanRaw = strtoupper(trim($teacherRaw));
-
-            // Exact match
-            $match = $teachers->first(fn ($t) => strtoupper(trim($t->name)) === $cleanRaw);
-            if ($match) return $match;
-
-            // Substring match
-            $match = $teachers->first(
-                fn ($t) => stripos($t->name, $cleanRaw) !== false || stripos($cleanRaw, $t->name) !== false
-            );
-            if ($match) return $match;
-
-            // Strip academic titles/degrees (S.Pd, M.Pd, etc.)
-            $cleanNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', $cleanRaw);
-            $cleanNoTitle = trim($cleanNoTitle);
-            if ($cleanNoTitle && $cleanNoTitle !== $cleanRaw) {
-                $match = $teachers->first(function ($t) use ($cleanNoTitle) {
-                    $tNameNoTitle = preg_replace('/,\s*(?:S\.[A-Za-z]+|M\.[A-Za-z]+|Drs\.|Dr\.|Ir\.|M\.T|S\.T|S\.Kom|M\.Kom).*$/i', '', strtoupper($t->name));
-                    return stripos($tNameNoTitle, $cleanNoTitle) !== false || stripos($cleanNoTitle, $tNameNoTitle) !== false;
-                });
-                if ($match) return $match;
-            }
-        }
-
-        return null;
+        if (!$teacherRaw) return null;
+        $matcher = new TeacherMatcherService();
+        return $matcher->match($teachers, $teacherRaw)['matched_teacher'];
     }
 
-    protected function findSubject($subjects, ?string $subjectRaw): ?Subject
+    protected function findSubject($subjects, ?string $subjectRaw, ?User $matchedTeacher = null): ?Subject
     {
         if (!$subjectRaw) return null;
         $raw = strtoupper(trim($subjectRaw));
 
-        // Exact match
+        // 1. Exact match
         $match = $subjects->first(fn ($s) => strtoupper(trim($s->name)) === $raw);
         if ($match) return $match;
 
-        // Substring match
-        $match = $subjects->first(
-            fn ($s) => stripos($s->name, $raw) !== false || stripos($raw, $s->name) !== false
-        );
-        if ($match) return $match;
+        // 2. Canonical Subject Dictionary / Aliases
+        $canonicalMap = [
+            'PENDIDIKAN JASMANI, OLAHRAGA DAN KESEHATAN' => 'PJOK',
+            'PENDIDIKAN JASMANI OLAHRAGA DAN KESEHATAN' => 'PJOK',
+            'PENDIDIKAN JASMANI' => 'PJOK',
+            'PENJASORKES' => 'PJOK',
+            'PENJAS' => 'PJOK',
+            'PENDIDIKAN PANCASILA DAN KEWARGANEGARAAN' => 'PENDIDIKAN PANCASILA',
+            'PPKN' => 'PENDIDIKAN PANCASILA',
+            'BIMBINGAN DAN KONSELING' => 'BIMBINGAN KONSELING',
+            'BK' => 'BIMBINGAN KONSELING',
+            'BAHASA JAWA' => 'MULOK BAHASA JAWA',
+            'PROJEK IPAS' => 'IPAS',
+            'ILMU PENGETAHUAN ALAM DAN SOSIAL' => 'IPAS',
+            'SENI MUSIK' => 'SENI BUDAYA',
+        ];
 
-        // Check significant words (>= 4 chars)
-        $words = array_filter(explode(' ', $raw), fn ($w) => strlen($w) >= 4);
-        foreach ($words as $word) {
-            $match = $subjects->first(fn ($s) => stripos($s->name, $word) !== false);
+        // Penanganan khusus mapel agama berdasarkan guru pengampu
+        if (preg_match('/^PENDIDIKAN AGAMA/i', $raw) || preg_match('/^PEND\.?\s*AGAMA/i', $raw)) {
+            $isCatholic = false;
+            if ($matchedTeacher) {
+                $tName = strtoupper($matchedTeacher->name);
+                if (stripos($tName, 'KRISTIANI') !== false || stripos($tName, 'RETNO') !== false) {
+                    $isCatholic = true;
+                }
+            }
+            $targetAgama = $isCatholic ? 'PEND. AG. KATHOLIK' : 'PEND. AG. ISLAM';
+            $agamaMatch = $subjects->first(fn ($s) => strtoupper(trim($s->name)) === $targetAgama);
+            if ($agamaMatch) return $agamaMatch;
+        }
+
+        if (isset($canonicalMap[$raw])) {
+            $targetName = $canonicalMap[$raw];
+            $match = $subjects->first(fn ($s) => strtoupper(trim($s->name)) === $targetName);
             if ($match) return $match;
         }
+
+        // 3. Strict Phrase Substring Match (whole phrase containment, min 4 chars)
+        // Mencegah generic words seperti "PENDIDIKAN" atau "DDPK" memicu false match ke mapel lain
+        $match = $subjects->first(function ($s) use ($raw) {
+            $sName = strtoupper(trim($s->name));
+            if ($sName === '' || $raw === '') return false;
+            if (in_array($sName, ['PENDIDIKAN', 'PRODUKTIF', 'DDPK', 'KK', 'MAPEL'])) {
+                return false;
+            }
+            return (stripos($sName, $raw) !== false || stripos($raw, $sName) !== false);
+        });
+        if ($match) return $match;
 
         return null;
     }
