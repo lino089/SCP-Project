@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
+import academicEventApi from '../../services/academicEventApi';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -67,6 +68,7 @@ export default function TeacherSchedulePage() {
   const [schedules, setSchedules] = useState([]);
   const [homeroomSchedules, setHomeroomSchedules] = useState([]);
   const [missingJournals, setMissingJournals] = useState([]);
+  const [todayExemption, setTodayExemption] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
@@ -88,6 +90,12 @@ export default function TeacherSchedulePage() {
           setPeriodTemplates(setRes.data.period_templates);
         }
       }
+
+      academicEventApi.checkExemption().then((res) => {
+        if (res.data?.data) {
+          setTodayExemption(res.data.data);
+        }
+      }).catch(() => {});
     } catch {
       // Fallback ke profil user jika ada
       if (user?.active_cycle) {
@@ -314,6 +322,11 @@ export default function TeacherSchedulePage() {
 
   // Navigasi ke halaman form Jurnal & Presensi
   const handleOpenJournal = (item) => {
+    if (item.is_teaching_exempted || item.journal_status === 'exempted') {
+      alert(`Jadwal kelas ${item.school_class?.name || item.class_name || ''} dibebaskan dari KBM karena terdapat agenda sekolah: ${item.exemption_reason || 'Kegiatan Khusus'}.`);
+      return;
+    }
+
     navigate('/teacher/journal', {
       state: {
         schedule: item,
@@ -324,6 +337,14 @@ export default function TeacherSchedulePage() {
 
   // Render Status Badge pada kartu jadwal
   const renderStatusBadge = (item) => {
+    if (item.is_teaching_exempted || item.journal_status === 'exempted') {
+      return (
+        <Badge variant="warning" title={item.exemption_reason || 'Dikecualikan dari KBM'}>
+          {item.exemption_reason ? `Dikecualikan: ${item.exemption_reason}` : 'Dikecualikan KBM'}
+        </Badge>
+      );
+    }
+
     if (scheduleContext === 'my_schedule' && todayActiveLeave) {
       if (todayActiveLeave.status === 'approved') {
         return <Badge variant="warning">Izin Disetujui</Badge>;
@@ -377,6 +398,21 @@ export default function TeacherSchedulePage() {
           </Badge>
         </div>
       </div>
+
+      {/* Banner Hari Libur Nasional / Agenda Sekolah Penuh */}
+      {todayExemption?.is_teaching_exempted && todayExemption?.disabling_event?.scope_type === 'all' && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-3 mb-4 text-rose-900 shadow-xs">
+          <AlertCircle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold">
+              HARI LIBUR / AGENDA RESMI: {todayExemption.disabling_event.title}
+            </h3>
+            <p className="text-xs text-rose-700 mt-0.5">
+              Seluruh kegiatan KBM reguler dan kewajiban pengisian jurnal/presensi dinonaktifkan pada hari ini.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 2. Kartu Statistik Ringkasan Beban Mengajar Guru */}
       {scheduleContext === 'my_schedule' && (

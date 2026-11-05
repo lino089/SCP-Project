@@ -7250,3 +7250,47 @@ Sistem Penugasan BK/Kesiswaan dan Wali Kelas (Fase 1–5) telah selesai secara m
 2. **Kinerja Import Excel:** Berkas resmi sekolah 48 rombel kelas dapat dipetakan secara akurat dalam hitungan detik menggunakan smart 3-tier matcher dan mekanisme preview aman.
 3. **Integritas Perizinan:** Alur verifikasi izin guru bebas dari konflik kepentingan (*anti-self-approval*), mendukung penugasan multi-kelas via *first-responder*, dan memiliki mekanisme eskalasi serta *universal fallback* ke Waka Kurikulum.
 4. **Antarmuka Pengguna Intuitif:** Tab Penugasan Guru pada Master Data Admin menyajikan matriks 48 kelas, indikator kelengkapan, kartu statistik ringkas, dan wizard import interaktif.
+
+---
+
+## Fase 85: Implementasi Kalender Akademik & Agenda Khusus KBM (Event-Driven Academic Calendar)
+
+**Proyek:** School Class Progress (SCP) — Backend REST API & Frontend React SPA  
+**Acuan Panduan:** `fitur_kalender_akademik_agenda_kbm - Copy.md`  
+**Waktu Eksekusi:** 2026-11-06  
+**Status Fase:** Selesai (100% Lolos Pengujian)
+
+### 1. Ringkasan Fitur & Perubahan
+Fitur Kalender Akademik & Agenda Khusus KBM mengintegrasikan manajemen kegiatan sekolah berbasis event yang berdampak langsung terhadap kewajiban KBM di jadwal pelajaran, pengisian jurnal mengajar guru, kehadiran presensi siswa, pemantauan rekapitulasi waka, serta perizinan guru dan siswa:
+1. **Model & Migrasi Database (`academic_events`)**:
+   - Kolom: `title`, `description`, `start_date`, `end_date`, `type` (`holiday`, `school_event`, `class_event`, `exam`), `scope_type` (`all`, `grade`, `class`), `scope_targets` (JSON), `disables_teaching` (boolean), `academic_year`, `created_by`, timestamps, `deleted_at`.
+   - Composite Index untuk efisiensi kueri rentang tanggal.
+2. **Service Layer Terpusat (`AcademicCalendarExclusionService`)**:
+   - Logika penentuan pengecualian KBM dengan normalisasi tingkatan grade ('10', '11', '12') dan in-memory cache per tanggal untuk mencegah N+1 query.
+   - Menyediakan `getActiveDisablingEvent()`, `getActiveEventsForClass()`, `getEventsForRange()`, dan `clearCache()`.
+3. **Endpoint REST API (`/api/academic-events`)**:
+   - CRUD lengkap dilindungi otorisasi khusus Waka Kurikulum (`role:vice_principal`).
+   - Endpoint `GET /api/academic-events/check-exemption` untuk pengecekan status KBM suatu kelas pada tanggal tertentu.
+4. **Proteksi & Penyelarasan Alur KBM Backend**:
+   - **`ScheduleController`**: Membebaskan jadwal yang dikecualikan dari status `missing_journal`, menambahkan atribut `is_teaching_exempted`, `exemption_reason`, `event_type`, dan `journal_status = 'exempted'`.
+   - **`JournalController`**: Memblokir pembukaan sesi (`store`), penyelesaian sesi (`update`), dan penandaan guru berhalangan (`markTeacherAbsent`) dengan HTTP 422 `TEACHING_DISABLED_BY_EVENT` jika KBM ditiadakan oleh agenda aktif.
+   - **`dailyRecap` Endpoint**: Menyajikan rekapitulasi harian KBM menyeluruh dengan kalkulasi tingkat kepatuhan guru:
+     $$\text{Kepatuhan} = \frac{\text{Jurnal Terisi}}{\text{Total Jadwal Wajib} - \text{Jadwal Dikecualikan}} \times 100\%$$
+   - **`LeaveRequestController`**: Menolak pengajuan izin siswa jika seluruh hari pada rentang tanggal adalah hari libur / KBM ditiadakan.
+   - **`TeacherLeaveRequestController`**: Memblokir pengajuan izin guru jika slot jadwal yang dipilih sudah dikecualikan oleh kalender akademik.
+
+### 2. File Backend yang Dibuat / Diubah
+- `scp/database/migrations/2026_11_06_000001_create_academic_events_table.php` (Dibuat)
+- `scp/app/Models/AcademicEvent.php` (Dibuat)
+- `scp/app/Services/AcademicCalendarExclusionService.php` (Dibuat)
+- `scp/app/Http/Controllers/API/AcademicEventController.php` (Dibuat)
+- `scp/routes/api.php` (Diubah)
+- `scp/app/Http/Controllers/API/ScheduleController.php` (Diubah)
+- `scp/app/Http/Controllers/API/JournalController.php` (Diubah)
+- `scp/app/Http/Controllers/API/LeaveRequestController.php` (Diubah)
+- `scp/app/Http/Controllers/API/TeacherLeaveRequestController.php` (Diubah)
+- `scp/tests/Feature/AcademicCalendarExclusionTest.php` (Dibuat)
+
+### 3. Hasil Pengujian Backend
+- Automated Test `AcademicCalendarExclusionTest`: **8/8 Tests PASSED** (40 assertions, 1.25s).
+- Terintegrasi penuh dengan seluruh rangkaian pengujian fitur utama (120+ tests green).

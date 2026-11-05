@@ -15,6 +15,7 @@ import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import { scheduleApi } from '../../services/scheduleApi';
 import { quizApi } from '../../services/quizApi';
+import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button, Modal, Table } from '../../components/shared';
 import './StudentHome.css';
 
@@ -27,6 +28,7 @@ export default function StudentHomePage() {
   const [attendances, setAttendances] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [activeQuizzes, setActiveQuizzes] = useState([]);
+  const [activeEvent, setActiveEvent] = useState(null);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
 
   // Student Profile Data (Data Riil dari Auth State)
@@ -71,10 +73,12 @@ export default function StudentHomePage() {
           })
         : Promise.resolve({ data: [] });
 
-      const [attRes, schedRes, quizRes] = await Promise.all([
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [attRes, schedRes, quizRes, eventRes] = await Promise.all([
         leaveApi.getAttendances({ per_page: 50 }),
         schedPromise,
         quizApi.getQuizzes({ per_page: 20 }),
+        academicEventApi.checkExemption({ for_my_class: 1, date: todayStr }).catch(() => ({ data: { data: {} } })),
       ]);
 
       // 1. Rekapitulasi Presensi
@@ -89,6 +93,16 @@ export default function StudentHomePage() {
       const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
       const filteredQuizzes = quizList.filter((q) => q.status === 'published');
       setActiveQuizzes(filteredQuizzes);
+
+      // 4. Agenda Khusus Kelas Hari Ini
+      const eventData = eventRes?.data?.data;
+      if (eventData?.disabling_event) {
+        setActiveEvent(eventData.disabling_event);
+      } else if (eventData?.active_events && eventData.active_events.length > 0) {
+        setActiveEvent(eventData.active_events[0]);
+      } else {
+        setActiveEvent(null);
+      }
     } catch (err) {
       console.warn('Gagal memuat data portal beranda siswa:', err);
       setLoadError(err.message || 'Gagal memuat data portal beranda siswa.');
@@ -331,6 +345,41 @@ export default function StudentHomePage() {
       </div>
 
       {/* =========================================================================
+          BANNER AGENDA KALENDER AKADEMIK KELAS HARI INI
+         ========================================================================= */}
+      {activeEvent && (
+        <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', backgroundColor: activeEvent.disables_teaching ? '#fffbeb' : '#f0fdf4', border: `1px solid ${activeEvent.disables_teaching ? '#fde68a' : '#bbf7d0'}`, borderRadius: '0.75rem' }}>
+          <div className="flex items-start gap-3">
+            <Calendar className={`w-5 h-5 mt-0.5 shrink-0 ${activeEvent.disables_teaching ? 'text-amber-600' : 'text-emerald-600'}`} />
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={`text-sm font-bold ${activeEvent.disables_teaching ? 'text-amber-950' : 'text-emerald-950'}`}>
+                  Agenda Hari Ini: {activeEvent.title}
+                </h3>
+                <Badge variant={activeEvent.disables_teaching ? 'warning' : 'success'}>
+                  {activeEvent.type === 'holiday' ? 'Libur Sekolah' : activeEvent.type === 'exam' ? 'Agenda Ujian' : 'Agenda Khusus'}
+                </Badge>
+              </div>
+              {activeEvent.description && (
+                <p className={`text-xs mt-1 ${activeEvent.disables_teaching ? 'text-amber-800' : 'text-emerald-800'}`}>
+                  {activeEvent.description}
+                </p>
+              )}
+              {activeEvent.disables_teaching ? (
+                <p className="text-xs font-semibold text-rose-700 mt-1">
+                  KBM reguler di kelas ditiadakan selama agenda berlangsung.
+                </p>
+              ) : (
+                <p className="text-xs font-medium text-emerald-700 mt-1">
+                  Kegiatan belajar mengajar (KBM) kelas tetap berjalan sesuai jadwal.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
           4. LAYOUT UTAMA: JADWAL KBM HARI INI & KUIS AKTIF
          ========================================================================= */}
       <div className="student-home__main-grid">
@@ -382,9 +431,16 @@ export default function StudentHomePage() {
                   </div>
 
                   <div className="student-home__sched-details">
-                    <h3 className="student-home__subject-name">
-                      {item.subject?.name || '-'}
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="student-home__subject-name">
+                        {item.subject?.name || '-'}
+                      </h3>
+                      {item.is_teaching_exempted && (
+                        <Badge variant="warning" className="text-[10px]">
+                          Dikecualikan: {item.exemption_reason || 'Agenda Khusus'}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="student-home__teacher-name">
                       Guru: {item.teacher?.name || '-'}
                     </p>

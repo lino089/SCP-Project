@@ -34,6 +34,14 @@ export const journalApi = {
   },
 
   /**
+   * Mengambil rekapitulasi harian KBM & kepatuhan pengisian jurnal
+   * GET /api/journals/daily-recap
+   */
+  async getDailyRecap(params = {}) {
+    return api.get('/journals/daily-recap', { params });
+  },
+
+  /**
    * Mengambil detail jurnal beserta riwayat presensi
    * GET /api/journals/{id}
    */

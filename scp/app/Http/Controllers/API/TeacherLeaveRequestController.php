@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Schedule;
 use App\Models\TeacherLeaveRequest;
+use App\Services\AcademicCalendarExclusionService;
 use App\Services\TeacherLeaveAuthorityResolver;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,8 @@ use Illuminate\Support\Facades\DB;
 class TeacherLeaveRequestController extends Controller
 {
     public function __construct(
-        protected TeacherLeaveAuthorityResolver $authorityResolver
+        protected TeacherLeaveAuthorityResolver $authorityResolver,
+        protected AcademicCalendarExclusionService $exclusionService
     ) {}
 
     /**
@@ -221,6 +223,8 @@ class TeacherLeaveRequestController extends Controller
         $scheduleIds = $request->input('schedule_ids', []);
 
         // 1. Validasi Integritas Kepemilikan Jadwal: Seluruh jadwal harus milik guru yang bersangkutan
+        $targetDate = Carbon::parse($request->input('date'))->toDateString();
+
         if (!empty($scheduleIds)) {
             $invalidScheduleExists = Schedule::whereIn('id', $scheduleIds)
                 ->where('teacher_id', '!=', $user->id)
@@ -232,10 +236,25 @@ class TeacherLeaveRequestController extends Controller
                     'message' => 'Anda hanya dapat mengajukan izin untuk jadwal mengajar milik Anda sendiri.',
                 ], 422);
             }
+
+            // Validasi: Cegah izin untuk jadwal yang sudah dikecualikan oleh kalender akademik
+            $schedules = Schedule::with('schoolClass')->whereIn('id', $scheduleIds)->get();
+            foreach ($schedules as $sched) {
+                $classLevel = $sched->schoolClass?->level;
+                if ($classLevel !== null) {
+                    $disablingEvent = $this->exclusionService->getActiveDisablingEvent($sched->class_id, $classLevel, $targetDate);
+                    if ($disablingEvent !== null) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Jadwal ' . ($sched->schoolClass?->name ?? 'Kelas') . ' pada tanggal tersebut sudah dibebaskan dari KBM karena agenda sekolah (' . $disablingEvent->title . '). Tidak perlu mengajukan izin untuk jadwal ini.',
+                            'error_code' => 'TEACHING_DISABLED_BY_EVENT',
+                        ], 422);
+                    }
+                }
+            }
         }
 
         // 2. Pencegahan Pengajuan Duplikat: Cegah pengajuan ganda pending/approved pada tanggal yang sama
-        $targetDate = Carbon::parse($request->input('date'))->toDateString();
 
         $existingActiveLeave = TeacherLeaveRequest::where('teacher_id', $user->id)
             ->whereDate('date', $targetDate)

@@ -74,6 +74,16 @@ export default function Sidebar({ isOpen = false, onClose }) {
                 </NavLink>
 
                 <NavLink
+                  to="/web/academic-calendar"
+                  className={({ isActive }) =>
+                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
+                  }
+                  onClick={() => onClose?.()}
+                >
+                  Kalender Akademik
+                </NavLink>
+
+                <NavLink
                   to="/web/schedules"
                   className={({ isActive }) =>
                     `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`

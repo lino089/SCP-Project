@@ -25,6 +25,7 @@ import {
 } from '../../components/shared';
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
 import { masterDataSummaryApi } from '../../services/masterDataApi';
+import academicEventApi from '../../services/academicEventApi';
 import './DashboardWaka.css';
 
 export default function DashboardWakaPage() {
@@ -51,6 +52,9 @@ export default function DashboardWakaPage() {
 
   // Missing journals
   const [missingJournals, setMissingJournals] = useState([]);
+
+  // Agenda Kalender Akademik Hari Ini
+  const [todayEvents, setTodayEvents] = useState([]);
 
   // Loading & Feedback states
   const [isLoading, setIsLoading] = useState(true);
@@ -90,12 +94,18 @@ export default function DashboardWakaPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [settingsRes, sumRes, historyRes, missingRes] = await Promise.all([
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [settingsRes, sumRes, historyRes, missingRes, eventRes] = await Promise.all([
         academicSettingApi.getSettings(),
         masterDataSummaryApi.getSummary(),
         academicSettingApi.getCycleHistory(),
         scheduleApi.getMissingJournals().catch(() => ({ data: [] })),
+        academicEventApi.checkExemption({ date: todayStr }).catch(() => ({ data: { data: {} } })),
       ]);
+
+      // Agenda Kalender Akademik Hari Ini
+      const activeEvts = eventRes?.data?.data?.active_events || [];
+      setTodayEvents(activeEvts);
 
       // 1. Settings
       if (settingsRes?.data) {
@@ -362,6 +372,50 @@ export default function DashboardWakaPage() {
             <RotateCw className="w-3.5 h-3.5 mr-1" />
             Coba Lagi
           </Button>
+        </div>
+      )}
+
+      {/* Banner Agenda Khusus / Kalender Akademik Hari Ini */}
+      {todayEvents.length > 0 && (
+        <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Calendar className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-amber-900">Agenda Kalender Akademik Hari Ini</h3>
+                  <Badge variant="warning">{todayEvents.length} Agenda Aktif</Badge>
+                </div>
+                <div className="mt-1 flex flex-col gap-1">
+                  {todayEvents.map((evt) => (
+                    <div key={evt.id} className="text-xs text-amber-800 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-amber-950">&bull; {evt.title}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-mono">
+                        {evt.scope_type === 'all' ? 'Seluruh Sekolah' : evt.scope_type === 'grade' ? `Tingkat ${evt.scope_targets?.join(', ')}` : 'Rombel Tertentu'}
+                      </span>
+                      {evt.disables_teaching ? (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold">
+                          KBM Reguler Ditiadakan
+                        </span>
+                      ) : (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
+                          KBM Tetap Berjalan
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/web/academic-calendar')}
+              className="shrink-0 text-amber-900 border-amber-300 hover:bg-amber-100"
+            >
+              Kelola Kalender
+            </Button>
+          </div>
         </div>
       )}
 

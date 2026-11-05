@@ -11,6 +11,7 @@ const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const ChangePasswordPage = lazy(() => import('../pages/auth/ChangePasswordPage'));
 const ProfilePage = lazy(() => import('../pages/profile/ProfilePage'));
 const DashboardWakaPage = lazy(() => import('../pages/waka/DashboardWakaPage'));
+const AcademicCalendarPage = lazy(() => import('../pages/waka/AcademicCalendarPage'));
 const ScheduleManagementPage = lazy(() => import('../pages/waka/ScheduleManagementPage'));
 const ScheduleImportPage = lazy(() => import('../pages/waka/ScheduleImportPage'));
 const MasterDataPage = lazy(() => import('../pages/waka/MasterDataPage'));
@@ -49,6 +50,8 @@ export default function AppRouter() {
             {/* Waka Kurikulum Routes */}
             <Route element={<RoleRoute allowedRoles={['waka']} />}>
               <Route path="/web/dashboard" element={<DashboardWakaPage />} />
+              <Route path="/web/academic-calendar" element={<AcademicCalendarPage />} />
+              <Route path="/waka/academic-calendar" element={<Navigate to="/web/academic-calendar" replace />} />
               <Route path="/web/schedules" element={<ScheduleManagementPage />} />
               <Route path="/kurikulum/jadwal/import" element={<ScheduleImportPage />} />
               <Route path="/kurikulum/jadwal/import/:id" element={<ScheduleImportPage />} />

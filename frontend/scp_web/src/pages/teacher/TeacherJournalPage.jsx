@@ -339,6 +339,10 @@ export default function TeacherJournalPage() {
   // Buka Sesi Kelas KBM (POST /api/journals)
   const handleOpenClass = async () => {
     if (!schedule) return;
+    if (schedule.is_teaching_exempted) {
+      setErrorMessage(`Pengisian jurnal dibatalkan karena terdapat agenda sekolah: ${schedule.exemption_reason || 'Kegiatan Khusus'}.`);
+      return;
+    }
     setIsSubmitting(true);
     setErrorMessage('');
 
@@ -968,52 +972,61 @@ export default function TeacherJournalPage() {
               Kembali ke Jadwal
             </Button>
 
-            <div className="teacher-journal__actions-primary">
-              {schedule?.journal_status === 'completed' ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="md"
-                    icon={Edit3}
-                    onClick={handleOpenClass}
-                  >
-                    Buka &amp; Perbarui Jurnal
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    icon={Eye}
-                    loading={isSubmitting}
-                    onClick={handleViewJournalDetail}
-                  >
-                    Lihat Detail Jurnal &amp; Catatan Siswa
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {(isKesiswaan() || hasRole('waka')) && (
+            {schedule?.is_teaching_exempted ? (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs flex items-center gap-2">
+                <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                <span>
+                  <strong>KBM Dikecualikan:</strong> {schedule.exemption_reason || 'Agenda Khusus Sekolah'}. Guru tidak berkewajiban membuka jurnal.
+                </span>
+              </div>
+            ) : (
+              <div className="teacher-journal__actions-primary">
+                {schedule?.journal_status === 'completed' ? (
+                  <>
                     <Button
                       variant="outline"
                       size="md"
-                      onClick={handleMarkTeacherAbsent}
+                      icon={Edit3}
+                      onClick={handleOpenClass}
                     >
-                      Tandai Guru Berhalangan
+                      Buka &amp; Perbarui Jurnal
                     </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    size="md"
-                    icon={PlayCircle}
-                    loading={isSubmitting}
-                    onClick={handleOpenClass}
-                  >
-                    {isSubstituteMode
-                      ? 'Mulai Presensi & Ambil Alih Kelas'
-                      : 'Mulai & Buka Kelas Sekarang'}
-                  </Button>
-                </>
-              )}
-            </div>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      icon={Eye}
+                      loading={isSubmitting}
+                      onClick={handleViewJournalDetail}
+                    >
+                      Lihat Detail Jurnal &amp; Catatan Siswa
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {(isKesiswaan() || hasRole('waka')) && (
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={handleMarkTeacherAbsent}
+                      >
+                        Tandai Guru Berhalangan
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="md"
+                      icon={PlayCircle}
+                      loading={isSubmitting}
+                      onClick={handleOpenClass}
+                    >
+                      {isSubstituteMode
+                        ? 'Mulai Presensi & Ambil Alih Kelas'
+                        : 'Mulai & Buka Kelas Sekarang'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : (

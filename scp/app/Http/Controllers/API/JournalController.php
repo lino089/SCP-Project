@@ -7,7 +7,9 @@ use App\Models\Attendance;
 use App\Models\Journal;
 use App\Models\LeaveRequest;
 use App\Models\Schedule;
+use App\Models\SystemConfiguration;
 use App\Models\User;
+use App\Services\AcademicCalendarExclusionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,10 @@ use Intervention\Image\Laravel\Facades\Image;
 
 class JournalController extends Controller
 {
+    public function __construct(
+        protected AcademicCalendarExclusionService $exclusionService
+    ) {}
+
     /**
      * Menampilkan daftar riwayat jurnal mengajar ter-scoped (PRD 9.7).
      * GET /api/journals
@@ -164,6 +170,24 @@ class JournalController extends Controller
         $user = $request->user();
         $today = $request->input('date') ?? Carbon::now('Asia/Jakarta')->toDateString();
 
+        // Validasi Eksklusi Kalender Akademik & Agenda Khusus KBM
+        $classLevel = $schedule->schoolClass?->level;
+        if ($classLevel !== null) {
+            $disablingEvent = $this->exclusionService->getActiveDisablingEvent($schedule->class_id, $classLevel, $today);
+            if ($disablingEvent !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengisian jurnal dibatalkan karena terdapat agenda sekolah: ' . $disablingEvent->title . '.',
+                    'error_code' => 'TEACHING_DISABLED_BY_EVENT',
+                    'data' => [
+                        'event_id' => $disablingEvent->id,
+                        'event_title' => $disablingEvent->title,
+                        'event_type' => $disablingEvent->type,
+                    ],
+                ], 422);
+            }
+        }
+
         $isOriginalTeacher = ($schedule->teacher_id === $user->id);
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
         $isWaka = ($user->role === 'vice_principal');
@@ -275,7 +299,25 @@ class JournalController extends Controller
             ], 403);
         }
 
-        $journal = Journal::with('schedule')->findOrFail($id);
+        $journal = Journal::with('schedule.schoolClass')->findOrFail($id);
+
+        // Validasi Eksklusi Kalender Akademik & Agenda Khusus KBM
+        $classLevel = $journal->schedule?->schoolClass?->level;
+        if ($classLevel !== null) {
+            $disablingEvent = $this->exclusionService->getActiveDisablingEvent($journal->schedule->class_id, $classLevel, $journal->date);
+            if ($disablingEvent !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Penandaan guru berhalangan hadir dibatalkan karena terdapat agenda sekolah: ' . $disablingEvent->title . '.',
+                    'error_code' => 'TEACHING_DISABLED_BY_EVENT',
+                    'data' => [
+                        'event_id' => $disablingEvent->id,
+                        'event_title' => $disablingEvent->title,
+                        'event_type' => $disablingEvent->type,
+                    ],
+                ], 422);
+            }
+        }
 
         if ($journal->status === 'completed') {
             return response()->json([
@@ -302,7 +344,25 @@ class JournalController extends Controller
      */
     public function update(Request $request, $id): JsonResponse
     {
-        $journal = Journal::with('schedule')->findOrFail($id);
+        $journal = Journal::with('schedule.schoolClass')->findOrFail($id);
+
+        // Validasi Eksklusi Kalender Akademik & Agenda Khusus KBM
+        $classLevel = $journal->schedule?->schoolClass?->level;
+        if ($classLevel !== null) {
+            $disablingEvent = $this->exclusionService->getActiveDisablingEvent($journal->schedule->class_id, $classLevel, $journal->date);
+            if ($disablingEvent !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Penyelesaian jurnal dibatalkan karena terdapat agenda sekolah: ' . $disablingEvent->title . '.',
+                    'error_code' => 'TEACHING_DISABLED_BY_EVENT',
+                    'data' => [
+                        'event_id' => $disablingEvent->id,
+                        'event_title' => $disablingEvent->title,
+                        'event_type' => $disablingEvent->type,
+                    ],
+                ], 422);
+            }
+        }
         $user = $request->user();
 
         $isOriginalTeacher = ($journal->schedule->teacher_id === $user->id);
@@ -463,6 +523,144 @@ class JournalController extends Controller
             ]),
             'meta' => [
                 'total_students_attendance' => $insertedCount,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Menampilkan rekapitulasi harian KBM & kepatuhan pengisian jurnal (PRD 9.7 & Kalender Akademik).
+     * GET /api/journals/daily-recap
+     */
+    public function dailyRecap(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Otorisasi: Khusus Waka Kurikulum & Guru
+        if (!in_array($user->role, ['vice_principal', 'teacher'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat rekapitulasi jurnal.',
+            ], 403);
+        }
+
+        $request->validate([
+            'date' => 'nullable|date_format:Y-m-d',
+            'class_id' => 'nullable|integer|exists:classes,id',
+        ]);
+
+        $dateStr = $request->input('date', Carbon::now('Asia/Jakarta')->toDateString());
+        $targetDate = Carbon::parse($dateStr, 'Asia/Jakarta');
+        $dayOfWeek = (int) $targetDate->dayOfWeekIso;
+
+        $activeCycle = (int) (SystemConfiguration::first()?->active_cycle ?? 1);
+
+        $query = Schedule::query()
+            ->where('cycle_type', $activeCycle)
+            ->where('day_of_week', $dayOfWeek)
+            ->with([
+                'schoolClass:id,name,level',
+                'teacher:id,name,nis_nip',
+                'room:id,name',
+                'subject:id,name',
+                'journals' => fn ($jq) => $jq->whereDate('date', $dateStr),
+            ]);
+
+        if ($request->filled('class_id')) {
+            $query->where('class_id', $request->integer('class_id'));
+        }
+
+        $schedules = $query->orderBy('class_id')->orderBy('period_number')->get();
+
+        $rows = [];
+        $totalMandatory = 0;
+        $exemptedCount = 0;
+        $completedCount = 0;
+        $ongoingCount = 0;
+        $absentCount = 0;
+        $unfilledCount = 0;
+
+        foreach ($schedules as $sched) {
+            $totalMandatory++;
+            $journal = $sched->journals->first();
+            $classLevel = $sched->schoolClass?->level;
+
+            $disablingEvent = $classLevel !== null
+                ? $this->exclusionService->getActiveDisablingEvent($sched->class_id, $classLevel, $targetDate)
+                : null;
+
+            $isExempted = $disablingEvent !== null;
+
+            if ($journal && $journal->status === 'completed') {
+                $status = 'completed';
+                $completedCount++;
+            } elseif ($journal && $journal->status === 'teacher_absent') {
+                $status = 'teacher_absent';
+                $absentCount++;
+            } elseif ($isExempted) {
+                $status = 'exempted';
+                $exemptedCount++;
+            } elseif ($journal && $journal->status === 'ongoing') {
+                $status = 'ongoing';
+                $ongoingCount++;
+            } else {
+                $status = 'unfilled';
+                $unfilledCount++;
+            }
+
+            $rows[] = [
+                'schedule_id' => $sched->id,
+                'class_id' => $sched->class_id,
+                'class_name' => $sched->schoolClass?->name,
+                'teacher_id' => $sched->teacher_id,
+                'teacher_name' => $sched->teacher?->name,
+                'subject_id' => $sched->subject_id,
+                'subject_name' => $sched->subject?->name,
+                'room_name' => $sched->room?->name,
+                'period_number' => $sched->period_number,
+                'date' => $dateStr,
+                'status' => $status,
+                'is_teaching_exempted' => $isExempted,
+                'exemption_reason' => $disablingEvent?->title,
+                'event_type' => $disablingEvent?->type,
+                'journal_id' => $journal?->id,
+                'photo_url' => $journal?->photo_url,
+                'topic_description' => $journal?->topic_description,
+                'substitute_teacher_id' => $journal?->substitute_teacher_id,
+                'substitute_teacher_name' => $journal?->substituteTeacher?->name,
+            ];
+        }
+
+        $effectiveMandatory = max(0, $totalMandatory - $exemptedCount);
+        $complianceRate = $effectiveMandatory > 0
+            ? round(($completedCount / $effectiveMandatory) * 100, 1)
+            : 100.0;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data rekapitulasi harian KBM berhasil diambil.',
+            'data' => [
+                'date' => $dateStr,
+                'day_of_week' => $dayOfWeek,
+                'active_cycle' => $activeCycle,
+                'total_mandatory' => $totalMandatory,
+                'exempted_count' => $exemptedCount,
+                'effective_mandatory' => $effectiveMandatory,
+                'completed_count' => $completedCount,
+                'ongoing_count' => $ongoingCount,
+                'absent_count' => $absentCount,
+                'unfilled_count' => $unfilledCount,
+                'compliance_rate' => $complianceRate,
+                'metrics' => [
+                    'total_mandatory' => $totalMandatory,
+                    'exempted_count' => $exemptedCount,
+                    'effective_mandatory' => $effectiveMandatory,
+                    'completed_count' => $completedCount,
+                    'ongoing_count' => $ongoingCount,
+                    'absent_count' => $absentCount,
+                    'unfilled_count' => $unfilledCount,
+                    'compliance_rate' => $complianceRate,
+                ],
+                'items' => $rows,
             ],
         ], 200);
     }

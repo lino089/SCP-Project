@@ -1565,17 +1565,35 @@ export default function MasterDataPage() {
               if (asgns.length === 0) {
                 return <span className="text-xs text-neutral-400">-</span>;
               }
+
+              const waliAssignments = asgns.filter((a) => a.type === 'wali_kelas');
+              const kesiswaanAssignments = asgns.filter((a) => a.type === 'kesiswaan');
+
               return (
                 <div className="flex flex-wrap gap-1">
-                  {asgns.map((a, i) => {
-                    const isWali = a.type === 'wali_kelas';
+                  {waliAssignments.map((a, i) => {
                     const cName = a.school_class?.name || a.schoolClass?.name || '';
                     return (
-                      <Badge key={a.id || i} variant={isWali ? 'default' : 'warning'}>
-                        {isWali ? `Wali ${cName}` : 'Kesiswaan'}
+                      <Badge key={a.id || `wali-${i}`} variant="default">
+                        {`Wali ${cName}`}
                       </Badge>
                     );
                   })}
+                  {kesiswaanAssignments.length > 0 && (
+                    <Badge
+                      variant="warning"
+                      title={
+                        kesiswaanAssignments.length > 1
+                          ? `Kesiswaan (${kesiswaanAssignments.length} Kelas Binaan: ${kesiswaanAssignments
+                              .map((k) => k.school_class?.name || k.schoolClass?.name || '')
+                              .filter(Boolean)
+                              .join(', ')})`
+                          : 'Kesiswaan'
+                      }
+                    >
+                      Kesiswaan
+                    </Badge>
+                  )}
                 </div>
               );
             },
@@ -2837,15 +2855,45 @@ export default function MasterDataPage() {
                   <div className="master-data__detail-item col-span-2">
                     <span className="master-data__detail-label">Tugas Tambahan &amp; Jabatan</span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
+                      {Array.isArray(detailItem.assignments) && detailItem.assignments.length > 0 && (
+                        <>
+                          {detailItem.assignments
+                            .filter((a) => a.type === 'wali_kelas')
+                            .map((a, idx) => {
+                              const cName = a.school_class?.name || a.schoolClass?.name || '';
+                              return (
+                                <Badge key={`wali-${idx}`} variant="default">
+                                  {`Wali ${cName}`}
+                                </Badge>
+                              );
+                            })}
+                          {detailItem.assignments.filter((a) => a.type === 'kesiswaan').length > 0 && (
+                            <Badge
+                              variant="warning"
+                              title={
+                                detailItem.assignments.filter((a) => a.type === 'kesiswaan').length > 1
+                                  ? `Kesiswaan (${detailItem.assignments.filter((a) => a.type === 'kesiswaan').length} Kelas Binaan: ${detailItem.assignments
+                                      .filter((a) => a.type === 'kesiswaan')
+                                      .map((k) => k.school_class?.name || k.schoolClass?.name || '')
+                                      .filter(Boolean)
+                                      .join(', ')})`
+                                  : 'Kesiswaan'
+                              }
+                            >
+                              Kesiswaan
+                            </Badge>
+                          )}
+                        </>
+                      )}
                       {Array.isArray(detailItem.roles) && detailItem.roles.length > 0 ? (
                         detailItem.roles.map((r, idx) => (
                           <Badge key={idx} variant="neutral">{r.name || r}</Badge>
                         ))
                       ) : detailItem.additional_task ? (
                         <Badge variant="neutral">{detailItem.additional_task}</Badge>
-                      ) : (
+                      ) : (!detailItem.assignments || detailItem.assignments.length === 0) ? (
                         <span className="text-xs text-neutral-400">Guru Reguler (Tanpa Tugas Tambahan)</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </>

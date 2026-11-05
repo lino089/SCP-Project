@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { FileText, Eye, UserX, Download, AlertCircle, RotateCw } from 'lucide-react';
+import { FileText, Eye, UserX, Download, AlertCircle, RotateCw, Calendar } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import { quizApi } from '../../services/quizApi';
 import { scheduleApi } from '../../services/scheduleApi';
+import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl } from '../../utils/formatters';
 import Tabs from '../../components/shared/Tabs';
 import Badge from '../../components/shared/Badge';
@@ -22,6 +23,7 @@ export default function ParentMonitoringPage() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
   const [childSchedules, setChildSchedules] = useState([]);
+  const [childEvent, setChildEvent] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
 
   // Child Profile Information
@@ -46,11 +48,20 @@ export default function ParentMonitoringPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [attRes, leaveRes, quizRes, schedRes] = await Promise.all([
+      const todayStr = new Date().toISOString().split('T')[0];
+      const studentObj = user?.linked_student || user?.linkedStudent;
+      const classId = studentObj?.class_id || null;
+
+      const eventPromise = classId
+        ? academicEventApi.checkExemption({ class_id: classId, date: todayStr }).catch(() => ({ data: { data: {} } }))
+        : academicEventApi.checkExemption({ date: todayStr }).catch(() => ({ data: { data: {} } }));
+
+      const [attRes, leaveRes, quizRes, schedRes, eventRes] = await Promise.all([
         leaveApi.getAttendances({ per_page: 50 }),
         leaveApi.getLeaveRequests({ per_page: 50 }),
         quizApi.getQuizzes({ status: 'published_result', per_page: 50 }),
         scheduleApi.getSchedules({ all: 1 }).catch(() => ({ data: [] })),
+        eventPromise,
       ]);
 
       // 1. Rekapitulasi Presensi
@@ -69,13 +80,23 @@ export default function ParentMonitoringPage() {
       // 4. Jadwal Belajar Kelas Anak
       const schedList = Array.isArray(schedRes?.data) ? schedRes.data : Array.isArray(schedRes) ? schedRes : [];
       setChildSchedules(schedList);
+
+      // 5. Agenda Kalender Akademik Hari Ini
+      const eventData = eventRes?.data?.data;
+      if (eventData?.disabling_event) {
+        setChildEvent(eventData.disabling_event);
+      } else if (eventData?.active_events && eventData.active_events.length > 0) {
+        setChildEvent(eventData.active_events[0]);
+      } else {
+        setChildEvent(null);
+      }
     } catch (err) {
       console.warn('Gagal memuat data monitoring anak:', err);
       setLoadError(err.message || 'Gagal memuat data monitoring anak dari server.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchMonitoringData();
@@ -414,6 +435,41 @@ export default function ParentMonitoringPage() {
               <div>
                 <h4 className="parent-alert-title">{attendanceWarning.title}</h4>
                 <p className="parent-alert-desc">{attendanceWarning.message}</p>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================================
+              BANNER AGENDA KALENDER AKADEMIK KELAS ANAK HARI INI
+             ===================================================================== */}
+          {childEvent && (
+            <div style={{ marginTop: '1rem', padding: '1rem 1.25rem', backgroundColor: childEvent.disables_teaching ? '#fffbeb' : '#f0fdf4', border: `1px solid ${childEvent.disables_teaching ? '#fde68a' : '#bbf7d0'}`, borderRadius: '0.75rem' }}>
+              <div className="flex items-start gap-3">
+                <Calendar className={`w-5 h-5 mt-0.5 shrink-0 ${childEvent.disables_teaching ? 'text-amber-600' : 'text-emerald-600'}`} />
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`text-sm font-bold ${childEvent.disables_teaching ? 'text-amber-950' : 'text-emerald-950'}`}>
+                      Agenda Hari Ini: {childEvent.title}
+                    </h3>
+                    <Badge variant={childEvent.disables_teaching ? 'warning' : 'success'}>
+                      {childEvent.type === 'holiday' ? 'Libur Sekolah' : childEvent.type === 'exam' ? 'Agenda Ujian' : 'Agenda Khusus'}
+                    </Badge>
+                  </div>
+                  {childEvent.description && (
+                    <p className={`text-xs mt-1 ${childEvent.disables_teaching ? 'text-amber-800' : 'text-emerald-800'}`}>
+                      {childEvent.description}
+                    </p>
+                  )}
+                  {childEvent.disables_teaching ? (
+                    <p className="text-xs font-semibold text-rose-700 mt-1">
+                      KBM reguler di rombel kelas siswa ditiadakan selama kegiatan ini berlangsung.
+                    </p>
+                  ) : (
+                    <p className="text-xs font-medium text-emerald-700 mt-1">
+                      KBM reguler di rombel kelas tetap berjalan sesuai jadwal pelajaran.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}

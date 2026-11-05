@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\API\AcademicEventController;
 use App\Http\Controllers\API\AcademicSettingController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AuthController;
@@ -56,6 +57,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/attendances', [AttendanceController::class, 'index']);
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
 
+    // Kalender Akademik & Agenda Khusus KBM (Read-only untuk seluruh user terautentikasi)
+    Route::get('/academic-events/check-exemption', [AcademicEventController::class, 'checkExemption']);
+    Route::get('/academic-events', [AcademicEventController::class, 'index']);
+    Route::get('/academic-events/{id}', [AcademicEventController::class, 'show']);
+
     // 9.6 Perizinan Siswa (Leave Requests)
     Route::get('/leave-requests', [LeaveRequestController::class, 'index']);
     Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
@@ -86,6 +92,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::patch('/academic-settings/year', [AcademicSettingController::class, 'updateAcademicYear']);
         Route::get('/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
         Route::get('/academic-settings/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
+
+        // Kalender Akademik (Mutasi Agenda Khusus Waka)
+        Route::post('/academic-events', [AcademicEventController::class, 'store']);
+        Route::put('/academic-events/{id}', [AcademicEventController::class, 'update']);
+        Route::delete('/academic-events/{id}', [AcademicEventController::class, 'destroy']);
 
         // 9.3 Master Data Classes
         Route::post('/classes', [SchoolClassController::class, 'store']);
@@ -148,6 +159,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // 2. Waka Kurikulum & Guru (Shared Read/Verification & Journals: PRD 9.7)
     Route::middleware('role:vice_principal,teacher')->group(function () {
+        Route::get('/journals/daily-recap', [JournalController::class, 'dailyRecap']);
         Route::get('/journals', [JournalController::class, 'index']);
         Route::get('/journals/{id}', [JournalController::class, 'show']);
         Route::post('/journals', [JournalController::class, 'store']);

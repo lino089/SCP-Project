@@ -774,9 +774,46 @@ Melakukan pengujian komprehensif alur pengguna (*end-to-end user journeys*) lint
 
 ---
 
+## Fase 10: Implementasi Kalender Akademik & Agenda Khusus KBM (Event-Driven Academic Calendar UI)
+
+### 1. Tujuan & Ruang Lingkup
+Mengembangkan antarmuka pengguna interaktif Kalender Akademik untuk Waka Kurikulum, serta mengintegrasikan deteksi dampak kegiatan khusus KBM di dashboard Waka, jadwal & jurnal guru, rekapitulasi monitoring, portal siswa, dan portal orang tua.
+
+### 2. Pekerjaan yang Telah Diselesaikan
+1. **API Service Client (`src/services/academicEventApi.js`)**:
+   - Mendukung `getEvents`, `checkExemption`, `getEventById`, `createEvent`, `updateEvent`, `deleteEvent`.
+   - Menambahkan method `getDailyRecap` pada `src/services/journalApi.js`.
+2. **Halaman Kalender Akademik Waka Kurikulum (`src/pages/waka/AcademicCalendarPage.jsx` & Modal)**:
+   - Navigasi bulan/tahun kalender dengan kisi 7 kolom.
+   - Modal Form CRUD agenda dengan opsi: tipe event (`holiday`, `school_event`, `class_event`, `exam`), rentang tanggal, cakupan (`all`, `grade`, `class`), dan toggle dampak KBM (`disables_teaching`).
+   - Kartu metrik KPI (Agenda Aktif, Libur Sekolah, Ujian/Asesmen, Kegiatan Sekolah) dan tabel daftar agenda dengan filter pencarian serta konfirmasi hapus via `ConfirmDialog`.
+   - Sidebar navigasi (`Sidebar.jsx`) dan Lazy Routing (`AppRouter.jsx`) pada rute `/web/academic-calendar`.
+3. **Integrasi Halaman Guru**:
+   - `TeacherSchedulePage.jsx`: Banner peringatan hari libur/kegiatan khusus, badge status KBM dikecualikan, dan pemblokiran pembukaan sesi jika KBM ditiadakan.
+   - `TeacherDashboardPage.jsx`: Banner agenda hari ini dan penggantian tombol aksi jurnal menjadi badge `Dikecualikan`.
+   - `TeacherJournalPage.jsx`: Penonaktifan form buka kelas dan penolakan aksi jika jadwal teridentifikasi dikecualikan.
+4. **Integrasi Rekapitulasi & Monitoring Waka (`MonitoringRecapPage.jsx`)**:
+   - Mengambil data rekap harian KBM via `journalApi.getDailyRecap()`.
+   - Menampilkan status slot KBM yang dikecualikan dengan badge `<Badge variant="warning">Dikecualikan: [Agenda]</Badge>`.
+   - Menampilkan slot jadwal wajib yang belum diisi dengan `<Badge variant="danger">Belum Terisi</Badge>`.
+   - Kartu metrik adaptif menghitung persentase kepatuhan guru:
+     $$\text{Kepatuhan} = \frac{\text{Selesai}}{\text{Wajib} - \text{Dikecualikan}} \times 100\%$$
+   - Ekspor Excel (.xlsx) mencakup status jurnal selesai, jam kosong, belum terisi, dan dikecualikan.
+5. **Integrasi Dashboard Waka, Portal Siswa, & Portal Orang Tua**:
+   - `DashboardWakaPage.jsx`: Banner agenda kalender akademik hari ini dengan shortcut ke halaman manajemen kalender.
+   - `StudentHomePage.jsx`: Banner agenda hari ini kelas dan label pengecualian KBM pada kartu jadwal hari ini.
+   - `StudentSchedulePage.jsx`: Matriks jadwal dan modal detail KBM menandai sesi yang dikecualikan kalender.
+   - `StudentPermissionPage.jsx`: Deteksi dini pemilihan tanggal yang bertepatan dengan libur sekolah / KBM ditiadakan.
+   - `ParentMonitoringPage.jsx`: Banner pemberitahuan agenda khusus dan peniadaan KBM rombel anak untuk transparansi orang tua.
+
+### 3. Hasil Validasi & Kualitas
+- **Production Build:** `vite build` selesai sukses dalam **1.22s** tanpa ada error maupun warning.
+
+---
+
 ## Status Akhir Proyek
 
-Seluruh tahapan pengembangan Front-End Website **School Class Project (SCP)** dari **Fase 0 hingga Fase 9** telah diselesaikan 100% dan dinyatakan **SIAP UJI KOMPETENSI KEAHLIAN (UKK) & PRODUCTION-READY**.
+Seluruh tahapan pengembangan Front-End Website **School Class Project (SCP)** dari **Fase 0 hingga Fase 10** telah diselesaikan 100% dan dinyatakan **SIAP UJI KOMPETENSI KEAHLIAN (UKK) & PRODUCTION-READY**.
 
 
 

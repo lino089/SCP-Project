@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
+import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
 import {
   Button,
@@ -77,7 +78,41 @@ export default function StudentPermissionPage() {
   const [expectedReturnTime, setExpectedReturnTime] = useState('12:00');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [formError, setFormError] = useState('');
+  const [dateWarning, setDateWarning] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Deteksi dini apakah tanggal yang dipilih bertepatan dengan libur / KBM ditiadakan
+  useEffect(() => {
+    let cancel = false;
+    const checkSelectedDate = async () => {
+      const targetDate = type === 'tidak_masuk' ? startDate : date;
+      if (!targetDate) {
+        setDateWarning(null);
+        return;
+      }
+      try {
+        const res = await academicEventApi.checkExemption({
+          for_my_class: 1,
+          date: targetDate,
+        });
+        if (cancel) return;
+        if (res?.data?.data?.disabling_event) {
+          const dev = res.data.data.disabling_event;
+          setDateWarning(
+            `Perhatian: Tanggal ${targetDate} bertepatan dengan agenda "${dev.title}" di mana KBM ditiadakan. Pengajuan izin tidak diperlukan untuk hari tersebut.`
+          );
+        } else {
+          setDateWarning(null);
+        }
+      } catch {
+        if (!cancel) setDateWarning(null);
+      }
+    };
+    checkSelectedDate();
+    return () => {
+      cancel = true;
+    };
+  }, [type, startDate, date]);
 
   // Load Data Perizinan dari Database Riil
   const loadPermissions = useCallback(async () => {
@@ -573,6 +608,13 @@ export default function StudentPermissionPage() {
                   onChange={(e) => setExpectedReturnTime(e.target.value)}
                 />
               </div>
+            </div>
+          )}
+
+          {dateWarning && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+              <span>{dateWarning}</span>
             </div>
           )}
 

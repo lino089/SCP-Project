@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
+import academicEventApi from '../../services/academicEventApi';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -65,6 +66,7 @@ export default function StudentSchedulePage() {
 
   // Schedule list & loading states
   const [schedules, setSchedules] = useState([]);
+  const [todayEvent, setTodayEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
@@ -101,6 +103,20 @@ export default function StudentSchedulePage() {
       if (typeof user?.monday_is_upacara === 'boolean') {
         setMondayIsUpacara(user.monday_is_upacara);
       }
+    }
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const eventRes = await academicEventApi.checkExemption({ for_my_class: 1, date: todayStr });
+      const evtData = eventRes?.data?.data;
+      if (evtData?.disabling_event) {
+        setTodayEvent(evtData.disabling_event);
+      } else if (evtData?.active_events && evtData.active_events.length > 0) {
+        setTodayEvent(evtData.active_events[0]);
+      } else {
+        setTodayEvent(null);
+      }
+    } catch {
+      // Abaikan fallback
     }
   }, [user]);
 
@@ -147,6 +163,10 @@ export default function StudentSchedulePage() {
         class_id: s.class_id || s.school_class?.id,
         room_id: s.room_id || s.room?.id,
         subject_id: s.subject_id || s.subject?.id,
+        is_teaching_exempted: Boolean(s.is_teaching_exempted),
+        exemption_reason: s.exemption_reason || null,
+        event_type: s.event_type || null,
+        academic_event_id: s.academic_event_id || null,
         teacherName: s.teacher?.name || s.teacherName || 'Guru Pengampu',
         className:
           s.school_class?.name ||
@@ -308,6 +328,35 @@ export default function StudentSchedulePage() {
           <span className="text-[11px] text-gray-400">Tenaga Pendidik</span>
         </div>
       </div>
+
+      {/* Banner Agenda Khusus / Kalender Akademik Hari Ini */}
+      {todayEvent && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem', backgroundColor: todayEvent.disables_teaching ? '#fffbeb' : '#f0fdf4', border: `1px solid ${todayEvent.disables_teaching ? '#fde68a' : '#bbf7d0'}`, borderRadius: '0.75rem' }}>
+          <div className="flex items-start gap-3">
+            <Calendar className={`w-5 h-5 mt-0.5 shrink-0 ${todayEvent.disables_teaching ? 'text-amber-600' : 'text-emerald-600'}`} />
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={`text-sm font-bold ${todayEvent.disables_teaching ? 'text-amber-950' : 'text-emerald-950'}`}>
+                  Agenda Hari Ini: {todayEvent.title}
+                </h3>
+                <Badge variant={todayEvent.disables_teaching ? 'warning' : 'success'}>
+                  {todayEvent.type === 'holiday' ? 'Libur Sekolah' : todayEvent.type === 'exam' ? 'Agenda Ujian' : 'Agenda Khusus'}
+                </Badge>
+              </div>
+              {todayEvent.description && (
+                <p className={`text-xs mt-1 ${todayEvent.disables_teaching ? 'text-amber-800' : 'text-emerald-800'}`}>
+                  {todayEvent.description}
+                </p>
+              )}
+              {todayEvent.disables_teaching && (
+                <p className="text-xs font-semibold text-rose-700 mt-1">
+                  KBM reguler di kelas ditiadakan selama agenda ini berlangsung.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3. Kartu Informasi Upacara Hari Senin */}
       <div className="schedule-ceremony-card">
@@ -505,6 +554,15 @@ export default function StudentSchedulePage() {
             </div>
 
             <div className="schedule-detail-grid">
+              {selectedDetailSchedule.is_teaching_exempted && (
+                <div style={{ gridColumn: '1 / -1', padding: '0.75rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="text-xs text-amber-900 font-medium">
+                    <strong>KBM Dikecualikan:</strong> {selectedDetailSchedule.exemption_reason || 'Kegiatan Kalender Akademik'}
+                  </span>
+                </div>
+              )}
+
               <div className="schedule-detail-item">
                 <span className="schedule-detail-label">Guru Pengampu</span>
                 <span className="schedule-detail-value flex items-center gap-1.5">

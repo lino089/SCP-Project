@@ -4,13 +4,19 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\LeaveRequest;
+use App\Models\User;
+use App\Services\AcademicCalendarExclusionService;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class LeaveRequestController extends Controller
 {
+    public function __construct(
+        protected AcademicCalendarExclusionService $exclusionService
+    ) {}
     /**
      * Menampilkan daftar perizinan siswa dengan scoping role & filter (PRD 9.6).
      * GET /api/leave-requests
@@ -220,6 +226,39 @@ class LeaveRequestController extends Controller
             $endDate = $startDate;
             $departureTime = $request->departure_time;
             $expectedReturnTime = $request->expected_return_time;
+        }
+
+        // Validasi Eksklusi Kalender Akademik & Agenda Khusus KBM
+        $student = User::with('schoolClass')->find($studentId);
+        if ($student && $student->schoolClass) {
+            $period = CarbonPeriod::create($startDate, $endDate);
+            $totalDays = 0;
+            $exemptedDays = 0;
+            $firstExemptionTitle = null;
+
+            foreach ($period as $d) {
+                if ($d->isWeekend()) {
+                    continue;
+                }
+                $totalDays++;
+                $disablingEvent = $this->exclusionService->getActiveDisablingEvent(
+                    $student->schoolClass->id,
+                    $student->schoolClass->level,
+                    $d
+                );
+                if ($disablingEvent !== null) {
+                    $exemptedDays++;
+                    $firstExemptionTitle = $disablingEvent->title;
+                }
+            }
+
+            if ($totalDays > 0 && $exemptedDays === $totalDays) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengajuan izin ditolak karena seluruh tanggal yang dipilih merupakan hari libur atau kegiatan khusus yang meniadakan KBM (' . $firstExemptionTitle . ').',
+                    'error_code' => 'TEACHING_DISABLED_BY_EVENT',
+                ], 422);
+            }
         }
 
         // 5. Simpan record perizinan

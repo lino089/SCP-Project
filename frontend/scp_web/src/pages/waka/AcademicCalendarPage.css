@@ -1,0 +1,255 @@
+/* AcademicCalendarPage.css - Exness Clean Precision Styling */
+
+.academic-calendar-container {
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .academic-calendar-container {
+    padding: 24px 32px;
+  }
+}
+
+/* Header & Controls */
+.calendar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 768px) {
+  .calendar-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.calendar-month-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calendar-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.calendar-nav-btn:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+/* Calendar Grid */
+.calendar-grid-wrapper {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.calendar-weekdays-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  text-align: center;
+}
+
+.calendar-weekday-cell {
+  padding: 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.calendar-weekday-cell--weekend {
+  color: #EF4444;
+}
+
+.calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: #E2E8F0;
+  gap: 1px;
+}
+
+.calendar-day-cell {
+  background: #FFFFFF;
+  min-height: 110px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.1s ease;
+  position: relative;
+}
+
+.calendar-day-cell:hover {
+  background: #F8FAFC;
+}
+
+.calendar-day-cell--outside {
+  background: #FAFAFA;
+  color: #94A3B8;
+}
+
+.calendar-day-cell--today {
+  background: #EFF6FF;
+}
+
+.calendar-day-cell--today .calendar-day-number {
+  background: #3B82F6;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.calendar-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.calendar-day-number {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.calendar-day-cell--outside .calendar-day-number {
+  color: #94A3B8;
+}
+
+.calendar-add-event-btn {
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.calendar-day-cell:hover .calendar-add-event-btn {
+  opacity: 1;
+}
+
+.calendar-add-event-btn:hover {
+  background: #E2E8F0;
+  color: #1E293B;
+}
+
+/* Event Chips */
+.calendar-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 80px;
+}
+
+.calendar-event-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.1s ease;
+  border-left-width: 3px;
+  border-style: solid;
+  line-height: 1.3;
+}
+
+.calendar-event-chip:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.95);
+}
+
+.calendar-event-chip--holiday {
+  background-color: #FEF2F2;
+  color: #991B1B;
+  border-color: #EF4444;
+}
+
+.calendar-event-chip--school_event,
+.calendar-event-chip--class_event {
+  background-color: #FFFBEB;
+  color: #92400E;
+  border-color: #F59E0B;
+}
+
+.calendar-event-chip--exam {
+  background-color: #EEF2FF;
+  color: #3730A3;
+  border-color: #4F46E5;
+}
+
+/* Legend Bar */
+.calendar-legend-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.calendar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.calendar-legend-dot--holiday {
+  background-color: #EF4444;
+}
+
+.calendar-legend-dot--event {
+  background-color: #F59E0B;
+}
+
+.calendar-legend-dot--exam {
+  background-color: #4F46E5;
+}

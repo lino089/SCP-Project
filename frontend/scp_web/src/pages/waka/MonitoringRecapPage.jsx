@@ -54,6 +54,7 @@ export default function MonitoringRecapPage() {
   // Filter Jurnal
   const [journalFilterDate, setJournalFilterDate] = useState('');
   const [journalSearchQuery, setJournalSearchQuery] = useState('');
+  const [dailyRecapData, setDailyRecapData] = useState(null);
   const [expandedTopicIds, setExpandedTopicIds] = useState(new Set());
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const [isPhotoLoading, setIsPhotoLoading] = useState(false);
@@ -106,6 +107,30 @@ export default function MonitoringRecapPage() {
     loadInitialData();
   }, [loadInitialData]);
 
+  // Muat data rekap harian KBM jika tanggal jurnal dipilih
+  const fetchDailyRecap = useCallback(async (dateStr) => {
+    if (!dateStr) {
+      setDailyRecapData(null);
+      return;
+    }
+    try {
+      const res = await journalApi.getDailyRecap({ date: dateStr });
+      if (res?.data?.success && res.data.data) {
+        setDailyRecapData(res.data.data);
+      }
+    } catch {
+      setDailyRecapData(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (journalFilterDate) {
+      fetchDailyRecap(journalFilterDate);
+    } else {
+      setDailyRecapData(null);
+    }
+  }, [journalFilterDate, fetchDailyRecap]);
+
   // Filter Presensi Aktif
   const filteredAttendances = useMemo(() => {
     return attendances.filter((item) => {
@@ -148,7 +173,7 @@ export default function MonitoringRecapPage() {
     return { total, hadir, sakit, izin, alpa, rate };
   }, [filteredAttendances]);
 
-  // Filter Jurnal Mengajar
+  // Filter Jurnal Mengajar (Semua Tanggal)
   const filteredJournals = useMemo(() => {
     return journals.filter((item) => {
       if (journalFilterDate && item.date !== journalFilterDate) return false;
@@ -166,16 +191,58 @@ export default function MonitoringRecapPage() {
     });
   }, [journals, journalFilterDate, journalSearchQuery]);
 
+  // Data Tampilan Jurnal (Adaptif: Rekap Harian Kalender vs Riwayat Historis)
+  const displayJournals = useMemo(() => {
+    if (journalFilterDate && dailyRecapData?.items) {
+      return dailyRecapData.items.filter((item) => {
+        if (journalSearchQuery.trim()) {
+          const q = journalSearchQuery.toLowerCase().trim();
+          const subject = (item.schedule?.subject?.name || '').toLowerCase();
+          const teacher = (item.schedule?.teacher?.name || '').toLowerCase();
+          const className = (item.schedule?.schoolClass?.name || '').toLowerCase();
+          const topic = (item.topic_description || item.exemption_reason || '').toLowerCase();
+          if (!subject.includes(q) && !teacher.includes(q) && !className.includes(q) && !topic.includes(q)) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+    return filteredJournals;
+  }, [journalFilterDate, dailyRecapData, journalSearchQuery, filteredJournals]);
+
   // Kalkulasi Metrik Jurnal Mengajar
   const journalMetrics = useMemo(() => {
+    if (journalFilterDate && dailyRecapData) {
+      return {
+        total: dailyRecapData.total_mandatory ?? dailyRecapData.items?.length ?? 0,
+        completed: dailyRecapData.completed_count ?? 0,
+        absent: dailyRecapData.absent_count ?? 0,
+        exempted: dailyRecapData.exempted_count ?? 0,
+        substitute: dailyRecapData.items?.filter((j) => Boolean(j.substitute_teacher_id)).length ?? 0,
+        completionRate: dailyRecapData.compliance_rate ?? '0.0',
+        effectiveMandatory: dailyRecapData.effective_mandatory ?? 0,
+        isDailyRecap: true,
+      };
+    }
+
     const total = filteredJournals.length;
     const completed = filteredJournals.filter((j) => j.status === 'completed').length;
     const absent = filteredJournals.filter((j) => j.status === 'teacher_absent').length;
     const substitute = filteredJournals.filter((j) => Boolean(j.substitute_teacher_id)).length;
     const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : '100.0';
 
-    return { total, completed, absent, substitute, completionRate };
-  }, [filteredJournals]);
+    return {
+      total,
+      completed,
+      absent,
+      substitute,
+      completionRate,
+      exempted: 0,
+      effectiveMandatory: total,
+      isDailyRecap: false,
+    };
+  }, [journalFilterDate, dailyRecapData, filteredJournals]);
 
   // Toggle Accordion Topik Materi
   const toggleTopicExpand = (id) => {
@@ -248,14 +315,15 @@ export default function MonitoringRecapPage() {
 
   // Ekspor Data Jurnal Mengajar ke Format Excel (.xlsx)
   const handleExportJournalExcel = () => {
-    if (filteredJournals.length === 0) {
+    const sourceData = displayJournals;
+    if (sourceData.length === 0) {
       alert('Tidak ada data jurnal mengajar untuk diekspor pada filter ini.');
       return;
     }
 
-    const excelData = filteredJournals.map((item, idx) => ({
+    const excelData = sourceData.map((item, idx) => ({
       'No': idx + 1,
-      'Tanggal KBM': item.date || '-',
+      'Tanggal KBM': item.date || journalFilterDate || '-',
       'Kelas': item.schedule?.schoolClass?.name || '-',
       'Mata Pelajaran': item.schedule?.subject?.name || '-',
       'Guru Pengampu': item.schedule?.teacher?.name || '-',
@@ -265,8 +333,14 @@ export default function MonitoringRecapPage() {
           ? 'Selesai'
           : item.status === 'teacher_absent'
           ? 'Jam Kosong'
+          : item.status === 'exempted'
+          ? `Dikecualikan (${item.exemption_reason || 'Agenda Khusus'})`
+          : item.status === 'unfilled'
+          ? 'Belum Terisi'
           : 'Berlangsung',
-      'Topik Pembelajaran': item.topic_description || '-',
+      'Topik Pembelajaran': item.status === 'exempted'
+        ? `[Dikecualikan] ${item.exemption_reason || 'Kegiatan Kalender'}`
+        : item.topic_description || '-',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -278,7 +352,7 @@ export default function MonitoringRecapPage() {
       { wch: 28 },
       { wch: 28 },
       { wch: 18 },
-      { wch: 18 },
+      { wch: 24 },
       { wch: 45 },
     ];
 
@@ -455,6 +529,14 @@ export default function MonitoringRecapPage() {
       renderCell: (row) => {
         if (row.status === 'completed') return <Badge variant="success" dot>Selesai</Badge>;
         if (row.status === 'teacher_absent') return <Badge variant="danger" dot>Jam Kosong</Badge>;
+        if (row.status === 'exempted') {
+          return (
+            <Badge variant="warning" dot>
+              Dikecualikan{row.exemption_reason ? `: ${row.exemption_reason}` : ''}
+            </Badge>
+          );
+        }
+        if (row.status === 'unfilled') return <Badge variant="danger" dot>Belum Terisi</Badge>;
         return <Badge variant="neutral" dot>Sedang Berlangsung</Badge>;
       },
     },
@@ -462,6 +544,20 @@ export default function MonitoringRecapPage() {
       key: 'topic',
       label: 'Topik Pembelajaran',
       renderCell: (row) => {
+        if (row.status === 'exempted') {
+          return (
+            <div className="text-xs text-amber-800 italic">
+              KBM ditiadakan ({row.exemption_reason || 'Agenda Kalender Akademik'})
+            </div>
+          );
+        }
+        if (row.status === 'unfilled') {
+          return (
+            <div className="text-xs text-rose-600 italic">
+              Guru pengampu belum mengisi jurnal KBM
+            </div>
+          );
+        }
         const isExpanded = expandedTopicIds.has(row.id);
         const text = row.topic_description || '-';
         return (
@@ -492,8 +588,14 @@ export default function MonitoringRecapPage() {
       key: 'photo',
       label: 'Foto Bukti',
       align: 'right',
-      renderCell: (row) =>
-        (row.photo_url || row.photo_path) ? (
+      renderCell: (row) => {
+        if (row.status === 'exempted') {
+          return <span className="text-gray-400 text-xs italic">Dikecualikan</span>;
+        }
+        if (row.status === 'unfilled') {
+          return <span className="text-rose-400 text-xs italic">Belum ada</span>;
+        }
+        return (row.photo_url || row.photo_path) ? (
           <button
             type="button"
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 text-xs font-medium cursor-pointer transition-colors"
@@ -504,7 +606,8 @@ export default function MonitoringRecapPage() {
           </button>
         ) : (
           <span className="text-gray-400 text-xs italic">Tanpa foto</span>
-        ),
+        );
+      },
     },
   ];
 
@@ -814,21 +917,48 @@ export default function MonitoringRecapPage() {
           {/* Metrik Cards Jurnal KBM */}
           <div className="monitoring-recap__metrics monitoring-recap__metrics--jurnal">
             <StatCard
-              label="Keterlaksanaan KBM"
+              label={journalMetrics.isDailyRecap ? 'Kepatuhan Jurnal KBM' : 'Keterlaksanaan KBM'}
               value={`${journalMetrics.completionRate}%`}
               accentBorder
               variant="success"
               statusDot="success"
-              description="Sesi KBM terlaksana tuntas"
+              description={
+                journalMetrics.isDailyRecap
+                  ? `${journalMetrics.completed} dari ${journalMetrics.effectiveMandatory} wajib terlaksana`
+                  : 'Sesi KBM terlaksana tuntas'
+              }
             />
             <StatCard
-              label="Total Sesi Jurnal"
+              label={journalMetrics.isDailyRecap ? 'Total Jadwal Wajib' : 'Total Sesi Jurnal'}
               value={`${journalMetrics.total} Sesi`}
               accentBorder
               variant="default"
               statusDot="neutral"
-              description="Dokumentasi mengajar tercatat"
+              description={
+                journalMetrics.isDailyRecap
+                  ? `${journalMetrics.effectiveMandatory} wajib diisi guru`
+                  : 'Dokumentasi mengajar tercatat'
+              }
             />
+            {journalMetrics.isDailyRecap ? (
+              <StatCard
+                label="Dikecualikan Agenda"
+                value={`${journalMetrics.exempted} Sesi`}
+                accentBorder
+                variant="warning"
+                statusDot="warning"
+                description="KBM ditiadakan kalender"
+              />
+            ) : (
+              <StatCard
+                label="Guru Pengganti"
+                value={`${journalMetrics.substitute} Sesi`}
+                accentBorder
+                variant="warning"
+                statusDot="warning"
+                description="Ditangani tim kesiswaan / piket"
+              />
+            )}
             <StatCard
               label="Jam Kosong / Guru Absen"
               value={`${journalMetrics.absent} Sesi`}
@@ -836,14 +966,6 @@ export default function MonitoringRecapPage() {
               variant="danger"
               statusDot="danger"
               description="Sesi tanpa kehadiran guru"
-            />
-            <StatCard
-              label="Guru Pengganti"
-              value={`${journalMetrics.substitute} Sesi`}
-              accentBorder
-              variant="warning"
-              statusDot="warning"
-              description="Ditangani tim kesiswaan / piket"
             />
           </div>
 
@@ -914,7 +1036,7 @@ export default function MonitoringRecapPage() {
             <div className="monitoring-filter-actions">
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <span>
-                  Menampilkan <strong className="text-gray-900">{filteredJournals.length}</strong> sesi jurnal KBM
+                  Menampilkan <strong className="text-gray-900">{displayJournals.length}</strong> sesi jurnal KBM
                 </span>
                 {journalFilterDate && (
                   <Badge variant="neutral" className="font-mono text-[10px]">
@@ -950,7 +1072,7 @@ export default function MonitoringRecapPage() {
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div className="flex items-center gap-2">
                 <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Riwayat Jurnal KBM Seluruh Kelas ({filteredJournals.length} Jurnal)
+                  Riwayat Jurnal KBM Seluruh Kelas ({displayJournals.length} Jurnal)
                 </h2>
               </div>
               <span className="text-[11px] text-gray-500 font-mono">
@@ -960,7 +1082,7 @@ export default function MonitoringRecapPage() {
 
             <Table
               columns={journalColumns}
-              data={filteredJournals}
+              data={displayJournals}
               isLoading={isLoading}
               emptyComponent={
                 <div className="py-12 px-4">

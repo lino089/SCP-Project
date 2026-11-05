@@ -6,6 +6,7 @@ import {
   FileText,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   PlayCircle,
   Eye,
   RotateCw,
@@ -15,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
 import { academicSettingApi } from '../../services/scheduleApi';
+import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button } from '../../components/shared';
 import './TeacherDashboard.css';
 
@@ -29,6 +31,7 @@ export default function TeacherDashboardPage() {
   const [weeklySchedules, setWeeklySchedules] = useState([]);
   const [missingJournals, setMissingJournals] = useState([]);
   const [teacherLeaves, setTeacherLeaves] = useState([]);
+  const [todayExemption, setTodayExemption] = useState(null);
 
   // Tanggal & Hari Berjalan (Indonesia)
   const dateInfo = useMemo(() => {
@@ -85,7 +88,7 @@ export default function TeacherDashboardPage() {
       }
 
       // 2. Fetch data paralel: Jadwal Hari Ini, Semua Jadwal Mingguan, Missing Journals, & Izin Guru
-      const [todayRes, weeklyRes, missingRes, leaveRes] = await Promise.all([
+      const [todayRes, weeklyRes, missingRes, leaveRes, exemptionRes] = await Promise.all([
         journalApi.getTeacherSchedules({
           day: dateInfo.dayOfWeek,
           cycle,
@@ -99,7 +102,12 @@ export default function TeacherDashboardPage() {
         }),
         journalApi.getMissingJournals().catch(() => ({ data: [] })),
         leaveApi.getTeacherLeaveRequests({ per_page: 20 }).catch(() => ({ data: [] })),
+        academicEventApi.checkExemption().catch(() => ({ data: { data: null } })),
       ]);
+
+      if (exemptionRes?.data?.data) {
+        setTodayExemption(exemptionRes.data.data);
+      }
 
       const todayList = Array.isArray(todayRes) ? todayRes : Array.isArray(todayRes?.data) ? todayRes.data : [];
       setTodaySchedules(todayList);
@@ -281,6 +289,23 @@ export default function TeacherDashboardPage() {
         </div>
       </div>
 
+      {/* Banner Hari Libur / Agenda Sekolah Aktif Hari Ini */}
+      {todayExemption?.is_teaching_exempted && todayExemption?.disabling_event && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 mb-6 text-amber-900 shadow-xs">
+          <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold">
+              Agenda Hari Ini: {todayExemption.disabling_event.title}
+            </h3>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {todayExemption.disabling_event.scope_type === 'all'
+                ? 'Seluruh kegiatan KBM reguler dan kewajiban pengisian jurnal/presensi ditiadakan hari ini.'
+                : 'Kegiatan KBM reguler untuk kelas yang terdampak agenda khusus ini ditiadakan.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================================
           3. LAYOUT UTAMA: JADWAL KBM HARI INI & INFORMASI PENDUKUNG
          ========================================================================= */}
@@ -383,7 +408,11 @@ export default function TeacherDashboardPage() {
                     </div>
 
                     <div className="teacher-dashboard__sched-actions">
-                      {isCompleted ? (
+                      {item.is_teaching_exempted || item.journal_status === 'exempted' ? (
+                        <Badge variant="warning" title={item.exemption_reason || 'Dikecualikan dari KBM'}>
+                          {item.exemption_reason ? `Dikecualikan: ${item.exemption_reason}` : 'Dikecualikan KBM'}
+                        </Badge>
+                      ) : isCompleted ? (
                         <>
                           <Badge variant="success">Jurnal Disimpan</Badge>
                           <Button

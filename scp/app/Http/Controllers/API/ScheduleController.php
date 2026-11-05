@@ -9,6 +9,7 @@ use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\SystemConfiguration;
 use App\Models\User;
+use App\Services\AcademicCalendarExclusionService;
 use App\Services\PeriodResolutionService;
 use App\Services\ScheduleConflictService;
 use App\Services\MasterDataPrerequisiteService;
@@ -25,7 +26,8 @@ class ScheduleController extends Controller
     public function __construct(
         private ScheduleConflictService $conflicts,
         private PeriodResolutionService $periodResolver,
-        private MasterDataPrerequisiteService $prerequisites
+        private MasterDataPrerequisiteService $prerequisites,
+        private AcademicCalendarExclusionService $exclusionService
     ) {
     }
 
@@ -44,6 +46,7 @@ class ScheduleController extends Controller
         $request->validate([
             'cycle' => 'nullable|integer|in:1,2',
             'day' => 'nullable|integer|between:1,7',
+            'date' => 'nullable|date_format:Y-m-d',
             'class_id' => 'nullable|integer|exists:classes,id',
             'class_ids' => 'nullable',
             'teacher_id' => 'nullable|integer|exists:users,id',
@@ -92,6 +95,12 @@ class ScheduleController extends Controller
             $missingSchedules = [];
 
             foreach ($candidateSchedules as $schedule) {
+                // Jadwal pada kelas/tingkat yang sedang dikecualikan oleh agenda kalender akademik
+                $classLevel = $schedule->schoolClass?->level;
+                if ($classLevel !== null && $this->exclusionService->getActiveDisablingEvent($schedule->class_id, $classLevel, $now)) {
+                    continue;
+                }
+
                 $todayJournal = $schedule->journals->first();
 
                 // Jadwal yang sudah memiliki jurnal berstatus completed dikecualikan
@@ -137,7 +146,11 @@ class ScheduleController extends Controller
         $activeCycle = (int) (SystemConfiguration::first()?->active_cycle ?? 1);
         $cycle = $request->has('cycle') ? $request->integer('cycle') : $activeCycle;
 
-        $todayDate = Carbon::now('Asia/Jakarta')->toDateString();
+        $referenceDate = $request->filled('date')
+            ? Carbon::parse($request->input('date'), 'Asia/Jakarta')
+            : Carbon::now('Asia/Jakarta');
+        $targetDateStr = $referenceDate->toDateString();
+
         $query = Schedule::query()
             ->where('cycle_type', $cycle)
             ->with([
@@ -145,7 +158,7 @@ class ScheduleController extends Controller
                 'teacher:id,name,nis_nip',
                 'room:id,name,capacity',
                 'subject:id,name',
-                'journals' => fn ($jq) => $jq->whereDate('date', $todayDate),
+                'journals' => fn ($jq) => $jq->whereDate('date', $targetDateStr),
             ]);
 
         // Scoping: Guru hanya melihat jadwal miliknya sendiri, kecuali Wali Kelas meminta jadwal kelas binaannya
@@ -201,17 +214,39 @@ class ScheduleController extends Controller
 
         $isAll = $request->boolean('all') || ($user->role === 'vice_principal' && $request->integer('per_page') >= 1000);
 
+        $mapScheduleItem = function ($schedule) use ($referenceDate) {
+            $scheduleArray = $schedule->toArray();
+            $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
+            $todayJournal = $schedule->journals?->first();
+            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
+            $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
+
+            // Resolusi tanggal jadwal dalam minggu referenceDate
+            $startOfWeek = $referenceDate->copy()->startOfWeek(Carbon::MONDAY);
+            $scheduleDate = $startOfWeek->copy()->addDays(max(0, ((int) $schedule->day_of_week) - 1));
+
+            // Deteksi status pengecualian dari kalender akademik
+            $classLevel = $schedule->schoolClass?->level;
+            $disablingEvent = $classLevel !== null
+                ? $this->exclusionService->getActiveDisablingEvent($schedule->class_id, $classLevel, $scheduleDate)
+                : null;
+
+            $isExempted = $disablingEvent !== null;
+            $scheduleArray['is_teaching_exempted'] = $isExempted;
+            $scheduleArray['exemption_reason'] = $disablingEvent?->title;
+            $scheduleArray['event_type'] = $disablingEvent?->type;
+            $scheduleArray['academic_event_id'] = $disablingEvent?->id;
+
+            if ($isExempted && (!$todayJournal || $todayJournal->status === 'ongoing')) {
+                $scheduleArray['journal_status'] = 'exempted';
+            }
+
+            return $scheduleArray;
+        };
+
         if ($isAll) {
             $allSchedules = $query->orderBy('day_of_week')->orderBy('period_number')->get();
-            $referenceDate = Carbon::now('Asia/Jakarta');
-            $items = $allSchedules->map(function ($schedule) use ($referenceDate) {
-                $scheduleArray = $schedule->toArray();
-                $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
-                $todayJournal = $schedule->journals?->first();
-                $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
-                $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
-                return $scheduleArray;
-            });
+            $items = $allSchedules->map($mapScheduleItem);
 
             return response()->json([
                 'success' => true,
@@ -228,17 +263,7 @@ class ScheduleController extends Controller
         }
 
         $schedules = $query->orderBy('day_of_week')->orderBy('period_number')->paginate($perPage);
-
-        // Tambahkan resolusi jam dinamis pada tiap item
-        $referenceDate = Carbon::now('Asia/Jakarta');
-        $items = collect($schedules->items())->map(function ($schedule) use ($referenceDate) {
-            $scheduleArray = $schedule->toArray();
-            $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
-            $todayJournal = $schedule->journals?->first();
-            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
-            $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
-            return $scheduleArray;
-        });
+        $items = collect($schedules->items())->map($mapScheduleItem);
 
         return response()->json([
             'success' => true,
