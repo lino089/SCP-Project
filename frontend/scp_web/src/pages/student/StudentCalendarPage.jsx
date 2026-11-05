@@ -253,7 +253,7 @@ export default function StudentCalendarPage() {
           />
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-b-xl p-5 shadow-sm -mt-6">
+        <div className="bg-white border border-gray-200 rounded-b-xl p-5 -mt-6">
           <div className="mb-4">
             <h2 className="text-sm font-bold text-gray-900">
               Daftar Seluruh Agenda Bulan {MONTH_NAMES[currentMonth - 1]} {currentYear}

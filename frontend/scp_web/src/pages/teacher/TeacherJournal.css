@@ -1,6 +1,6 @@
 /* ==========================================================================
    TeacherJournal.css — Styling Halaman Jurnal KBM & Presensi Exception-Based
-   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent #FFDE02)
+   Desain: Clean, Minimalist & Modern (Soft Neutrals, Accent #FFDE00)
    ========================================================================== */
 
 .teacher-journal {
@@ -58,13 +58,15 @@
 .teacher-journal__kesiswaan-banner {
   margin-bottom: 1.5rem;
   padding: 1rem 1.25rem;
-  background-color: #0f172a;
-  color: #ffffff;
+  background-color: #fffdf0;
+  color: #1e293b;
+  border: 1px solid #fef08a;
+  border-left: 4px solid #ffde00;
   border-radius: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 @media (min-width: 640px) {
@@ -78,23 +80,23 @@
 .teacher-journal__kesiswaan-banner-title {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #854d0e;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .teacher-journal__kesiswaan-banner-sub {
   font-size: 0.75rem;
-  color: #cbd5e1;
+  color: #713f12;
   margin-top: 0.15rem;
 }
 
 .teacher-journal__kesiswaan-pill {
   padding: 0.25rem 0.625rem;
   border-radius: 0.25rem;
-  background-color: rgba(255, 222, 2, 0.15);
-  color: #FFDE02;
-  border: 1px solid rgba(255, 222, 2, 0.3);
+  background-color: #fef08a;
+  color: #713f12;
+  border: 1px solid #fde047;
   font-size: 0.75rem;
   font-weight: 600;
   align-self: flex-start;
@@ -108,12 +110,12 @@
 
 /* Standby Sesi Card */
 .teacher-journal__standby-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
   padding: 1.5rem;
   background-color: #ffffff;
   max-width: 860px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-shadow: none;
   transition: all 0.2s ease;
 }
 
@@ -172,10 +174,11 @@
 .teacher-journal__class-badge {
   padding: 0.25rem 0.65rem;
   border-radius: 0.375rem;
-  background-color: #0f172a;
-  color: #ffffff;
+  background-color: #f3f4f6;
+  color: #111827;
+  border: 1px solid #e5e7eb;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 

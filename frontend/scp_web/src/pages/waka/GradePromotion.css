@@ -26,7 +26,7 @@
 .promotion-title {
   font-size: 1.625rem;
   font-weight: 700;
-  color: var(--neutral-900);
+  color: var(--neutral-900, #0f172a);
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0 0 0.25rem 0;
@@ -35,7 +35,7 @@
 .promotion-subtitle {
   font-size: 0.8125rem;
   font-weight: 400;
-  color: var(--neutral-500);
+  color: var(--neutral-500, #64748b);
   margin: 0;
 }
 
@@ -47,9 +47,9 @@
 
 /* Success Result Card */
 .promotion-success-card {
-  background-color: var(--success-50);
-  border: 1px solid var(--success-200);
-  border-radius: var(--radius-md);
+  background-color: var(--success-50, #f0fdf4);
+  border: 1px solid var(--success-200, #bbf7d0);
+  border-radius: var(--radius-md, 8px);
   padding: 1rem 1.25rem;
   display: flex;
   align-items: center;
@@ -65,18 +65,6 @@
   gap: 0.75rem;
 }
 
-.promotion-success-icon {
-  width: 40px;
-  height: 40px;
-  background-color: var(--success-100);
-  color: var(--success-700);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 .promotion-success-stats {
   display: flex;
   align-items: center;
@@ -89,116 +77,448 @@
   flex-direction: column;
   padding: 0.35rem 0.75rem;
   background-color: #fff;
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--neutral-200, #e2e8f0);
+  border-radius: var(--radius-sm, 6px);
   text-align: center;
 }
 
 .promotion-stat-label {
   font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--neutral-500);
+  color: var(--neutral-500, #64748b);
   text-transform: uppercase;
 }
 
 .promotion-stat-val {
   font-size: 1.125rem;
   font-weight: 700;
-  color: var(--neutral-900);
+  color: var(--neutral-900, #0f172a);
 }
 
-/* Sections */
+/* Main Sections */
 .promotion-section {
   margin-bottom: 2rem;
   background-color: #fff;
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-200, #e2e8f0);
+  border-radius: var(--radius-lg, 10px);
   padding: 1.25rem;
-  box-shadow: var(--shadow-2xs);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .promotion-section-header {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 1rem;
-  gap: 1rem;
+  margin-bottom: 1.25rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
 }
 
 .promotion-section-title {
   font-size: 1.125rem;
   font-weight: 700;
-  color: var(--neutral-900);
+  color: var(--neutral-900, #0f172a);
   letter-spacing: -0.015em;
-  margin: 0 0 0.2rem 0;
+  margin: 0 0 0.25rem 0;
 }
 
 .promotion-section-desc {
   font-size: 0.8125rem;
   font-weight: 400;
-  color: var(--neutral-500);
+  color: var(--neutral-500, #64748b);
   margin: 0;
 }
 
-/* Toolbar & Filters */
-.promotion-toolbar {
+/* Header Meta Area (Date picker & Stats badge) */
+.promotion-header-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0.875rem;
   flex-wrap: wrap;
 }
 
-.promotion-search {
+.promotion-date-picker-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.promotion-date-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neutral-600, #475569);
+  white-space: nowrap;
+}
+
+.promotion-date-input-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+.promotion-date-input {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  border: 1px solid var(--neutral-300, #cbd5e1);
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: var(--neutral-800, #1e293b);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.promotion-date-input:focus {
+  border-color: #0f172a;
+}
+
+.promotion-stats-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--neutral-700, #334155);
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Toolbar & Filters Bar */
+.promotion-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.promotion-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
   max-width: 320px;
   width: 100%;
 }
 
-.promotion-filters {
+.promotion-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--neutral-400, #94a3b8);
+  pointer-events: none;
+}
+
+.promotion-search-input {
+  width: 100%;
+  padding: 0.45rem 2rem 0.45rem 2.25rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--neutral-300, #cbd5e1);
+  border-radius: 6px;
+  outline: none;
+  background-color: #ffffff;
+  color: var(--neutral-900, #0f172a);
+  transition: border-color 0.15s ease;
+}
+
+.promotion-search-input:focus {
+  border-color: #0f172a;
+}
+
+.promotion-search-shortcut {
+  position: absolute;
+  right: 0.6rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: var(--neutral-400, #94a3b8);
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.promotion-filters-group {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
   flex-wrap: wrap;
 }
 
 .promotion-filter-select {
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   font-size: 0.8125rem;
-  border: 1px solid var(--neutral-300);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--neutral-300, #cbd5e1);
+  border-radius: 6px;
   background-color: #fff;
-  color: var(--neutral-700);
+  color: var(--neutral-700, #334155);
   outline: none;
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .promotion-filter-select:focus {
-  border-color: #0F172A;
+  border-color: #0f172a;
 }
 
-.promotion-holdback-btn {
+/* Segmented Tabs (Semua, Kelas X, Kelas XI, Kelas XII) */
+.promotion-segmented-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.6rem;
+  background-color: #f1f5f9;
+  padding: 3px;
+  border-radius: 6px;
+  gap: 2px;
+  border: 1px solid #e2e8f0;
+}
+
+.promotion-tab-btn {
+  padding: 0.35rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 500;
-  border-radius: var(--radius-xs);
+  color: var(--neutral-600, #475569);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
-  border: 1px solid var(--neutral-300);
+  white-space: nowrap;
+}
+
+.promotion-tab-btn:hover {
+  color: var(--neutral-900, #0f172a);
+}
+
+.promotion-tab-btn--active {
+  background-color: #ffffff;
+  color: var(--neutral-900, #0f172a);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Grouped Class Card */
+.promotion-cohort-list,
+.promotion-groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.promotion-class-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.promotion-class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.promotion-class-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+
+.promotion-class-bar {
+  width: 3px;
+  height: 18px;
+  background-color: #0f172a;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.promotion-class-name {
+  font-weight: 700;
+}
+
+.promotion-class-dot {
+  color: var(--neutral-300, #cbd5e1);
+  font-weight: 400;
+}
+
+.promotion-class-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neutral-500, #64748b);
+  letter-spacing: 0.04em;
+}
+
+.promotion-class-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.promotion-target-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--neutral-400, #94a3b8);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.promotion-target-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+
+.promotion-target-badge--success {
+  background-color: var(--success-50, #f0fdf4);
+  border-color: var(--success-300, #86efac);
+  color: var(--success-700, #15803d);
+}
+
+/* Custom Table inside Class Cards */
+.promotion-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.promotion-custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.8125rem;
+}
+
+.promotion-custom-table thead tr {
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #ffffff;
+}
+
+.promotion-custom-table thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neutral-500, #64748b);
+  white-space: nowrap;
+}
+
+.promotion-custom-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.12s ease;
+}
+
+.promotion-custom-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.promotion-custom-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.promotion-custom-table tbody td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.promotion-cell-no {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--neutral-400, #94a3b8);
+}
+
+.promotion-nis-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background-color: #f1f5f9;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.promotion-jurusan-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.promotion-student-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.promotion-status-text {
+  font-size: 0.8125rem;
+}
+
+/* Card Footer */
+.promotion-class-footer {
+  padding: 0.625rem 1rem;
+  font-size: 0.75rem;
+  color: var(--neutral-400, #94a3b8);
+  background-color: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Checkbox Component */
+.promotion-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8125rem;
+  color: #334155;
+}
+
+.promotion-checkbox-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0f172a;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.promotion-checkbox-text {
+  font-size: 0.78125rem;
+  color: #334155;
+  transition: color 0.15s ease;
+}
+
+.promotion-checkbox-label:hover .promotion-checkbox-text {
+  color: #0f172a;
+}
+
+/* Loading & Skeletons */
+.promotion-table-loading {
   background-color: #fff;
-  color: var(--neutral-700);
-}
-
-.promotion-holdback-btn:hover {
-  background-color: var(--neutral-50);
-}
-
-.promotion-holdback-btn--active {
-  background-color: var(--danger-50);
-  color: var(--danger-700);
-  border-color: var(--danger-300);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--neutral-200, #e2e8f0);
+  overflow: hidden;
+  padding: 0.5rem;
 }

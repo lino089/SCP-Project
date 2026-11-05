@@ -18,6 +18,7 @@ import { leaveApi } from '../../services/leaveApi';
 import { academicSettingApi } from '../../services/scheduleApi';
 import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button } from '../../components/shared';
+import { resolveSlotTime } from '../../utils/timetableHelper';
 import './TeacherDashboard.css';
 
 export default function TeacherDashboardPage() {
@@ -154,13 +155,12 @@ export default function TeacherDashboardPage() {
     if (item.resolved_times?.start_time && item.resolved_times?.end_time) {
       return `${item.resolved_times.start_time.slice(0, 5)} - ${item.resolved_times.end_time.slice(0, 5)} WIB`;
     }
-    const startPeriod = item.period_number || 1;
-    const duration = item.duration_periods || 2;
-    const startHour = 7 + Math.floor((startPeriod - 1) * 0.75);
-    const startMin = ((startPeriod - 1) * 45) % 60;
-    const endHour = startHour + Math.floor((duration * 45 + startMin) / 60);
-    const endMin = (duration * 45 + startMin) % 60;
-    return `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')} - ${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} WIB`;
+    const resolved = resolveSlotTime(
+      item.day_of_week || dateInfo.dayOfWeek,
+      item.period_number || 1,
+      item.duration_periods || 1
+    );
+    return `${resolved.timeText} WIB`;
   };
 
   return (

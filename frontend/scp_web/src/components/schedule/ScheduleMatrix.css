@@ -146,6 +146,72 @@
   color: #64748B;
 }
 
+/* Break Row (Istirahat I & II) */
+.schedule-break-row {
+  background-color: #FAFAFA;
+  border-top: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.schedule-break-row td {
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 4px 6px !important;
+  vertical-align: middle !important;
+}
+
+.schedule-break-header-cell {
+  background-color: #F8FAFC !important;
+  border-right: 1px solid #E2E8F0 !important;
+}
+
+.schedule-break-cell {
+  background-color: #F9FAFB;
+  text-align: center;
+}
+
+.schedule-break-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  gap: 6px;
+  border: 1px dashed #CBD5E1;
+  background-color: #FFFFFF;
+}
+
+.schedule-break-pill--break1 {
+  border-color: #FDE68A;
+  background-color: #FFFDF5;
+  color: #92400E;
+}
+
+.schedule-break-pill--break2 {
+  border-color: #BAE6FD;
+  background-color: #F0F9FF;
+  color: #0369A1;
+}
+
+.schedule-break-pill--friday {
+  border-color: #BBF7D0;
+  background-color: #F0FDF4;
+  color: #166534;
+}
+
+.schedule-break-name {
+  font-weight: 600;
+  font-size: 10.5px;
+}
+
+.schedule-break-time {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.85;
+}
+
 /* Slot Content & Cards */
 .schedule-cell-content {
   display: flex;

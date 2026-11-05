@@ -680,7 +680,7 @@ export default function TeacherJournalPage() {
       {isSubstituteMode && (
         <div className="teacher-journal__kesiswaan-banner">
           <div className="flex items-center gap-3">
-            <ShieldCheck size={22} className="text-[#FFDE02] shrink-0" />
+            <ShieldCheck size={22} className="text-amber-500 shrink-0" />
             <div>
               <div className="teacher-journal__kesiswaan-banner-title">
                 Ambil Alih Kelas KBM oleh Tim Kesiswaan (Piket)
@@ -1410,15 +1410,14 @@ export default function TeacherJournalPage() {
               Batal
             </Button>
             {isSubstituteMode ? (
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                loading={isSubmitting}
                 disabled={isSubmitting}
-                className="h-10 px-5 rounded-md text-xs font-bold bg-[#FFDE02] text-gray-900 hover:bg-[#F2D300] active:scale-[0.98] transition-all shadow-xs flex items-center justify-center cursor-pointer disabled:opacity-50"
               >
-                <span>
-                  {isSubmitting ? 'Menyimpan...' : 'Simpan Presensi Piket'}
-                </span>
-              </button>
+                Simpan Presensi Piket
+              </Button>
             ) : (
               <Button
                 type="submit"

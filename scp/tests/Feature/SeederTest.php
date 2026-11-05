@@ -28,19 +28,24 @@ class SeederTest extends TestCase
         $this->assertEquals(1, $config->active_cycle);
         $this->assertTrue((bool) $config->monday_is_upacara);
 
-        // 3. PeriodTemplate has 50 records (10 periods x 5 day_types)
-        $this->assertEquals(50, PeriodTemplate::count());
+        // 3. PeriodTemplate has 48 records (10 JP x 4 tipe hari + 8 JP Jumat)
+        $this->assertEquals(48, PeriodTemplate::count());
 
-        // 4. Verify Friday short period duration (40 minutes)
+        // 4. Verify Friday short period duration and dismissal time (8 JP, max 13:50)
         $jumatP1 = PeriodTemplate::where('day_type', 'jumat')->where('period_number', 1)->first();
         $this->assertNotNull($jumatP1);
         $this->assertEquals('07:15:00', $jumatP1->start_time);
         $this->assertEquals('07:55:00', $jumatP1->end_time);
 
-        // 5. Verify Senin Upacara starts at 08:00
+        $jumatP8 = PeriodTemplate::where('day_type', 'jumat')->where('period_number', 8)->first();
+        $this->assertNotNull($jumatP8);
+        $this->assertEquals('13:15:00', $jumatP8->start_time);
+        $this->assertEquals('13:50:00', $jumatP8->end_time);
+
+        // 5. Verify Senin Upacara starts at 08:00 and ends at 08:35 (35 menit)
         $seninP1 = PeriodTemplate::where('day_type', 'senin_upacara')->where('period_number', 1)->first();
         $this->assertNotNull($seninP1);
         $this->assertEquals('08:00:00', $seninP1->start_time);
-        $this->assertEquals('08:45:00', $seninP1->end_time);
+        $this->assertEquals('08:35:00', $seninP1->end_time);
     }
 }

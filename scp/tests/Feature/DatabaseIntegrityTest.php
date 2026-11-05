@@ -165,8 +165,8 @@ class DatabaseIntegrityTest extends TestCase
         $this->assertNotNull($config);
         $this->assertEquals(1, $config->active_cycle);
 
-        // 3. 50 record PeriodTemplate (10 JP x 5 tipe hari)
-        $this->assertEquals(50, PeriodTemplate::count());
+        // 3. 48 record PeriodTemplate (10 JP x 4 tipe hari + 8 JP Jumat)
+        $this->assertEquals(48, PeriodTemplate::count());
 
         // 4. Data master awal ruangan (5 ruangan)
         $this->assertGreaterThanOrEqual(5, Room::count());

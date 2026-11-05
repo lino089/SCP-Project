@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, Fragment } from 'react';
 import { Plus } from 'lucide-react';
 import ScheduleMorningRow from './ScheduleMorningRow';
+import ScheduleBreakRow from './ScheduleBreakRow';
 import ScheduleCardItem from './ScheduleCardItem';
 import {
   DAYS_LIST,
@@ -34,6 +35,14 @@ export default function ScheduleTimetableMatrix({
     }));
   }, []);
 
+  // Slot info untuk header jika hanya 1 hari aktif
+  const singleDaySlots = useMemo(() => {
+    if (matrixDays.length === 1) {
+      return getTimeSlotsForDay(matrixDays[0], mondayIsUpacara, periodTemplates);
+    }
+    return null;
+  }, [matrixDays, mondayIsUpacara, periodTemplates]);
+
   return (
     <div className="schedule-matrix-container">
       <table className="schedule-matrix">
@@ -61,117 +70,146 @@ export default function ScheduleTimetableMatrix({
           {/* Row Jam Masuk 07:00 WIB (Upacara vs Pembiasaan Karakter) */}
           <ScheduleMorningRow matrixDays={matrixDays} mondayIsUpacara={mondayIsUpacara} />
 
-          {/* Slots 1 s/d 10 */}
-          {displaySlots.map((slotObj) => (
-            <tr key={slotObj.slot}>
-              <td className="schedule-slot-cell whitespace-nowrap">
-                <div className="schedule-slot-header">
-                  <span className="schedule-slot-num">{slotObj.label}</span>
-                </div>
-              </td>
+          {/* Slots 1 s/d 10 diselingi Istirahat I (setelah JP 3) dan Istirahat II (setelah JP 6) */}
+          {displaySlots.map((slotObj) => {
+            const singleSlot = singleDaySlots?.find((s) => s.slot === slotObj.slot);
 
-              {matrixDays.map((dayName) => {
-                // Cari jadwal yang mulai pada slot ini
-                const cellSchedules = schedules.filter((s) => {
-                  const sDay =
-                    typeof s.day_of_week === 'number'
-                      ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
-                      : s.day || 'Senin';
-                  if (sDay !== dayName) return false;
-                  const sSlot = Number(s.slot || s.period_number);
-                  return sSlot === slotObj.slot;
-                });
-
-                // Cari jadwal multi-JP yang berlanjut di slot ini dari jam sebelumnya
-                const continuationSchedule = schedules.find((s) => {
-                  const sDay =
-                    typeof s.day_of_week === 'number'
-                      ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
-                      : s.day || 'Senin';
-                  if (sDay !== dayName) return false;
-                  const start = Number(s.slot || s.period_number);
-                  const dur = Number(s.duration || s.duration_periods || 1);
-                  return start < slotObj.slot && slotObj.slot < start + dur;
-                });
-
-                // Cek apakah slot ini di luar jam operasional KBM untuk hari tersebut
-                const daySlots = getTimeSlotsForDay(dayName, mondayIsUpacara, periodTemplates);
-                const isDayOff = !daySlots.some((s) => s.slot === Number(slotObj.slot));
-
-                return (
-                  <td key={dayName}>
-                    {cellSchedules.length > 0 ? (
-                      <div className="schedule-cell-content">
-                        {cellSchedules.map((item) => {
-                          const isConflict = conflictIds.has(item.id);
-                          const slotTime = resolveSlotTime(
-                            dayName,
-                            item.slot || item.period_number,
-                            item.duration || item.duration_periods || 1,
-                            mondayIsUpacara,
-                            periodTemplates
-                          );
-
-                          return (
-                            <ScheduleCardItem
-                              key={item.id}
-                              item={item}
-                              slotTime={slotTime}
-                              role={role}
-                              isConflict={isConflict}
-                              statusBadge={renderCardStatus ? renderCardStatus(item) : null}
-                              onClick={onCardClick}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : continuationSchedule ? (
-                      <div
-                        className="schedule-continuation-block"
-                        onClick={() => onCardClick && onCardClick(continuationSchedule)}
-                        title={`Lanjutan dari Jam Ke-${continuationSchedule.slot || continuationSchedule.period_number}: ${
-                          continuationSchedule.subject?.name || continuationSchedule.subjectName
-                        }`}
-                      >
-                        <span className="schedule-continuation-text">
-                          ↳ Lanjutan:{' '}
-                          {continuationSchedule.subject?.name || continuationSchedule.subjectName}{' '}
-                          (
-                          {role === 'teacher'
-                            ? continuationSchedule.school_class?.name ||
-                              continuationSchedule.schoolClass?.name ||
-                              continuationSchedule.className
-                            : continuationSchedule.room?.name || continuationSchedule.roomName}
-                          )
+            return (
+              <Fragment key={slotObj.slot}>
+                <tr>
+                  <td className="schedule-slot-cell whitespace-nowrap">
+                    <div className="schedule-slot-header">
+                      <span className="schedule-slot-num">{slotObj.label}</span>
+                      {singleSlot && (
+                        <span className="schedule-slot-time">
+                          {singleSlot.start} - {singleSlot.end}
                         </span>
-                      </div>
-                    ) : isDayOff ? (
-                      <div className="schedule-cell-off" title={`Di luar alokasi jam KBM ${dayName} (Off)`}>
-                        -x-
-                      </div>
-                    ) : role === 'waka' && emptySlotAction ? (
-                      <div className="schedule-cell--empty">
-                        <button
-                          type="button"
-                          className="schedule-cell__empty-btn"
-                          disabled={emptySlotDisabled}
-                          onClick={() => emptySlotAction(slotObj.slot, dayName)}
-                          title={`Tambah jadwal hari ${dayName} Jam Ke-${slotObj.slot}`}
-                        >
-                          <Plus size={12} />
-                          <span>Kosong</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="schedule-cell--empty">
-                        <span className="schedule-cell__empty-dash">-</span>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
-                );
-              })}
-            </tr>
-          ))}
+
+                  {matrixDays.map((dayName) => {
+                    // Cari jadwal yang mulai pada slot ini
+                    const cellSchedules = schedules.filter((s) => {
+                      const sDay =
+                        typeof s.day_of_week === 'number'
+                          ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
+                          : s.day || 'Senin';
+                      if (sDay !== dayName) return false;
+                      const sSlot = Number(s.slot || s.period_number);
+                      return sSlot === slotObj.slot;
+                    });
+
+                    // Cari jadwal multi-JP yang berlanjut di slot ini dari jam sebelumnya
+                    const continuationSchedule = schedules.find((s) => {
+                      const sDay =
+                        typeof s.day_of_week === 'number'
+                          ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
+                          : s.day || 'Senin';
+                      if (sDay !== dayName) return false;
+                      const start = Number(s.slot || s.period_number);
+                      const dur = Number(s.duration || s.duration_periods || 1);
+                      return start < slotObj.slot && slotObj.slot < start + dur;
+                    });
+
+                    // Cek apakah slot ini di luar jam operasional KBM untuk hari tersebut
+                    const daySlots = getTimeSlotsForDay(dayName, mondayIsUpacara, periodTemplates);
+                    const isDayOff = !daySlots.some((s) => s.slot === Number(slotObj.slot));
+
+                    return (
+                      <td key={dayName}>
+                        {cellSchedules.length > 0 ? (
+                          <div className="schedule-cell-content">
+                            {cellSchedules.map((item) => {
+                              const isConflict = conflictIds.has(item.id);
+                              const slotTime = resolveSlotTime(
+                                dayName,
+                                item.slot || item.period_number,
+                                item.duration || item.duration_periods || 1,
+                                mondayIsUpacara,
+                                periodTemplates
+                              );
+
+                              return (
+                                <ScheduleCardItem
+                                  key={item.id}
+                                  item={item}
+                                  slotTime={slotTime}
+                                  role={role}
+                                  isConflict={isConflict}
+                                  statusBadge={renderCardStatus ? renderCardStatus(item) : null}
+                                  onClick={onCardClick}
+                                />
+                              );
+                            })}
+                          </div>
+                        ) : continuationSchedule ? (
+                          <div
+                            className="schedule-continuation-block"
+                            onClick={() => onCardClick && onCardClick(continuationSchedule)}
+                            title={`Lanjutan dari Jam Ke-${continuationSchedule.slot || continuationSchedule.period_number}: ${
+                              continuationSchedule.subject?.name || continuationSchedule.subjectName
+                            }`}
+                          >
+                            <span className="schedule-continuation-text">
+                              ↳ Lanjutan:{' '}
+                              {continuationSchedule.subject?.name || continuationSchedule.subjectName}{' '}
+                              (
+                              {role === 'teacher'
+                                ? continuationSchedule.school_class?.name ||
+                                  continuationSchedule.schoolClass?.name ||
+                                  continuationSchedule.className
+                                : continuationSchedule.room?.name || continuationSchedule.roomName}
+                              )
+                            </span>
+                          </div>
+                        ) : isDayOff ? (
+                          <div className="schedule-cell-off" title={`Di luar alokasi jam KBM ${dayName} (Off)`}>
+                            -x-
+                          </div>
+                        ) : role === 'waka' && emptySlotAction ? (
+                          <div className="schedule-cell--empty">
+                            <button
+                              type="button"
+                              className="schedule-cell__empty-btn"
+                              disabled={emptySlotDisabled}
+                              onClick={() => emptySlotAction(slotObj.slot, dayName)}
+                              title={`Tambah jadwal hari ${dayName} Jam Ke-${slotObj.slot}`}
+                            >
+                              <Plus size={12} />
+                              <span>Kosong</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="schedule-cell--empty">
+                            <span className="schedule-cell__empty-dash">-</span>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Istirahat I setelah Jam Ke-3 */}
+                {slotObj.slot === 3 && (
+                  <ScheduleBreakRow
+                    breakNumber={1}
+                    matrixDays={matrixDays}
+                    mondayIsUpacara={mondayIsUpacara}
+                  />
+                )}
+
+                {/* Istirahat II setelah Jam Ke-6 */}
+                {slotObj.slot === 6 && (
+                  <ScheduleBreakRow
+                    breakNumber={2}
+                    matrixDays={matrixDays}
+                    mondayIsUpacara={mondayIsUpacara}
+                  />
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

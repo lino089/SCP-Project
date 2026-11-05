@@ -1888,7 +1888,7 @@ export default function MasterDataPage() {
           )}
 
           {activeTab !== 'trash' && activeTab !== 'penugasan' && (
-            <Button variant="primary" onClick={handleOpenAdd}>
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
               Tambah {tabs.find((t) => t.id === activeTab)?.label}
             </Button>
           )}

@@ -214,16 +214,19 @@ class ScheduleController extends Controller
 
         $isAll = $request->boolean('all') || ($user->role === 'vice_principal' && $request->integer('per_page') >= 1000);
 
-        $mapScheduleItem = function ($schedule) use ($referenceDate) {
-            $scheduleArray = $schedule->toArray();
-            $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $referenceDate);
-            $todayJournal = $schedule->journals?->first();
-            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
-            $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
+        $config = SystemConfiguration::first();
+        $mondayIsUpacara = $config ? (bool) $config->monday_is_upacara : true;
 
+        $mapScheduleItem = function ($schedule) use ($referenceDate, $mondayIsUpacara) {
             // Resolusi tanggal jadwal dalam minggu referenceDate
             $startOfWeek = $referenceDate->copy()->startOfWeek(Carbon::MONDAY);
             $scheduleDate = $startOfWeek->copy()->addDays(max(0, ((int) $schedule->day_of_week) - 1));
+
+            $scheduleArray = $schedule->toArray();
+            $scheduleArray['resolved_times'] = $this->periodResolver->getScheduleTimes($schedule, $scheduleDate, $mondayIsUpacara);
+            $todayJournal = $schedule->journals?->first();
+            $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
+            $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
 
             // Deteksi status pengecualian dari kalender akademik
             $classLevel = $schedule->schoolClass?->level;
@@ -331,6 +334,25 @@ class ScheduleController extends Controller
         $data['duration_periods'] = $data['duration_periods'] ?? 1;
         $data['source'] = 'manual';
 
+        $periodNumber = (int) $data['period_number'];
+        $durationPeriods = (int) $data['duration_periods'];
+        $endPeriod = $periodNumber + $durationPeriods - 1;
+        $dayOfWeek = (int) $data['day_of_week'];
+
+        $maxPeriod = $dayOfWeek === 5 ? 8 : 10;
+        if ($endPeriod > $maxPeriod) {
+            $msg = $dayOfWeek === 5
+                ? 'Jadwal hari Jumat maksimal sampai periode ke-8 (13:50 WIB).'
+                : 'Jadwal hari Senin–Kamis maksimal sampai periode ke-10 (15:10 WIB).';
+            return response()->json([
+                'success' => false,
+                'message' => 'Periode melebihi batas operasional.',
+                'errors' => [
+                    'period_number' => [$msg],
+                ],
+            ], 422);
+        }
+
         $schedule = DB::transaction(function () use ($data) {
             $this->lockResources($data);
 
@@ -395,6 +417,26 @@ class ScheduleController extends Controller
         }
 
         $payload = collect($validated)->except('password')->all();
+
+        $targetSchedule = Schedule::findOrFail($id);
+        $dayOfWeek = (int) ($payload['day_of_week'] ?? $targetSchedule->day_of_week);
+        $periodNumber = (int) ($payload['period_number'] ?? $targetSchedule->period_number);
+        $durationPeriods = (int) ($payload['duration_periods'] ?? $targetSchedule->duration_periods ?? 1);
+        $endPeriod = $periodNumber + $durationPeriods - 1;
+
+        $maxPeriod = $dayOfWeek === 5 ? 8 : 10;
+        if ($endPeriod > $maxPeriod) {
+            $msg = $dayOfWeek === 5
+                ? 'Jadwal hari Jumat maksimal sampai periode ke-8 (13:50 WIB).'
+                : 'Jadwal hari Senin–Kamis maksimal sampai periode ke-10 (15:10 WIB).';
+            return response()->json([
+                'success' => false,
+                'message' => 'Periode melebihi batas operasional.',
+                'errors' => [
+                    'period_number' => [$msg],
+                ],
+            ], 422);
+        }
 
         $schedule = DB::transaction(function () use ($id, $payload) {
             $schedule = Schedule::lockForUpdate()->findOrFail($id);

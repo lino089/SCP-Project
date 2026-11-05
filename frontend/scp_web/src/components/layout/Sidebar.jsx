@@ -289,7 +289,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
             onClick={() => onClose?.()}
           >
             <Home size={16} strokeWidth={1.5} />
-            <span>Beranda &amp; Presensi</span>
+            <span>Beranda</span>
           </NavLink>
 
           <NavLink

@@ -3,11 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
-  Sparkles,
-  FileText,
   CheckCircle2,
   ArrowRight,
-  GraduationCap,
   AlertCircle,
   RotateCw,
 } from 'lucide-react';
@@ -17,6 +14,7 @@ import { scheduleApi } from '../../services/scheduleApi';
 import { quizApi } from '../../services/quizApi';
 import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button, Modal, Table } from '../../components/shared';
+import { resolveSlotTime } from '../../utils/timetableHelper';
 import './StudentHome.css';
 
 export default function StudentHomePage() {
@@ -136,12 +134,12 @@ export default function StudentHomePage() {
     if (item.resolved_times?.start_time && item.resolved_times?.end_time) {
       return `${item.resolved_times.start_time.slice(0, 5)} - ${item.resolved_times.end_time.slice(0, 5)} WIB`;
     }
-    // Estimasi jam per period
-    const startHour = 7 + Math.floor(((item.period_number || 1) - 1) * 0.75);
-    const startMin = (((item.period_number || 1) - 1) * 45) % 60;
-    const endHour = startHour + Math.floor(((item.duration_periods || 2) * 45 + startMin) / 60);
-    const endMin = ((item.duration_periods || 2) * 45 + startMin) % 60;
-    return `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')} - ${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} WIB`;
+    const resolved = resolveSlotTime(
+      item.day_of_week || dateInfo.dayOfWeek,
+      item.period_number || 1,
+      item.duration_periods || 1
+    );
+    return `${resolved.timeText} WIB`;
   };
 
   // Log Presensi Table Columns
@@ -248,7 +246,14 @@ export default function StudentHomePage() {
           2. EMPAT KARTU METRIK KEHADIRAN MANDIRI
          ========================================================================= */}
       <div className="student-home__stats-grid">
-        <div className="student-home__stat-card">
+        <div
+          className="student-home__stat-card student-home__stat-card--clickable"
+          onClick={() => setIsAttendanceModalOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setIsAttendanceModalOpen(true)}
+          title="Klik untuk melihat riwayat log presensi"
+        >
           <div className="student-home__stat-top">
             <span className="student-home__stat-title">Hari Masuk</span>
             <span className="student-home__stat-indicator student-home__stat-indicator--hadir" />
@@ -260,7 +265,14 @@ export default function StudentHomePage() {
           <p className="student-home__stat-desc">Presensi fisik terkonfirmasi di kelas</p>
         </div>
 
-        <div className="student-home__stat-card">
+        <div
+          className="student-home__stat-card student-home__stat-card--clickable"
+          onClick={() => setIsAttendanceModalOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setIsAttendanceModalOpen(true)}
+          title="Klik untuk melihat riwayat log presensi"
+        >
           <div className="student-home__stat-top">
             <span className="student-home__stat-title">Izin Sakit</span>
             <span className="student-home__stat-indicator student-home__stat-indicator--sakit" />
@@ -272,7 +284,14 @@ export default function StudentHomePage() {
           <p className="student-home__stat-desc">Tervalidasi surat keterangan dokter</p>
         </div>
 
-        <div className="student-home__stat-card">
+        <div
+          className="student-home__stat-card student-home__stat-card--clickable"
+          onClick={() => setIsAttendanceModalOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setIsAttendanceModalOpen(true)}
+          title="Klik untuk melihat riwayat log presensi"
+        >
           <div className="student-home__stat-top">
             <span className="student-home__stat-title">Izin Keperluan</span>
             <span className="student-home__stat-indicator student-home__stat-indicator--izin" />
@@ -284,7 +303,14 @@ export default function StudentHomePage() {
           <p className="student-home__stat-desc">Izin resmi disetujui pihak sekolah</p>
         </div>
 
-        <div className="student-home__stat-card">
+        <div
+          className="student-home__stat-card student-home__stat-card--clickable"
+          onClick={() => setIsAttendanceModalOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setIsAttendanceModalOpen(true)}
+          title="Klik untuk melihat riwayat log presensi"
+        >
           <div className="student-home__stat-top">
             <span className="student-home__stat-title">Alpa</span>
             <span className="student-home__stat-indicator student-home__stat-indicator--alpa" />
@@ -295,53 +321,6 @@ export default function StudentHomePage() {
           </div>
           <p className="student-home__stat-desc">Ketidakhadiran tanpa keterangan</p>
         </div>
-      </div>
-
-      {/* =========================================================================
-          3. AKSI CEPAT SISWA (QUICK ACTIONS)
-         ========================================================================= */}
-      <div className="student-home__quick-actions">
-        <button
-          type="button"
-          className="student-home__action-card"
-          onClick={() => navigate('/student/permissions')}
-        >
-          <div className="student-home__action-icon student-home__action-icon--blue">
-            <FileText size={18} />
-          </div>
-          <div>
-            <span className="student-home__action-title">Ajukan Izin / Sakit</span>
-            <span className="student-home__action-subtitle">Kirim permohonan surat izin mandiri</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          className="student-home__action-card"
-          onClick={() => navigate('/student/quiz')}
-        >
-          <div className="student-home__action-icon student-home__action-icon--yellow">
-            <Sparkles size={18} />
-          </div>
-          <div>
-            <span className="student-home__action-title">Pengerjaan Kuis CBT</span>
-            <span className="student-home__action-subtitle">Buka lembar ujian evaluasi AI aktif</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          className="student-home__action-card"
-          onClick={() => setIsAttendanceModalOpen(true)}
-        >
-          <div className="student-home__action-icon student-home__action-icon--slate">
-            <Clock size={18} />
-          </div>
-          <div>
-            <span className="student-home__action-title">Riwayat Presensi</span>
-            <span className="student-home__action-subtitle">Lihat rekapitulasi kehadiran kelas</span>
-          </div>
-        </button>
       </div>
 
       {/* =========================================================================
@@ -511,21 +490,6 @@ export default function StudentHomePage() {
               ))}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* =========================================================================
-          5. KARTU UCAPAN MOTIVASI BELAJAR (INSPIRASI BELAJAR)
-         ========================================================================= */}
-      <div className="student-home__quote-box">
-        <div className="student-home__quote-icon">
-          <GraduationCap size={22} />
-        </div>
-        <div className="student-home__quote-content">
-          <h4>Inspirasi Belajar Kejuruan</h4>
-          <p>
-            &ldquo;Konsistensi latihan harian dan kedisiplinan presensi adalah fondasi utama keberhasilan penguasaan kompetensi keahlian. Teruslah berproses dan raih capaian terbaik!&rdquo;
-          </p>
         </div>
       </div>
 

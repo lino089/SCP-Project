@@ -249,8 +249,9 @@ class TeacherManagementTest extends TestCase
                 'message' => 'Penugasan guru berhasil dicabut.',
             ]);
 
-        $this->assertDatabaseMissing('teacher_assignments', [
+        $this->assertDatabaseHas('teacher_assignments', [
             'id' => $assignmentId,
+            'is_active' => false,
         ]);
     }
 

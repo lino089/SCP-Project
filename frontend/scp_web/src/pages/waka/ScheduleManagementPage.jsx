@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -23,6 +23,7 @@ import {
   EmptyState,
   ErrorState,
 } from '../../components/feedback';
+import ScheduleBreakRow from '../../components/schedule/ScheduleBreakRow';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
 import {
@@ -659,6 +660,7 @@ export default function ScheduleManagementPage() {
           </Button>
           <Button
             variant="primary"
+            icon={Plus}
             disabled={!prerequisiteCheck.isReady}
             onClick={() => handleOpenAddModal()}
           >
@@ -1073,12 +1075,29 @@ export default function ScheduleManagementPage() {
 
                       {/* Slots Iteration */}
                       {displaySlots.map((slotObj) => (
-                        <tr key={slotObj.slot}>
-                          <td className="schedule-slot-cell whitespace-nowrap">
-                            <div className="schedule-slot-header">
-                              <span className="schedule-slot-num">{slotObj.label}</span>
-                            </div>
-                          </td>
+                        <Fragment key={slotObj.slot}>
+                          <tr>
+                            <td className="schedule-slot-cell whitespace-nowrap">
+                              <div className="schedule-slot-header">
+                                <span className="schedule-slot-num">{slotObj.label}</span>
+                                {matrixDays.length === 1 && (
+                                  <span className="schedule-slot-time">
+                                    {getTimeSlotsForDay(matrixDays[0], mondayIsUpacara, periodTemplates).find(
+                                      (s) => s.slot === slotObj.slot
+                                    )?.start || ''}
+                                    {getTimeSlotsForDay(matrixDays[0], mondayIsUpacara, periodTemplates).find(
+                                      (s) => s.slot === slotObj.slot
+                                    )
+                                      ? ` - ${
+                                          getTimeSlotsForDay(matrixDays[0], mondayIsUpacara, periodTemplates).find(
+                                            (s) => s.slot === slotObj.slot
+                                          )?.end
+                                        }`
+                                      : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
 
                           {matrixDays.map((dayName) => {
                             // Find schedule items starting at this slot
@@ -1184,7 +1203,26 @@ export default function ScheduleManagementPage() {
                               </td>
                             );
                           })}
-                        </tr>
+                          </tr>
+
+                          {/* Istirahat I setelah Jam Ke-3 */}
+                          {slotObj.slot === 3 && (
+                            <ScheduleBreakRow
+                              breakNumber={1}
+                              matrixDays={matrixDays}
+                              mondayIsUpacara={mondayIsUpacara}
+                            />
+                          )}
+
+                          {/* Istirahat II setelah Jam Ke-6 */}
+                          {slotObj.slot === 6 && (
+                            <ScheduleBreakRow
+                              breakNumber={2}
+                              matrixDays={matrixDays}
+                              mondayIsUpacara={mondayIsUpacara}
+                            />
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

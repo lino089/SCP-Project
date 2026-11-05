@@ -1,6 +1,6 @@
 /* ==========================================================================
    TeacherSchedule.css — Styling Kalender Jadwal Mengajar Guru
-   Mengadopsi Exness Precision Fintech Palette: Slate-900, Gray-50/100, Accent #FFDE02
+   Desain: Clean, Minimalist & Modern (Soft Neutrals, Accent #FFDE00)
    ========================================================================== */
 
 .teacher-schedule {
@@ -151,7 +151,7 @@
   border-radius: 0.75rem;
   background-color: #ffffff;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 
 .teacher-schedule__card-item {
@@ -294,7 +294,7 @@
 }
 
 .teacher-schedule__matrix-cell--active {
-  border-left-color: #FFDE02;
+  border-left-color: #FFDE00;
   background-color: #fffdf0;
 }
 

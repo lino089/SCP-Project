@@ -1,6 +1,6 @@
 /* ==========================================================================
    StudentHome.css — Antarmuka Beranda Mandiri Siswa
-   Tema: Exness Precision Fintech (Slate-900, Slate-600, Gray-50/100, Accent #FFDE02)
+   Desain: Clean, Minimalist & Modern (Soft Neutrals, Accent #FFDE00)
    ========================================================================== */
 
 .student-home {
@@ -114,12 +114,21 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 1rem 1.125rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  box-shadow: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .student-home__stat-card:hover {
   border-color: #cbd5e1;
+}
+
+.student-home__stat-card--clickable {
+  cursor: pointer;
+}
+
+.student-home__stat-card--clickable:hover {
+  background-color: #fafbfc;
+  border-color: #94a3b8;
 }
 
 .student-home__stat-top {
@@ -213,9 +222,10 @@
 }
 
 .student-home__action-card:hover {
-  border-color: #0f172a;
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .student-home__action-icon {
@@ -458,22 +468,24 @@
 
 /* Motivational Learning Quote Box */
 .student-home__quote-box {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #ffde00;
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
-  color: #ffffff;
+  color: #1e293b;
   display: flex;
   align-items: center;
   gap: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1);
+  box-shadow: none;
 }
 
 .student-home__quote-icon {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background-color: rgba(255, 222, 2, 0.15);
-  color: #ffde02;
+  background-color: #fef9c3;
+  color: #854d0e;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -483,14 +495,14 @@
 .student-home__quote-content h4 {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #ffde02;
+  color: #0f172a;
   margin: 0 0 0.25rem;
   letter-spacing: -0.01em;
 }
 
 .student-home__quote-content p {
   font-size: 0.8125rem;
-  color: #cbd5e1;
+  color: #4b5563;
   line-height: 1.5;
   margin: 0;
 }

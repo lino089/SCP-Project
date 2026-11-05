@@ -229,7 +229,7 @@ export default function TeacherCalendarPage() {
       </div>
 
       {/* Rincian Agenda Kegiatan Bulan Berjalan */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-base font-bold text-gray-900">

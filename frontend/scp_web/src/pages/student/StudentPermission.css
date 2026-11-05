@@ -1,6 +1,6 @@
 /* ==========================================================================
    StudentPermission.css — Styling Halaman Pengajuan Perizinan Siswa/Ortu
-   Kepatuhan Tema: Exness Precision Fintech (Slate-900, Gray-50/100, Accent #FFDE02)
+   Desain: Clean, Minimalist & Modern (Soft Neutrals, Accent #FFDE00)
    ========================================================================== */
 
 .student-permission {
@@ -95,9 +95,9 @@
 }
 
 .student-permission__type-card--active {
-  border-color: #0f172a;
-  background-color: #f8fafc;
-  box-shadow: 0 0 0 1px #0f172a;
+  border-color: #ffde00;
+  background-color: #fffdf0;
+  box-shadow: 0 0 0 1px #ffde00;
 }
 
 .student-permission__type-card-radio {
@@ -113,14 +113,14 @@
 }
 
 .student-permission__type-card--active .student-permission__type-card-radio {
-  border-color: #0f172a;
+  border-color: #d97706;
 }
 
 .student-permission__type-card-dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
-  background-color: #0f172a;
+  background-color: #000000;
 }
 
 .student-permission__type-card-title {

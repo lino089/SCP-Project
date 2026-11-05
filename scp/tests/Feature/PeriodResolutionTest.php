@@ -97,7 +97,7 @@ class PeriodResolutionTest extends TestCase
 
         $resolvedUpacara = $this->periodService->getScheduleTimes($schedule, $mondayDate);
         $this->assertEquals('08:00:00', $resolvedUpacara['start_time']);
-        $this->assertEquals('09:30:00', $resolvedUpacara['end_time']); // 2 JP x 45 min = 09:30
+        $this->assertEquals('09:10:00', $resolvedUpacara['end_time']); // 2 JP x 35 min = 09:10:00
         $this->assertEquals('senin_upacara', $this->periodService->resolveDayType($mondayDate));
 
         // 2. Ubah konfigurasi menjadi Senin Reguler (tanpa upacara): JP 1 mulai jam 07:15:00
@@ -105,7 +105,7 @@ class PeriodResolutionTest extends TestCase
 
         $resolvedReguler = $this->periodService->getScheduleTimes($schedule, $mondayDate);
         $this->assertEquals('07:15:00', $resolvedReguler['start_time']);
-        $this->assertEquals('08:45:00', $resolvedReguler['end_time']);
+        $this->assertEquals('08:35:00', $resolvedReguler['end_time']); // 2 JP x 40 min = 08:35:00
         $this->assertEquals('senin_reguler', $this->periodService->resolveDayType($mondayDate));
     }
 

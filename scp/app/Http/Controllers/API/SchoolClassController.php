@@ -21,8 +21,9 @@ class SchoolClassController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'per_page' => 'nullable|integer|min:1|max:100',
+            'per_page' => 'nullable|integer|min:1|max:1000',
             'search' => 'nullable|string|max:100',
+            'all' => 'nullable|in:true,false,1,0',
         ]);
 
         $perPage = $request->integer('per_page', 15);
@@ -33,6 +34,22 @@ class SchoolClassController extends Controller
         if ($search) {
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
             $query->where('name', $like, '%' . $search . '%');
+        }
+
+        if ($request->boolean('all')) {
+            $classes = $query->orderBy('level')->orderBy('name')->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data kelas berhasil diambil.',
+                'data' => $classes,
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => $classes->count(),
+                    'total' => $classes->count(),
+                    'last_page' => 1,
+                ],
+            ], 200);
         }
 
         $classes = $query->orderBy('level')->orderBy('name')->paginate($perPage);

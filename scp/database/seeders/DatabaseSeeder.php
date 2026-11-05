@@ -112,7 +112,6 @@ class DatabaseSeeder extends Seeder
                 'role' => 'teacher',
                 'name' => 'Drs. Ahmad Fauzi, M.Pd.',
                 'email' => 'ahmad.fauzi@sekolah.sch.id',
-                'fet_staff_id' => 'AFAUZI',
                 'password' => Hash::make('password123'),
                 'must_change_password' => false,
             ]
@@ -131,7 +130,6 @@ class DatabaseSeeder extends Seeder
                 'role' => 'teacher',
                 'name' => 'Budi Santoso, M.Kom.',
                 'email' => 'budi.santoso@sekolah.sch.id',
-                'fet_staff_id' => 'BSANTOSO',
                 'password' => Hash::make('password123'),
                 'must_change_password' => false,
             ]

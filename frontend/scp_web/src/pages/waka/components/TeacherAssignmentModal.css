@@ -19,14 +19,15 @@
 .teacher-assignment__avatar {
   width: 40px;
   height: 40px;
-  background-color: #0F172A;
-  color: #FFFFFF;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-family: var(--font-family-mono);
 }
 

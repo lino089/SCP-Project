@@ -561,7 +561,7 @@ export default function PermissionVerifyPage() {
             type="button"
             className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
               activeCategory === 'students'
-                ? 'border-gray-900 text-gray-900'
+                ? 'border-[#FFDE00] text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setActiveCategory('students')}
@@ -577,7 +577,7 @@ export default function PermissionVerifyPage() {
             type="button"
             className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
               activeCategory === 'teachers'
-                ? 'border-gray-900 text-gray-900'
+                ? 'border-[#FFDE00] text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setActiveCategory('teachers')}
@@ -716,7 +716,7 @@ export default function PermissionVerifyPage() {
             <div className="permission-verify__doc-container">
               {isDocLoading && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 text-white gap-2.5">
-                  <RotateCw size={26} className="animate-spin text-[#FFDE02]" />
+                  <RotateCw size={26} className="animate-spin text-[#FFDE00]" />
                   <span className="text-xs text-slate-300 font-medium">
                     Memuat surat lampiran dari Supabase Storage...
                   </span>
@@ -748,7 +748,7 @@ export default function PermissionVerifyPage() {
                     {!triedDocFallback && (
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded bg-[#FFDE02] hover:bg-[#F2D300] text-xs text-slate-900 font-bold transition cursor-pointer"
+                        className="px-3 py-1.5 rounded bg-[#FFDE00] hover:bg-[#FFE63B] text-xs text-slate-900 font-bold transition cursor-pointer"
                         onClick={() => {
                           setTriedDocFallback(true);
                           setDocLoadError(false);

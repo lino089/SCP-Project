@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: none;
 }
 
 @media (min-width: 640px) {
@@ -95,7 +95,7 @@
   border: 1px solid #E2E8F0;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 
 .shared-calendar-weekdays {
@@ -113,6 +113,12 @@
   color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  border-right: 1px solid #E2E8F0;
+  box-sizing: border-box;
+}
+
+.shared-calendar-weekday-cell:last-child {
+  border-right: none;
 }
 
 .shared-calendar-weekday-cell--weekend {
@@ -122,8 +128,8 @@
 .shared-calendar-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  background: #E2E8F0;
-  gap: 1px;
+  background: #FFFFFF;
+  gap: 0;
 }
 
 .shared-calendar-day-cell {
@@ -134,6 +140,13 @@
   flex-direction: column;
   transition: background-color 0.1s ease;
   position: relative;
+  border-right: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+  box-sizing: border-box;
+}
+
+.shared-calendar-day-cell:nth-child(7n) {
+  border-right: none;
 }
 
 .shared-calendar-day-cell:hover {
@@ -146,12 +159,12 @@
 }
 
 .shared-calendar-day-cell--today {
-  background: #EFF6FF;
+  background: #fffdf0;
 }
 
 .shared-calendar-day-cell--today .shared-calendar-day-num {
-  background: #2563EB;
-  color: #FFFFFF;
+  background: #ffde00;
+  color: #000000;
   border-radius: 9999px;
   width: 24px;
   height: 24px;

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 class PeriodResolutionService
 {
     /**
-     * Cache in-memory untuk seluruh baris period_templates (~40 baris).
+     * Cache in-memory untuk seluruh baris period_templates (~48 baris).
      * Mencegah N+1 query berulang saat mapping ribuan jadwal KBM.
      */
     protected static ?Collection $templateCache = null;
@@ -36,32 +36,39 @@ class PeriodResolutionService
     }
 
     /**
-     * Menentukan tipe hari (day_type) berdasarkan tanggal dan setting upacara hari Senin.
+     * Menentukan tipe hari (day_type) berdasarkan indeks hari dalam minggu (1 = Senin s/d 5 = Jumat).
      */
-    public function resolveDayType(Carbon $date): ?string
+    public function resolveDayTypeForDayOfWeek(int $dayOfWeek, ?bool $mondayIsUpacara = null): ?string
     {
-        $dayOfWeek = (int) $date->dayOfWeekIso; // 1 = Senin, ..., 7 = Minggu
-
         if ($dayOfWeek < 1 || $dayOfWeek > 5) {
             return null; // Sabtu & Minggu tidak ada jadwal sekolah
         }
 
-        $mondayIsUpacara = true;
-        if ($dayOfWeek === 1) {
+        if ($dayOfWeek === 1 && $mondayIsUpacara === null) {
             $config = SystemConfiguration::first();
             $mondayIsUpacara = $config ? (bool) $config->monday_is_upacara : true;
         }
 
-        return PeriodTemplate::dayTypeFor($dayOfWeek, $mondayIsUpacara);
+        return PeriodTemplate::dayTypeFor($dayOfWeek, (bool) $mondayIsUpacara);
     }
 
     /**
-     * Menghitung jam mulai dan jam selesai literal (HH:MM:SS) untuk suatu jadwal pada tanggal tertentu.
+     * Menentukan tipe hari (day_type) berdasarkan tanggal Carbon.
      */
-    public function getScheduleTimes(Schedule $schedule, ?Carbon $date = null): array
+    public function resolveDayType(Carbon $date, ?bool $mondayIsUpacara = null): ?string
     {
-        $date = $date ? $date->copy() : Carbon::now('Asia/Jakarta');
-        $dayType = $this->resolveDayType($date);
+        $dayOfWeek = (int) $date->dayOfWeekIso; // 1 = Senin, ..., 7 = Minggu
+        return $this->resolveDayTypeForDayOfWeek($dayOfWeek, $mondayIsUpacara);
+    }
+
+    /**
+     * Menghitung jam mulai dan jam selesai literal (HH:MM:SS) untuk suatu jadwal.
+     * Mengutamakan day_of_week dari jadwal agar resolusi jam selalu akurat sesuai hari KBM jadwal tersebut.
+     */
+    public function getScheduleTimes(Schedule $schedule, ?Carbon $date = null, ?bool $mondayIsUpacara = null): array
+    {
+        $dayOfWeek = (int) ($schedule->day_of_week ?? ($date ? $date->dayOfWeekIso : 0));
+        $dayType = $this->resolveDayTypeForDayOfWeek($dayOfWeek, $mondayIsUpacara);
 
         if (!$dayType) {
             return [

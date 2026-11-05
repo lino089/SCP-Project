@@ -75,7 +75,7 @@ class PeriodResolutionServiceTest extends TestCase
 
         $monday = Carbon::parse('2026-10-19');
 
-        // Schedule JP 1 single period on Senin Upacara -> 08:00 to 08:45
+        // Schedule JP 1 single period on Senin Upacara -> 08:00 to 08:35 (35 menit sesuai Jadwal_Ruangan.pdf)
         $scheduleSingle = new Schedule([
             'day_of_week' => 1,
             'period_number' => 1,
@@ -84,9 +84,9 @@ class PeriodResolutionServiceTest extends TestCase
 
         $timesSingle = $this->service->getScheduleTimes($scheduleSingle, $monday);
         $this->assertEquals('08:00:00', $timesSingle['start_time']);
-        $this->assertEquals('08:45:00', $timesSingle['end_time']);
+        $this->assertEquals('08:35:00', $timesSingle['end_time']);
 
-        // Schedule JP 1 duration 2 on Senin Upacara -> 08:00 to 09:30 (JP 1 start to JP 2 end)
+        // Schedule JP 1 duration 2 on Senin Upacara -> 08:00 to 09:10 (JP 1 start to JP 2 end)
         $scheduleMulti = new Schedule([
             'day_of_week' => 1,
             'period_number' => 1,
@@ -95,7 +95,27 @@ class PeriodResolutionServiceTest extends TestCase
 
         $timesMulti = $this->service->getScheduleTimes($scheduleMulti, $monday);
         $this->assertEquals('08:00:00', $timesMulti['start_time']);
-        $this->assertEquals('09:30:00', $timesMulti['end_time']);
+        $this->assertEquals('09:10:00', $timesMulti['end_time']);
+    }
+
+    public function test_get_schedule_times_resolves_accurately_even_when_date_is_sunday(): void
+    {
+        SystemConfiguration::create([
+            'active_cycle' => 1,
+            'monday_is_upacara' => true,
+        ]);
+
+        $sunday = Carbon::parse('2026-10-25'); // Sunday
+
+        $scheduleMonday = new Schedule([
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 1,
+        ]);
+
+        $times = $this->service->getScheduleTimes($scheduleMonday, $sunday);
+        $this->assertEquals('08:00:00', $times['start_time']);
+        $this->assertEquals('08:35:00', $times['end_time']);
     }
 
     public function test_get_schedule_times_for_friday_short_periods(): void
@@ -117,6 +137,26 @@ class PeriodResolutionServiceTest extends TestCase
         $times = $this->service->getScheduleTimes($scheduleFriday, $friday);
         $this->assertEquals('07:15:00', $times['start_time']);
         $this->assertEquals('07:55:00', $times['end_time']);
+
+        // Friday JP 6 (35 min): 10:50:00 to 11:25:00
+        $scheduleP6 = new Schedule([
+            'day_of_week' => 5,
+            'period_number' => 6,
+            'duration_periods' => 1,
+        ]);
+        $timesP6 = $this->service->getScheduleTimes($scheduleP6, $friday);
+        $this->assertEquals('10:50:00', $timesP6['start_time']);
+        $this->assertEquals('11:25:00', $timesP6['end_time']);
+
+        // Friday JP 8 (35 min, Jam Pulang Jumat): 13:15:00 to 13:50:00
+        $scheduleP8 = new Schedule([
+            'day_of_week' => 5,
+            'period_number' => 8,
+            'duration_periods' => 1,
+        ]);
+        $timesP8 = $this->service->getScheduleTimes($scheduleP8, $friday);
+        $this->assertEquals('13:15:00', $timesP8['start_time']);
+        $this->assertEquals('13:50:00', $timesP8['end_time']);
     }
 
     public function test_is_schedule_past_tolerance_threshold(): void
@@ -126,23 +166,23 @@ class PeriodResolutionServiceTest extends TestCase
             'monday_is_upacara' => true,
         ]);
 
-        // Monday JP 1 ends at 08:45:00
+        // Monday JP 1 ends at 08:35:00
         $schedule = new Schedule([
             'day_of_week' => 1,
             'period_number' => 1,
             'duration_periods' => 1,
         ]);
 
-        // At 09:00:00 (+15 mins): still within 30 mins grace period -> false
-        $withinTolerance = Carbon::parse('2026-10-19 09:00:00');
+        // At 08:50:00 (+15 mins): still within 30 mins grace period -> false
+        $withinTolerance = Carbon::parse('2026-10-19 08:50:00');
         $this->assertFalse($this->service->isSchedulePastTolerance($schedule, $withinTolerance));
 
-        // At 09:15:00 (+30 mins exact threshold): not past -> false
-        $atTolerance = Carbon::parse('2026-10-19 09:15:00');
+        // At 09:05:00 (+30 mins exact threshold): not past -> false
+        $atTolerance = Carbon::parse('2026-10-19 09:05:00');
         $this->assertFalse($this->service->isSchedulePastTolerance($schedule, $atTolerance));
 
-        // At 09:15:01 (+30 mins and 1 sec): past tolerance -> true
-        $pastTolerance = Carbon::parse('2026-10-19 09:15:01');
+        // At 09:05:01 (+30 mins and 1 sec): past tolerance -> true
+        $pastTolerance = Carbon::parse('2026-10-19 09:05:01');
         $this->assertTrue($this->service->isSchedulePastTolerance($schedule, $pastTolerance));
     }
 }

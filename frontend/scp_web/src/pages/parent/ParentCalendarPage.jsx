@@ -211,7 +211,7 @@ export default function ParentCalendarPage() {
             <select
               value={selectedChildId}
               onChange={(e) => setSelectedChildId(e.target.value)}
-              className="h-9 px-3 text-xs font-semibold border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500"
+              className="h-9 px-3 text-xs font-semibold border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Semua Anak</option>
               {childrenList.map((c) => (
@@ -244,7 +244,7 @@ export default function ParentCalendarPage() {
 
       {/* Banner Sorotan Minggu Berjalan (Highlights) */}
       {currentWeekEvents.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 sm:p-5 shadow-sm">
+        <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">
             <Clock size={15} className="text-blue-600" />
             <span>Informasi Minggu Ini untuk {selectedChildLabel}</span>
@@ -255,7 +255,7 @@ export default function ParentCalendarPage() {
               <div
                 key={evt.id}
                 onClick={() => setSelectedEvent(evt)}
-                className="bg-white/90 hover:bg-white border border-blue-100 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer transition shadow-xs"
+                className="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer transition"
               >
                 <div>
                   <div className="font-bold text-gray-900 flex items-center gap-2">
@@ -330,7 +330,7 @@ export default function ParentCalendarPage() {
       </div>
 
       {/* Daftar Agenda Kegiatan Bulan Ini */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-base font-bold text-gray-900">

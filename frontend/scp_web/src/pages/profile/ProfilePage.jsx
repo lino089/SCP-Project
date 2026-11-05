@@ -283,7 +283,7 @@ export default function ProfilePage() {
           {/* Identity Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center gap-3.5 mb-4">
-              <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base font-mono">
+              <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-900 border border-gray-200 flex items-center justify-center font-bold text-base font-mono">
                 {getInitials(user?.name)}
               </div>
               <div className="min-w-0 flex-1">
@@ -597,7 +597,7 @@ export default function ProfilePage() {
               />
 
               <div className="pt-2">
-                <Button type="submit" variant="dark" loading={passwordLoading}>
+                <Button type="submit" variant="primary" loading={passwordLoading}>
                   Simpan Kata Sandi Baru
                 </Button>
               </div>

@@ -590,7 +590,7 @@ export default function ForgotPasswordPage() {
 
             <Button
               type="button"
-              variant="dark"
+              variant="primary"
               size="lg"
               fullWidth
               onClick={() => navigate('/login', { replace: true })}

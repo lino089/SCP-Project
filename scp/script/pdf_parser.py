@@ -87,6 +87,8 @@ def parse_ruangan_pdf(file_path):
         "JUMAT": 5
     }
     
+    time_table = {}
+    
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
             for table in page.extract_tables():
@@ -117,12 +119,30 @@ def parse_ruangan_pdf(file_path):
                     if not current_day:
                         continue
                         
-                    c1 = (row[1] or "").strip()
+                    c1 = (row[1] or "").strip().upper()
+                    raw_waktu = (row[2] or "").replace("\n", " ").strip() if len(row) > 2 else ""
+
+                    # Catat dan validasi waktu istirahat
+                    if c1 == "IST" and raw_waktu:
+                        time_table[(current_day, "IST", raw_waktu)] = True
+                        continue
+
                     if not c1.isdigit():
                         continue
                     period_num = int(c1)
                     if period_num < 1 or period_num > 10:
                         continue
+
+                    if raw_waktu:
+                        time_table[(current_day, period_num)] = raw_waktu
+                        # Peringatan Anomali Selasa Jam Ke-10
+                        if current_day == 2 and period_num == 10 and "14.45" in raw_waktu:
+                            sys.stderr.write(
+                                "[PERINGATAN WAKTU] Selasa Jam Ke-10 tertulis '14.45 - 15.10' di PDF Jadwal Ruangan "
+                                "(terdapat jeda kosong 10 menit dari akhir JP 9 pukul 14:35). "
+                                "Rekomendasi: Diselaraskan menjadi '14:35 - 15:10' (durasi 35 menit) agar kronologis "
+                                "menyambung dari Jam Ke-9 dan konsisten dengan pola jam siang hari Senin.\n"
+                            )
                         
                     for c_idx, norm_class in class_columns.items():
                         if c_idx < len(row):
@@ -179,6 +199,23 @@ def parse_kelas_pdf(file_path, room_lookup):
                             
                 if curr_entry:
                     finalize_schedule(curr_entry, norm_class, day_name, day_of_week, curr_start, curr_duration, room_lookup, schedules)
+
+    # Cross-check: Deteksi ruangan yang dialokasikan di Jadwal_Ruangan.pdf tetapi tanpa KBM di Jadwal_Kelas.pdf
+    scheduled_slots = set()
+    for s in schedules:
+        for p in range(s["period_number"], s["period_number"] + s["duration_periods"]):
+            scheduled_slots.add((s["kelas_mentah"], s["day_of_week"], p))
+
+    day_names_map = {1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat"}
+    for (norm_class, day_of_week, period_num), room_val in sorted(room_lookup.items()):
+        if (norm_class, day_of_week, period_num) not in scheduled_slots:
+            d_name = day_names_map.get(day_of_week, str(day_of_week))
+            sys.stderr.write(
+                f"[PERINGATAN KONFLIK RUANGAN] Kelas {norm_class} hari {d_name} Jam Ke-{period_num} "
+                f"memiliki alokasi ruang '{room_val}' pada Jadwal_Ruangan.pdf, tetapi tidak memiliki kegiatan "
+                f"belajar mengajar (mapel kosong '---') di Jadwal_Kelas.pdf. Rekomendasi: Ikuti Jadwal_Kelas "
+                f"(kelas pulang lebih awal pada jam tersebut) dan bebaskan ruang '{room_val}'.\n"
+            )
                     
     return schedules
 

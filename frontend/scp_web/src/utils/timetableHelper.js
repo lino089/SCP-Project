@@ -2,6 +2,7 @@
  * Helper Utilitas Timetable & Resolusi Jam Dinamis KBM
  * Menghitung jam riil pelajaran per slot berdasarkan hari dan status Upacara Senin
  * mengintegrasikan template jam resmi (period_templates) serta mendeteksi bentrok jadwal lokal.
+ * Sumber Waktu Resmi: Jadwal_Ruangan.pdf (SMKN 1 Bantul)
  */
 
 export const DAYS_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
@@ -73,7 +74,7 @@ export const MORNING_ACTIVITIES = {
     badge: 'Pembiasaan',
     variant: 'neutral',
     kbmStart: '07:15',
-    description: 'Tadarus Al-Qur\'an, Doa Pagi & Menyanyikan Lagu Kebangsaan',
+    description: "Tadarus Al-Qur'an, Doa Pagi & Menyanyikan Lagu Kebangsaan",
   },
   selasa: {
     title: 'Literasi Pagi',
@@ -103,9 +104,6 @@ export const MORNING_ACTIVITIES = {
 
 /**
  * Mendapatkan detail kegiatan pembiasaan pagi untuk hari tertentu
- * @param {string|number} day - Nama hari ('Senin', dsb.) atau nomor hari (1..5)
- * @param {boolean} mondayIsUpacara - Apakah hari Senin melaksanakan upacara bendera
- * @returns {object} Objek kegiatan pagi { title, time, badge, variant, kbmStart, description }
  */
 export const getMorningActivity = (day, mondayIsUpacara = true) => {
   const normDay = typeof day === 'number' ? NUMBER_TO_DAY[day] : day;
@@ -115,9 +113,6 @@ export const getMorningActivity = (day, mondayIsUpacara = true) => {
 
 /**
  * Mendapatkan jam mulai KBM resmi (Jam Ke-1) per hari
- * @param {string|number} day - Nama hari atau nomor hari
- * @param {boolean} mondayIsUpacara - Status upacara hari Senin
- * @returns {string} Jam mulai KBM ('07:15', '07:30', atau '08:00')
  */
 export const getDayKbmStartTime = (day, mondayIsUpacara = true) => {
   const activity = getMorningActivity(day, mondayIsUpacara);
@@ -125,84 +120,117 @@ export const getDayKbmStartTime = (day, mondayIsUpacara = true) => {
 };
 
 /**
- * Template Slot Hari Senin dengan Upacara Bendera (Upacara 07:00-08:00, JP 1 mulai 08:00, 10 JP)
+ * Template Slot Hari Senin dengan Upacara Bendera (Jadwal_Ruangan.pdf: Upacara 07:00-08:00, Pulang: 15:10 WIB)
  */
 export const MONDAY_CEREMONY_SLOTS = [
-  { slot: 1, start: '08:00', end: '08:45', label: 'Jam Ke-1' },
-  { slot: 2, start: '08:45', end: '09:30', label: 'Jam Ke-2' },
-  { slot: 3, start: '09:30', end: '10:15', label: 'Jam Ke-3' },
-  { slot: 4, start: '10:45', end: '11:30', label: 'Jam Ke-4' },
-  { slot: 5, start: '11:30', end: '12:15', label: 'Jam Ke-5' },
-  { slot: 6, start: '13:00', end: '13:45', label: 'Jam Ke-6' },
-  { slot: 7, start: '13:45', end: '14:30', label: 'Jam Ke-7' },
-  { slot: 8, start: '14:30', end: '15:15', label: 'Jam Ke-8' },
-  { slot: 9, start: '15:15', end: '16:00', label: 'Jam Ke-9' },
-  { slot: 10, start: '16:00', end: '16:45', label: 'Jam Ke-10' },
+  { slot: 1, start: '08:00', end: '08:35', label: 'Jam Ke-1' },
+  { slot: 2, start: '08:35', end: '09:10', label: 'Jam Ke-2' },
+  { slot: 3, start: '09:10', end: '09:45', label: 'Jam Ke-3' },
+  { slot: 4, start: '10:00', end: '10:35', label: 'Jam Ke-4' },
+  { slot: 5, start: '10:35', end: '11:10', label: 'Jam Ke-5' },
+  { slot: 6, start: '11:10', end: '11:45', label: 'Jam Ke-6' },
+  { slot: 7, start: '12:45', end: '13:25', label: 'Jam Ke-7' },
+  { slot: 8, start: '13:25', end: '14:00', label: 'Jam Ke-8' },
+  { slot: 9, start: '14:00', end: '14:35', label: 'Jam Ke-9' },
+  { slot: 10, start: '14:35', end: '15:10', label: 'Jam Ke-10' },
 ];
 
 /**
- * Template Slot Hari Senin Reguler Tanpa Upacara (Tadarus 07:00-07:15, JP 1 mulai 07:15, 10 JP)
+ * Template Slot Hari Senin Reguler Tanpa Upacara (Pola reguler 40 mnt/JP, Pulang: 15:10 WIB)
  */
 export const SENIN_REGULER_SLOTS = [
-  { slot: 1, start: '07:15', end: '08:00', label: 'Jam Ke-1' },
-  { slot: 2, start: '08:00', end: '08:45', label: 'Jam Ke-2' },
-  { slot: 3, start: '08:45', end: '09:30', label: 'Jam Ke-3' },
-  { slot: 4, start: '10:00', end: '10:45', label: 'Jam Ke-4' },
-  { slot: 5, start: '10:45', end: '11:30', label: 'Jam Ke-5' },
-  { slot: 6, start: '11:30', end: '12:15', label: 'Jam Ke-6' },
-  { slot: 7, start: '13:00', end: '13:45', label: 'Jam Ke-7' },
-  { slot: 8, start: '13:45', end: '14:30', label: 'Jam Ke-8' },
-  { slot: 9, start: '14:30', end: '15:15', label: 'Jam Ke-9' },
-  { slot: 10, start: '15:15', end: '16:00', label: 'Jam Ke-10' },
+  { slot: 1, start: '07:15', end: '07:55', label: 'Jam Ke-1' },
+  { slot: 2, start: '07:55', end: '08:35', label: 'Jam Ke-2' },
+  { slot: 3, start: '08:35', end: '09:15', label: 'Jam Ke-3' },
+  { slot: 4, start: '09:30', end: '10:10', label: 'Jam Ke-4' },
+  { slot: 5, start: '10:10', end: '10:50', label: 'Jam Ke-5' },
+  { slot: 6, start: '10:50', end: '11:30', label: 'Jam Ke-6' },
+  { slot: 7, start: '12:30', end: '13:10', label: 'Jam Ke-7' },
+  { slot: 8, start: '13:10', end: '13:50', label: 'Jam Ke-8' },
+  { slot: 9, start: '13:50', end: '14:30', label: 'Jam Ke-9' },
+  { slot: 10, start: '14:30', end: '15:10', label: 'Jam Ke-10' },
 ];
 
 /**
- * Template Slot Hari Selasa (Literasi 07:00-07:30, JP 1 mulai 07:30, 10 JP)
+ * Template Slot Hari Selasa (Jadwal_Ruangan.pdf: Literasi 07:00-07:30, Pulang: 15:10 WIB)
  */
 export const TUESDAY_SLOTS = [
-  { slot: 1, start: '07:30', end: '08:15', label: 'Jam Ke-1' },
-  { slot: 2, start: '08:15', end: '09:00', label: 'Jam Ke-2' },
-  { slot: 3, start: '09:00', end: '09:45', label: 'Jam Ke-3' },
-  { slot: 4, start: '10:15', end: '11:00', label: 'Jam Ke-4' },
-  { slot: 5, start: '11:00', end: '11:45', label: 'Jam Ke-5' },
-  { slot: 6, start: '12:30', end: '13:15', label: 'Jam Ke-6' },
-  { slot: 7, start: '13:15', end: '14:00', label: 'Jam Ke-7' },
-  { slot: 8, start: '14:00', end: '14:45', label: 'Jam Ke-8' },
-  { slot: 9, start: '14:45', end: '15:30', label: 'Jam Ke-9' },
-  { slot: 10, start: '15:30', end: '16:15', label: 'Jam Ke-10' },
+  { slot: 1, start: '07:30', end: '08:10', label: 'Jam Ke-1' },
+  { slot: 2, start: '08:10', end: '08:50', label: 'Jam Ke-2' },
+  { slot: 3, start: '08:50', end: '09:30', label: 'Jam Ke-3' },
+  { slot: 4, start: '09:45', end: '10:25', label: 'Jam Ke-4' },
+  { slot: 5, start: '10:25', end: '11:05', label: 'Jam Ke-5' },
+  { slot: 6, start: '11:05', end: '11:45', label: 'Jam Ke-6' },
+  { slot: 7, start: '12:45', end: '13:25', label: 'Jam Ke-7' },
+  { slot: 8, start: '13:25', end: '14:00', label: 'Jam Ke-8' },
+  { slot: 9, start: '14:00', end: '14:35', label: 'Jam Ke-9' },
+  { slot: 10, start: '14:35', end: '15:10', label: 'Jam Ke-10' },
 ];
 
 /**
- * Template Slot Jam Reguler Rabu & Kamis (Tadarus 07:00-07:15, JP 1 mulai 07:15, 10 JP)
+ * Template Slot Jam Reguler Rabu & Kamis (Jadwal_Ruangan.pdf: Pulang: 15:10 WIB)
  */
 export const STANDARD_SLOTS = [
-  { slot: 1, start: '07:15', end: '08:00', label: 'Jam Ke-1' },
-  { slot: 2, start: '08:00', end: '08:45', label: 'Jam Ke-2' },
-  { slot: 3, start: '08:45', end: '09:30', label: 'Jam Ke-3' },
-  { slot: 4, start: '10:00', end: '10:45', label: 'Jam Ke-4' },
-  { slot: 5, start: '10:45', end: '11:30', label: 'Jam Ke-5' },
-  { slot: 6, start: '11:30', end: '12:15', label: 'Jam Ke-6' },
-  { slot: 7, start: '13:00', end: '13:45', label: 'Jam Ke-7' },
-  { slot: 8, start: '13:45', end: '14:30', label: 'Jam Ke-8' },
-  { slot: 9, start: '14:30', end: '15:15', label: 'Jam Ke-9' },
-  { slot: 10, start: '15:15', end: '16:00', label: 'Jam Ke-10' },
+  { slot: 1, start: '07:15', end: '07:55', label: 'Jam Ke-1' },
+  { slot: 2, start: '07:55', end: '08:35', label: 'Jam Ke-2' },
+  { slot: 3, start: '08:35', end: '09:15', label: 'Jam Ke-3' },
+  { slot: 4, start: '09:30', end: '10:10', label: 'Jam Ke-4' },
+  { slot: 5, start: '10:10', end: '10:50', label: 'Jam Ke-5' },
+  { slot: 6, start: '10:50', end: '11:30', label: 'Jam Ke-6' },
+  { slot: 7, start: '12:30', end: '13:10', label: 'Jam Ke-7' },
+  { slot: 8, start: '13:10', end: '13:50', label: 'Jam Ke-8' },
+  { slot: 9, start: '13:50', end: '14:30', label: 'Jam Ke-9' },
+  { slot: 10, start: '14:30', end: '15:10', label: 'Jam Ke-10' },
 ];
 
 /**
- * Template Slot Hari Jumat (10 JP, 40 mnt/JP, Sholat Jumat 11:45-13:00)
+ * Template Slot Hari Jumat (Jadwal_Ruangan.pdf: Maksimal 8 JP, Sholat Jumat 11:25-12:40, Pulang: 13:50 WIB)
  */
 export const FRIDAY_SLOTS = [
   { slot: 1, start: '07:15', end: '07:55', label: 'Jam Ke-1' },
   { slot: 2, start: '07:55', end: '08:35', label: 'Jam Ke-2' },
   { slot: 3, start: '08:35', end: '09:15', label: 'Jam Ke-3' },
-  { slot: 4, start: '09:45', end: '10:25', label: 'Jam Ke-4' },
-  { slot: 5, start: '10:25', end: '11:05', label: 'Jam Ke-5' },
-  { slot: 6, start: '11:05', end: '11:45', label: 'Jam Ke-6' },
-  { slot: 7, start: '13:00', end: '13:40', label: 'Jam Ke-7' },
-  { slot: 8, start: '13:40', end: '14:20', label: 'Jam Ke-8' },
-  { slot: 9, start: '14:20', end: '15:00', label: 'Jam Ke-9' },
-  { slot: 10, start: '15:00', end: '15:40', label: 'Jam Ke-10' },
+  { slot: 4, start: '09:30', end: '10:10', label: 'Jam Ke-4' },
+  { slot: 5, start: '10:10', end: '10:50', label: 'Jam Ke-5' },
+  { slot: 6, start: '10:50', end: '11:25', label: 'Jam Ke-6' },
+  { slot: 7, start: '12:40', end: '13:15', label: 'Jam Ke-7' },
+  { slot: 8, start: '13:15', end: '13:50', label: 'Jam Ke-8' },
 ];
+
+/**
+ * Waktu Istirahat Resmi per Tipe Hari (Jadwal_Ruangan.pdf)
+ */
+export const BREAK_SCHEDULES = {
+  senin_upacara: [
+    { afterSlot: 3, name: 'Istirahat I', time: '09:45 - 10:00', duration: 15 },
+    { afterSlot: 6, name: 'Istirahat II (Ishoma)', time: '11:45 - 12:45', duration: 60 },
+  ],
+  senin_reguler: [
+    { afterSlot: 3, name: 'Istirahat I', time: '09:15 - 09:30', duration: 15 },
+    { afterSlot: 6, name: 'Istirahat II (Ishoma)', time: '11:30 - 12:30', duration: 60 },
+  ],
+  selasa: [
+    { afterSlot: 3, name: 'Istirahat I', time: '09:30 - 09:45', duration: 15 },
+    { afterSlot: 6, name: 'Istirahat II (Ishoma)', time: '11:45 - 12:45', duration: 60 },
+  ],
+  rabu_kamis: [
+    { afterSlot: 3, name: 'Istirahat I', time: '09:15 - 09:30', duration: 15 },
+    { afterSlot: 6, name: 'Istirahat II (Ishoma)', time: '11:30 - 12:30', duration: 60 },
+  ],
+  jumat: [
+    { afterSlot: 3, name: 'Istirahat I', time: '09:15 - 09:30', duration: 15 },
+    { afterSlot: 6, name: 'Istirahat II (Sholat Jumat)', time: '11:25 - 12:40', duration: 75 },
+  ],
+};
+
+/**
+ * Mendapatkan daftar waktu istirahat untuk hari tertentu
+ */
+export const getBreaksForDay = (day, mondayIsUpacara = true) => {
+  const normDay = typeof day === 'number' ? NUMBER_TO_DAY[day] : day;
+  const dayType = getDayTypeFor(normDay, mondayIsUpacara);
+  return BREAK_SCHEDULES[dayType] || BREAK_SCHEDULES.rabu_kamis;
+};
 
 /**
  * Membangun array slot waktu dari kumpulan record period_templates untuk suatu day_type
@@ -277,13 +305,40 @@ export const resolveSlotTime = (dayName, startSlot, duration = 1, mondayIsUpacar
 };
 
 /**
+ * Menghitung jam pulang aktual untuk suatu hari berdasarkan sesi pembelajaran terakhir yang terjadwal.
+ */
+export const getDismissalTimeForDay = (schedules = [], dayName, mondayIsUpacara = true, periodTemplates = null) => {
+  const normDay = typeof dayName === 'number' ? NUMBER_TO_DAY[dayName] : dayName;
+  const daySlots = getTimeSlotsForDay(normDay, mondayIsUpacara, periodTemplates);
+  if (!daySlots || daySlots.length === 0) return '15:10';
+
+  const daySchedules = (schedules || []).filter((s) => {
+    const sDay = typeof s.day_of_week === 'number' ? NUMBER_TO_DAY[s.day_of_week] : s.day;
+    return sDay === normDay;
+  });
+
+  if (daySchedules.length === 0) {
+    return daySlots[daySlots.length - 1]?.end || (normDay === 'Jumat' ? '13:50' : '15:10');
+  }
+
+  let maxSlotNum = 1;
+  daySchedules.forEach((s) => {
+    const slot = Number(s.slot || s.period_number || 1);
+    const dur = Number(s.duration || s.duration_periods || 1);
+    const endSlot = slot + dur - 1;
+    if (endSlot > maxSlotNum) {
+      maxSlotNum = endSlot;
+    }
+  });
+
+  const matchingSlot = daySlots.find((s) => s.slot === maxSlotNum);
+  return matchingSlot ? matchingSlot.end : (daySlots[daySlots.length - 1]?.end || '15:10');
+};
+
+/**
  * Menentukan apakah sebuah ruangan atau identifier ruangan merupakan fasilitas bersama (shared facility)
  * seperti Lapangan Olahraga / OR di mana beberapa kelas dapat menggunakan fasilitas tersebut secara
  * bersamaan tanpa memicu penandaan bentrok ruangan.
- *
- * @param {Object|string|number|null} room - Objek room, nama ruangan, atau ID ruangan
- * @param {Array} roomList - Kumpulan master data ruangan (opsional, untuk resolusi jika hanya ID)
- * @returns {boolean}
  */
 export const isSharedRoom = (room, roomList = []) => {
   if (!room) return false;
@@ -331,16 +386,6 @@ export const isSharedRoom = (room, roomList = []) => {
 /**
  * Deteksi bentrok jadwal lokal dalam satu siklus putaran
  * Mengembalikan Set berisi ID jadwal yang saling bertabrakan
- *
- * Catatan penting:
- * - Ruangan fasilitas bersama (shared room seperti OR / Lapangan) dapat digunakan bersamaan oleh
- *   banyak kelas/guru sehingga TIDAK memicu bentrok ruangan.
- * - Namun, jika guru yang sama atau rombel kelas yang sama terjadwal di jam bersamaan,
- *   jadwal tersebut tetap ditandai sebagai bentrok sah.
- *
- * @param {Array} schedules - Kumpulan objek jadwal
- * @param {Array} roomList - Kumpulan data ruangan untuk pencarian ID (opsional)
- * @returns {Set<number|string>}
  */
 export const detectScheduleConflicts = (schedules, roomList = []) => {
   const conflicts = new Set();

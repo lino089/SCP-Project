@@ -55,8 +55,8 @@ class PeriodResolutionBenchmarkTest extends TestCase
         $queries = DB::getQueryLog();
         $queryCount = count($queries);
 
-        // Before: 1 + (20 * 2) = 41+ queries. Now: Only 6 queries total!
-        $this->assertLessThanOrEqual(8, $queryCount);
+        // Minimal queries: schedules, classes, users, rooms, subjects, journals, period_templates + academic_events per weekday
+        $this->assertLessThanOrEqual(15, $queryCount);
         $this->assertTrue($res->getData()->success);
         $this->assertCount(20, $res->getData()->data);
     }

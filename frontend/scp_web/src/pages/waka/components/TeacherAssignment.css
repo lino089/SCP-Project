@@ -23,18 +23,17 @@
 .assignment-stat-card {
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 16px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: none;
+  transition: border-color 0.15s ease;
 }
 
 .assignment-stat-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
 }
 
 .assignment-stat-icon {
@@ -218,13 +217,13 @@
 }
 
 .import-dropzone:hover {
-  border-color: #3b82f6;
-  background-color: #f0f7ff;
+  border-color: #94a3b8;
+  background-color: #f8fafc;
 }
 
 .import-dropzone--active {
-  border-color: #2563eb;
-  background-color: #eff6ff;
+  border-color: #ffde00;
+  background-color: #fffdf0;
 }
 
 .import-summary-banner {
@@ -405,8 +404,8 @@
 }
 
 .import-select-control:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
+  border-color: #ffde00;
+  box-shadow: 0 0 0 1px #ffde00;
 }
 
 .import-select-control--error {

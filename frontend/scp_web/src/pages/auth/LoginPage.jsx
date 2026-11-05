@@ -161,7 +161,7 @@ export default function LoginPage() {
           <div className="login-actions">
             <Button
               type="submit"
-              variant="dark"
+              variant="primary"
               size="lg"
               fullWidth
               loading={isLoading}

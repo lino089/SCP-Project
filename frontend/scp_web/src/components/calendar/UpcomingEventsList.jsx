@@ -92,7 +92,7 @@ export default function UpcomingEventsList({
 
   if (!sortedEvents || sortedEvents.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
         <div className="w-12 h-12 rounded-full bg-gray-50 text-gray-400 mx-auto flex items-center justify-center mb-3">
           <Calendar size={22} />
         </div>
@@ -116,7 +116,7 @@ export default function UpcomingEventsList({
           <div
             key={evt.id}
             onClick={() => onEventClick && onEventClick(evt)}
-            className="group bg-white border border-gray-200 hover:border-blue-400 rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition cursor-pointer relative"
+            className="group bg-white border border-gray-200 hover:border-gray-400 rounded-xl p-4 sm:p-5 transition cursor-pointer relative"
           >
             {/* Header Tanggal & Badges */}
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">

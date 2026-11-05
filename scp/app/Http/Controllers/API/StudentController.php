@@ -680,16 +680,21 @@ class StudentController extends Controller
 
     /**
      * Menandai siswa tidak naik kelas sebelum promosi kelas massal (PRD 5.13).
+     * Mendukung toggle otomatis atau nilai eksplisit is_held_back.
      */
     public function holdBack(Request $request, $id): JsonResponse
     {
         $student = User::where('role', 'student')->findOrFail($id);
 
-        $student->update(['is_held_back' => true]);
+        $newStatus = $request->has('is_held_back')
+            ? filter_var($request->input('is_held_back'), FILTER_VALIDATE_BOOLEAN)
+            : !$student->is_held_back;
+
+        $student->update(['is_held_back' => $newStatus]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Siswa berhasil ditandai tinggal kelas.',
+            'message' => $newStatus ? 'Siswa berhasil ditandai tinggal kelas.' : 'Tanda tinggal kelas siswa berhasil dibatalkan.',
             'data' => $student,
         ], 200);
     }

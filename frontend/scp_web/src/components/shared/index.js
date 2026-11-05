@@ -15,3 +15,4 @@ export { default as FileUpload } from './FileUpload';
 export { default as Tabs } from './Tabs';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as ProgressBar } from './ProgressBar';
+export { default as RowCard } from './RowCard';

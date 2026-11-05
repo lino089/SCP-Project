@@ -79,6 +79,10 @@ class ParseSchedulePdfJob implements ShouldQueue
             return;
         }
 
+        if (!empty($process->getErrorOutput())) {
+            Log::info('Python Parser Warnings: ' . $process->getErrorOutput());
+        }
+
         $outputString = $process->getOutput();
         $parseData = json_decode($outputString, true);
 

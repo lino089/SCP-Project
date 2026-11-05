@@ -12,7 +12,11 @@ export const masterDataSummaryApi = {
 };
 
 export const classApi = {
-  getClasses: (params) => api.get('/classes', { params }),
+  getClasses: (params) => {
+    const cleanParams = params ? { ...params } : {};
+    if (cleanParams.all === true) cleanParams.all = 1;
+    return api.get('/classes', { params: cleanParams });
+  },
   createClass: (data) => api.post('/classes', data),
   updateClass: (id, data) => api.put(`/classes/${id}`, data),
   deleteClass: (id) => api.delete(`/classes/${id}`),
@@ -65,7 +69,7 @@ export const studentApi = {
   createStudent: (data) => api.post('/students', data),
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
   deleteStudent: (id, data) => api.delete(`/students/${id}`, { data }),
-  holdBack: (id) => api.post(`/students/${id}/hold-back`),
+  holdBack: (id, data) => api.post(`/students/${id}/hold-back`, data),
   downloadTemplate: () =>
     api.get('/students/import-template', {
       params: { t: Date.now() },

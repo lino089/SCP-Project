@@ -60,7 +60,7 @@
   border: 1px solid #E2E8F0;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 .calendar-weekdays-row {
@@ -78,6 +78,12 @@
   color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  border-right: 1px solid #E2E8F0;
+  box-sizing: border-box;
+}
+
+.calendar-weekday-cell:last-child {
+  border-right: none;
 }
 
 .calendar-weekday-cell--weekend {
@@ -87,8 +93,8 @@
 .calendar-days-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  background: #E2E8F0;
-  gap: 1px;
+  background: #FFFFFF;
+  gap: 0;
 }
 
 .calendar-day-cell {
@@ -99,6 +105,13 @@
   flex-direction: column;
   transition: background-color 0.1s ease;
   position: relative;
+  border-right: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+  box-sizing: border-box;
+}
+
+.calendar-day-cell:nth-child(7n) {
+  border-right: none;
 }
 
 .calendar-day-cell:hover {

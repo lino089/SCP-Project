@@ -778,7 +778,7 @@ export default function StudentPermissionPage() {
             <div className="student-permission__doc-container">
               {isDocLoading && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 text-white gap-2.5">
-                  <RotateCw size={26} className="animate-spin text-[#FFDE02]" />
+                  <RotateCw size={26} className="animate-spin text-[#FFDE00]" />
                   <span className="text-xs text-slate-300 font-medium">
                     Memuat surat lampiran dari Supabase Storage...
                   </span>
@@ -810,7 +810,7 @@ export default function StudentPermissionPage() {
                     {!triedDocFallback && (
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded bg-[#FFDE02] hover:bg-[#F2D300] text-xs text-slate-900 font-bold transition cursor-pointer"
+                        className="px-3 py-1.5 rounded bg-[#FFDE00] hover:bg-[#FFE63B] text-xs text-slate-900 font-bold transition cursor-pointer"
                         onClick={() => {
                           setTriedDocFallback(true);
                           setDocLoadError(false);

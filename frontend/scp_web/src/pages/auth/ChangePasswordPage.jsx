@@ -145,7 +145,7 @@ export default function ChangePasswordPage() {
             <div className="change-password-actions">
               <Button
                 type="submit"
-                variant="dark"
+                variant="primary"
                 size="lg"
                 fullWidth
                 loading={isLoading}
