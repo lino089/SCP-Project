@@ -357,6 +357,12 @@ export default function GradePromotionPage() {
               <span className="promotion-stat-label text-gray-700">Lulus</span>
               <span className="promotion-stat-val text-gray-900">{promotionResult.graduated}</span>
             </div>
+            {typeof promotionResult.deactivated_assignments === 'number' && (
+              <div className="promotion-stat-item">
+                <span className="promotion-stat-label text-blue-700">Penugasan Diarsipkan</span>
+                <span className="promotion-stat-val text-blue-700">{promotionResult.deactivated_assignments}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -493,7 +499,7 @@ export default function GradePromotionPage() {
         onClose={() => setIsConfirmModalOpen(false)}
         onConfirm={handleExecutePromotion}
         title="Konfirmasi Promosi Kelas Massal"
-        message="PERINGATAN: Tindakan ini akan memindahkan seluruh siswa ke kelas kenaikan tahun ajaran baru dan meluluskan siswa tingkat 12. Siswa yang ditandai 'Tinggal Kelas' akan tetap pada kelasnya. Tindakan ini tidak dapat dibatalkan."
+        message="PERINGATAN: Tindakan ini akan memindahkan seluruh siswa ke kelas kenaikan tahun ajaran baru, meluluskan siswa tingkat 12, serta mengarsipkan (menonaktifkan) seluruh penugasan Wali Kelas dan Guru BK/Kesiswaan periode berjalan agar siap diisi penugasan tahun ajaran baru. Seluruh riwayat data periode sebelumnya tetap tersimpan utuh."
         confirmLabel="Ya, Eksekusi Promosi Massal"
         cancelLabel="Batal"
         confirmVariant="danger"

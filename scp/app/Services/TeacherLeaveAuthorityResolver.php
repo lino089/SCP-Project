@@ -44,9 +44,10 @@ class TeacherLeaveAuthorityResolver
                 ->toArray();
 
             if (!empty($classIds)) {
-                // Petugas BK/Kesiswaan yang membina rombel kelas-kelas tersebut
+                // Petugas BK/Kesiswaan AKTIF yang membina rombel kelas-kelas tersebut
                 $bkUserIds = TeacherAssignment::query()
                     ->where('type', 'kesiswaan')
+                    ->where('is_active', true)
                     ->where(function ($q) use ($classIds) {
                         $q->whereIn('class_id', $classIds)
                           ->orWhereNull('class_id'); // Dukung penugasan global legacy
@@ -59,9 +60,10 @@ class TeacherLeaveAuthorityResolver
             }
         } else {
             // Jika izin tidak memiliki schedule_ids (misal dinas luar umum),
-            // petugas kesiswaan dengan penugasan global (legacy) tetap didukung selain Waka
+            // petugas kesiswaan AKTIF dengan penugasan global (legacy) tetap didukung selain Waka
             $globalBkUserIds = TeacherAssignment::query()
                 ->where('type', 'kesiswaan')
+                ->where('is_active', true)
                 ->whereNull('class_id')
                 ->pluck('user_id')
                 ->map(fn($id) => (int)$id)
@@ -125,35 +127,43 @@ class TeacherLeaveAuthorityResolver
         if ($user->role === 'teacher' && $user->isKesiswaan()) {
             $assignedClassIds = $user->getKesiswaanClassIds();
             $hasGlobalAssignment = $user->assignments()->where('type', 'kesiswaan')->whereNull('class_id')->exists();
+            $includePersonalVerifiedHistory = ($status !== 'pending');
 
             return $query->where('teacher_id', '!=', $user->id)
-                ->whereDoesntHave('teacher.assignments', function ($q) {
-                    // Hindari izin dari rekan guru kesiswaan (karena harus dieskalasikan ke waka)
-                    $q->where('type', 'kesiswaan');
-                })
-                ->where(function ($sub) use ($assignedClassIds, $hasGlobalAssignment) {
-                    if ($hasGlobalAssignment) {
-                        return; // Jika assignment global, izinkan seluruh guru non-kesiswaan
-                    }
+                ->where(function ($outer) use ($user, $assignedClassIds, $hasGlobalAssignment, $includePersonalVerifiedHistory) {
+                    $outer->where(function ($activeScope) use ($assignedClassIds, $hasGlobalAssignment) {
+                        $activeScope->whereDoesntHave('teacher.assignments', function ($q) {
+                            // Hindari izin dari rekan guru kesiswaan aktif (karena harus dieskalasikan ke waka)
+                            $q->where('type', 'kesiswaan')->where('is_active', true);
+                        })->where(function ($sub) use ($assignedClassIds, $hasGlobalAssignment) {
+                            if ($hasGlobalAssignment) {
+                                return; // Jika assignment global, izinkan seluruh guru non-kesiswaan
+                            }
 
-                    if (empty($assignedClassIds)) {
-                        $sub->whereRaw('1 = 0'); // Belum punya kelas binaan
-                        return;
-                    }
+                            if (empty($assignedClassIds)) {
+                                $sub->whereRaw('1 = 0'); // Belum punya kelas binaan
+                                return;
+                            }
 
-                    // Ambil jadwal yang memiliki class_id sesuai kelas binaan petugas
-                    $validScheduleIds = Schedule::whereIn('class_id', $assignedClassIds)->pluck('id')->toArray();
+                            // Ambil jadwal yang memiliki class_id sesuai kelas binaan petugas
+                            $validScheduleIds = Schedule::whereIn('class_id', $assignedClassIds)->pluck('id')->toArray();
 
-                    if (empty($validScheduleIds)) {
-                        $sub->whereRaw('1 = 0');
-                        return;
-                    }
+                            if (empty($validScheduleIds)) {
+                                $sub->whereRaw('1 = 0');
+                                return;
+                            }
 
-                    // Cocokkan apakah schedule_ids pada izin beririsan dengan validScheduleIds
-                    // Pada PostgreSQL, kolom schedule_ids adalah json/jsonb
-                    foreach ($validScheduleIds as $schedId) {
-                        $sub->orWhereJsonContains('schedule_ids', (int)$schedId)
-                            ->orWhereJsonContains('schedule_ids', (string)$schedId);
+                            // Cocokkan apakah schedule_ids pada izin beririsan dengan validScheduleIds
+                            foreach ($validScheduleIds as $schedId) {
+                                $sub->orWhereJsonContains('schedule_ids', (int)$schedId)
+                                    ->orWhereJsonContains('schedule_ids', (string)$schedId);
+                            }
+                        });
+                    });
+
+                    // Keputusan 1 Opsi A: Tetap tampilkan riwayat izin yang pernah diverifikasi sendiri
+                    if ($includePersonalVerifiedHistory) {
+                        $outer->orWhere('approved_by', $user->id);
                     }
                 });
         }

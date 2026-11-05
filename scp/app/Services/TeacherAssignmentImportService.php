@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Classes;
+use App\Models\SystemConfiguration;
 use App\Models\TeacherAssignment;
 use App\Models\User;
 use App\Services\TeacherMatcherService;
@@ -145,9 +146,10 @@ class TeacherAssignmentImportService
      *
      * @param string $previewToken
      * @param array $items Array of ['class_id' => int, 'wali_teacher_id' => int, 'bk_teacher_id' => int]
+     * @param int|null $actorId
      * @return array
      */
-    public function commit(string $previewToken, array $items): array
+    public function commit(string $previewToken, array $items, ?int $actorId = null): array
     {
         // 1. Verifikasi Idempotency Lock
         $lockKey = "teacher_assignment_lock_{$previewToken}";
@@ -174,7 +176,10 @@ class TeacherAssignmentImportService
         Cache::put($lockKey, true, now()->addMinutes(5));
 
         try {
-            return DB::transaction(function () use ($items, $previewToken, $cacheKey) {
+            return DB::transaction(function () use ($items, $previewToken, $cacheKey, $actorId) {
+                $actorId = $actorId ?? auth()->id();
+                $academicYear = SystemConfiguration::query()->value('academic_year') ?: '2026/2027';
+
                 // 3. Validasi Integritas Data Items
                 $classesCount = count($items);
                 $waliTeacherIds = [];
@@ -225,9 +230,11 @@ class TeacherAssignmentImportService
                     ]);
                 }
 
-                // 5. Validasi Aturan Bisnis 1 Guru 1 Wali Kelas terhadap Database
-                // Cek apakah ada guru di $waliTeacherIds yang sudah menjadi wali kelas di kelas LAIN di luar data yang di-commit
-                $conflictingTeacherWali = TeacherAssignment::where('type', 'wali_kelas')
+                // 5. Validasi Aturan Bisnis 1 Guru 1 Wali Kelas AKTIF terhadap Database
+                // Cek apakah ada guru di $waliTeacherIds yang sudah menjadi wali kelas aktif di kelas LAIN di luar data yang di-commit
+                $conflictingTeacherWali = TeacherAssignment::query()
+                    ->where('type', 'wali_kelas')
+                    ->where('is_active', true)
                     ->whereIn('user_id', $waliTeacherIds)
                     ->whereNotIn('class_id', $classIds)
                     ->with('teacher:id,name')
@@ -240,7 +247,7 @@ class TeacherAssignmentImportService
                     ]);
                 }
 
-                // 6. Eksekusi Penyimpanan Atomik Penugasan per Kelas
+                // 6. Eksekusi Penyimpanan Atomik Penugasan per Kelas (Non-Destructive Lifecycle)
                 $waliCount = 0;
                 $bkCount = 0;
 
@@ -250,26 +257,77 @@ class TeacherAssignmentImportService
                     $bkId = (int)$item['bk_teacher_id'];
 
                     // A. Penugasan Wali Kelas:
-                    // Hapus penugasan wali kelas lama pada kelas ini jika ada guru lain yang menjabat
-                    TeacherAssignment::where('type', 'wali_kelas')
+                    // Nonaktifkan penugasan wali kelas lama pada kelas ini jika ada guru lain yang menjabat
+                    TeacherAssignment::query()
+                        ->where('type', 'wali_kelas')
                         ->where('class_id', $classId)
+                        ->where('is_active', true)
                         ->where('user_id', '!=', $waliId)
-                        ->delete();
+                        ->update([
+                            'is_active' => false,
+                            'ended_at' => now(),
+                            'revoked_by' => $actorId,
+                            'notes' => 'Digantikan melalui Impor Excel Penugasan',
+                            'updated_at' => now(),
+                        ]);
 
-                    // Simpan / Perbarui wali kelas aktif
-                    TeacherAssignment::updateOrCreate(
-                        ['type' => 'wali_kelas', 'class_id' => $classId],
-                        ['user_id' => $waliId]
-                    );
+                    $existingActiveWali = TeacherAssignment::query()
+                        ->where('type', 'wali_kelas')
+                        ->where('class_id', $classId)
+                        ->where('user_id', $waliId)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (!$existingActiveWali) {
+                        TeacherAssignment::create([
+                            'user_id' => $waliId,
+                            'type' => 'wali_kelas',
+                            'class_id' => $classId,
+                            'academic_year' => $academicYear,
+                            'is_active' => true,
+                            'started_at' => now(),
+                            'ended_at' => null,
+                            'assigned_by' => $actorId,
+                            'notes' => 'Ditugaskan melalui Impor Excel Penugasan',
+                        ]);
+                    }
                     $waliCount++;
 
                     // B. Penugasan Guru BK / Kesiswaan:
-                    // Pastikan penugasan kesiswaan untuk kelas ini tersimpan
-                    TeacherAssignment::firstOrCreate([
-                        'user_id' => $bkId,
-                        'type' => 'kesiswaan',
-                        'class_id' => $classId,
-                    ]);
+                    // Nonaktifkan penugasan Guru BK lama pada kelas ini jika berbeda dengan Guru BK baru
+                    TeacherAssignment::query()
+                        ->where('type', 'kesiswaan')
+                        ->where('class_id', $classId)
+                        ->where('is_active', true)
+                        ->where('user_id', '!=', $bkId)
+                        ->update([
+                            'is_active' => false,
+                            'ended_at' => now(),
+                            'revoked_by' => $actorId,
+                            'notes' => 'Digantikan melalui Impor Excel Penugasan',
+                            'updated_at' => now(),
+                        ]);
+
+                    $existingActiveBk = TeacherAssignment::query()
+                        ->where('type', 'kesiswaan')
+                        ->where('class_id', $classId)
+                        ->where('user_id', $bkId)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (!$existingActiveBk) {
+                        TeacherAssignment::create([
+                            'user_id' => $bkId,
+                            'type' => 'kesiswaan',
+                            'class_id' => $classId,
+                            'academic_year' => $academicYear,
+                            'is_active' => true,
+                            'started_at' => now(),
+                            'ended_at' => null,
+                            'assigned_by' => $actorId,
+                            'notes' => 'Ditugaskan melalui Impor Excel Penugasan',
+                        ]);
+                    }
                     $bkCount++;
                 }
 

@@ -32,8 +32,8 @@ export default function TeacherAssignmentModal({
     e.preventDefault();
     setErrorMessage('');
 
-    if (type === 'wali_kelas' && !classId) {
-      setErrorMessage('Silakan pilih kelas untuk penugasan wali kelas.');
+    if (!classId) {
+      setErrorMessage('Silakan pilih rombel kelas untuk penugasan ini.');
       return;
     }
 
@@ -41,7 +41,8 @@ export default function TeacherAssignmentModal({
       setIsSubmitting(true);
       await onAssign?.(teacher.id, {
         type,
-        class_id: type === 'wali_kelas' ? Number(classId) : null,
+        class_id: Number(classId),
+        replace_existing: true,
       });
       // Reset form on success
       setClassId('');
@@ -118,11 +119,9 @@ export default function TeacherAssignmentModal({
                       <Badge variant={isWali ? 'primary' : 'warning'}>
                         {isWali ? 'Wali Kelas' : 'Guru Kesiswaan'}
                       </Badge>
-                      {isWali && (
-                        <span className="text-sm font-medium text-neutral-800">
-                          {className || 'Semua Kelas'}
-                        </span>
-                      )}
+                      <span className="text-sm font-medium text-neutral-800">
+                        {className || 'Semua Kelas'}
+                      </span>
                     </div>
                     {asgn.id && (
                       <button
@@ -163,25 +162,23 @@ export default function TeacherAssignmentModal({
               />
             </div>
 
-            {type === 'wali_kelas' && (
-              <div>
-                <Select
-                  label="Pilih Rombel Kelas"
-                  value={classId}
-                  onChange={(e) => {
-                    setClassId(e.target.value);
-                    setErrorMessage('');
-                  }}
-                  options={[
-                    { value: '', label: '-- Pilih Kelas --' },
-                    ...classList.map((c) => ({
-                      value: String(c.id),
-                      label: `${c.name} (Tingkat ${c.level || c.grade})`,
-                    })),
-                  ]}
-                />
-              </div>
-            )}
+            <div>
+              <Select
+                label="Pilih Rombel Kelas"
+                value={classId}
+                onChange={(e) => {
+                  setClassId(e.target.value);
+                  setErrorMessage('');
+                }}
+                options={[
+                  { value: '', label: '-- Pilih Kelas --' },
+                  ...classList.map((c) => ({
+                    value: String(c.id),
+                    label: `${c.name} (Tingkat ${c.level || c.grade})`,
+                  })),
+                ]}
+              />
+            </div>
           </div>
 
           <div className="pt-2">

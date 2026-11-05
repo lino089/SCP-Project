@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Classes;
 use App\Models\Subject;
+use App\Models\SystemConfiguration;
 use App\Models\TeacherAssignment;
 use App\Models\User;
 use App\Services\TeacherAssignmentImportService;
@@ -505,11 +506,19 @@ class TeacherController extends Controller
         $request->validate([
             'type' => 'required|in:kesiswaan,wali_kelas',
             'class_id' => 'required_if:type,wali_kelas|exists:classes,id|nullable',
+            'replace_existing' => 'nullable|boolean',
+            'notes' => 'nullable|string|max:500',
         ]);
 
+        $replaceExisting = $request->boolean('replace_existing', false);
+        $actorId = $request->user()?->id;
+        $academicYear = SystemConfiguration::query()->value('academic_year') ?: '2026/2027';
+
         if ($request->type === 'wali_kelas') {
-            // 1. Validasi Ketat: Seorang guru hanya boleh mengampu maksimal 1 rombel kelas sebagai Wali Kelas
-            $existingTeacherWali = TeacherAssignment::where('type', 'wali_kelas')
+            // 1. Validasi Ketat: Seorang guru hanya boleh mengampu maksimal 1 rombel kelas sebagai Wali Kelas AKTIF
+            $existingTeacherWali = TeacherAssignment::query()
+                ->where('type', 'wali_kelas')
+                ->where('is_active', true)
                 ->where('user_id', $teacher->id)
                 ->where('class_id', '!=', $request->class_id)
                 ->first();
@@ -522,12 +531,14 @@ class TeacherController extends Controller
             }
 
             // 2. Validasi Ketat: Satu rombel kelas hanya boleh memiliki tepat 1 wali kelas aktif
-            $existingClassWali = TeacherAssignment::where('type', 'wali_kelas')
+            $existingClassWali = TeacherAssignment::query()
+                ->where('type', 'wali_kelas')
+                ->where('is_active', true)
                 ->where('class_id', $request->class_id)
                 ->where('user_id', '!=', $teacher->id)
                 ->first();
 
-            if ($existingClassWali) {
+            if ($existingClassWali && !$replaceExisting) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Kelas ini sudah memiliki wali kelas aktif.',
@@ -535,11 +546,62 @@ class TeacherController extends Controller
             }
         }
 
-        $assignment = TeacherAssignment::firstOrCreate([
-            'user_id' => $teacher->id,
-            'type' => $request->type,
-            'class_id' => $request->class_id,
-        ]);
+        if ($request->type === 'kesiswaan' && $request->filled('class_id')) {
+            // Validasi Keputusan 7 Opsi A: Satu rombel kelas hanya boleh memiliki 1 Guru BK/Kesiswaan aktif
+            $existingClassBk = TeacherAssignment::query()
+                ->where('type', 'kesiswaan')
+                ->where('is_active', true)
+                ->where('class_id', $request->class_id)
+                ->where('user_id', '!=', $teacher->id)
+                ->first();
+
+            if ($existingClassBk && !$replaceExisting) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kelas ini sudah memiliki petugas BK/Kesiswaan aktif. Cabut penugasan petugas sebelumnya atau aktifkan opsi ganti penugasan.',
+                ], 422);
+            }
+        }
+
+        $assignment = DB::transaction(function () use ($request, $teacher, $replaceExisting, $actorId, $academicYear) {
+            if ($replaceExisting && $request->filled('class_id')) {
+                TeacherAssignment::query()
+                    ->where('type', $request->type)
+                    ->where('class_id', $request->class_id)
+                    ->where('is_active', true)
+                    ->where('user_id', '!=', $teacher->id)
+                    ->update([
+                        'is_active' => false,
+                        'ended_at' => now(),
+                        'revoked_by' => $actorId,
+                        'notes' => $request->input('notes') ?: ('Digantikan oleh ' . $teacher->name),
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            $existingActive = TeacherAssignment::query()
+                ->where('user_id', $teacher->id)
+                ->where('type', $request->type)
+                ->where('class_id', $request->class_id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($existingActive) {
+                return $existingActive;
+            }
+
+            return TeacherAssignment::create([
+                'user_id' => $teacher->id,
+                'type' => $request->type,
+                'class_id' => $request->class_id,
+                'academic_year' => $academicYear,
+                'is_active' => true,
+                'started_at' => now(),
+                'ended_at' => null,
+                'assigned_by' => $actorId,
+                'notes' => $request->input('notes'),
+            ]);
+        });
 
         return response()->json([
             'success' => true,
@@ -559,7 +621,8 @@ class TeacherController extends Controller
             ->orderBy('name')
             ->with([
                 'teacherAssignments' => function ($q) {
-                    $q->with('teacher:id,name,nis_nip,email,phone_number');
+                    $q->where('is_active', true)
+                      ->with('teacher:id,name,nis_nip,email,phone_number');
                 },
             ])
             ->get();
@@ -581,6 +644,8 @@ class TeacherController extends Controller
                     'name' => $wali->name,
                     'nis_nip' => $wali->nis_nip,
                     'phone_number' => $wali->phone_number,
+                    'academic_year' => $waliAssignment->academic_year,
+                    'started_at' => $waliAssignment->started_at?->toIso8601String(),
                 ] : null,
                 'kesiswaan' => $kesiswaanAssignments->map(function ($asgn) {
                     $t = $asgn->teacher;
@@ -591,6 +656,8 @@ class TeacherController extends Controller
                         'name' => $t->name,
                         'nis_nip' => $t->nis_nip,
                         'phone_number' => $t->phone_number,
+                        'academic_year' => $asgn->academic_year,
+                        'started_at' => $asgn->started_at?->toIso8601String(),
                     ];
                 })->filter()->values()->toArray(),
             ];
@@ -613,19 +680,81 @@ class TeacherController extends Controller
     }
 
     /**
-     * Mencabut penugasan tambahan spesifik milik guru.
+     * Mengambil daftar riwayat penugasan Wali Kelas & Kesiswaan (aktif maupun nonaktif/lampau).
+     * GET /api/teachers/assignments/histories
      */
-    public function revokeRole($id, $assignment_id): JsonResponse
+    public function getAssignmentHistories(Request $request): JsonResponse
+    {
+        $query = TeacherAssignment::query()
+            ->with([
+                'teacher:id,name,nis_nip',
+                'schoolClass:id,name,level',
+                'assignedBy:id,name',
+                'revokedBy:id,name',
+            ]);
+
+        if ($request->filled('class_id')) {
+            $query->where('class_id', $request->integer('class_id'));
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->integer('user_id'));
+        }
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->input('type'));
+        }
+
+        if ($request->filled('academic_year')) {
+            $query->where('academic_year', $request->input('academic_year'));
+        }
+
+        if ($request->has('is_active') && $request->input('is_active') !== '') {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
+
+        $perPage = $request->integer('per_page', 25);
+        $histories = $query
+            ->orderByDesc('is_active')
+            ->orderByDesc('started_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Riwayat penugasan guru berhasil diambil.',
+            'data' => $histories->items(),
+            'meta' => [
+                'current_page' => $histories->currentPage(),
+                'per_page' => $histories->perPage(),
+                'total' => $histories->total(),
+                'last_page' => $histories->lastPage(),
+            ],
+        ], 200);
+    }
+
+    /**
+     * Mencabut penugasan tambahan spesifik milik guru secara non-destruktif (menyimpan riwayat).
+     */
+    public function revokeRole(Request $request, $id, $assignment_id): JsonResponse
     {
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
         $assignment = TeacherAssignment::where('user_id', $teacher->id)->findOrFail($assignment_id);
-        $assignment->delete();
+
+        if ($assignment->is_active) {
+            $assignment->update([
+                'is_active' => false,
+                'ended_at' => now(),
+                'revoked_by' => $request->user()?->id,
+                'notes' => $request->input('notes', 'Dicabut oleh Waka Kurikulum'),
+            ]);
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Penugasan guru berhasil dicabut.',
-            'data' => null,
+            'data' => $assignment->fresh(['schoolClass:id,name,level', 'teacher:id,name,nis_nip']),
         ], 200);
     }
 
@@ -677,7 +806,8 @@ class TeacherController extends Controller
 
         $result = $importService->commit(
             $request->input('preview_token'),
-            $request->input('items')
+            $request->input('items'),
+            $request->user()?->id
         );
 
         return response()->json([

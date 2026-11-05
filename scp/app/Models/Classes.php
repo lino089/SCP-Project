@@ -36,6 +36,14 @@ class Classes extends Model
 
     public function teacherAssignments(): HasMany
     {
-        return $this->hasMany(TeacherAssignment::class, 'class_id');
+        return $this->hasMany(TeacherAssignment::class, 'class_id')
+            ->where('is_active', true);
+    }
+
+    public function teacherAssignmentHistories(): HasMany
+    {
+        return $this->hasMany(TeacherAssignment::class, 'class_id')
+            ->orderByDesc('started_at')
+            ->orderByDesc('id');
     }
 }

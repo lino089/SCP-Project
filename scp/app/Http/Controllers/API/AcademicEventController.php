@@ -5,9 +5,11 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicEvent;
 use App\Models\Classes;
+use App\Models\Schedule;
 use App\Models\SystemConfiguration;
 use App\Services\AcademicCalendarExclusionService;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -85,13 +87,29 @@ class AcademicEventController extends Controller
 
         $query->orderBy('start_date')->orderBy('id');
 
-        // Cek filter spesifik kelas siswa / pengguna
+        // Cek filter spesifik kelas siswa / pengguna dengan pengamanan berbasis peran
+        $user = $request->user();
         $classId = null;
-        if ($request->boolean('for_my_class')) {
-            $user = $request->user();
-            if ($user->role === 'student') {
+
+        if ($user && $user->role === 'student') {
+            $classId = $user->class_id;
+        } elseif ($user && $user->role === 'parent') {
+            $children = $user->getLinkedStudents();
+            $allowedClassIds = $children->pluck('class_id')->filter()->map('intval')->unique()->toArray();
+            if ($request->filled('class_id')) {
+                $reqClassId = $request->integer('class_id');
+                if (!in_array($reqClassId, $allowedClassIds, true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat agenda kelas ini.',
+                    ], 403);
+                }
+                $classId = $reqClassId;
+            }
+        } elseif ($request->boolean('for_my_class')) {
+            if ($user?->role === 'student') {
                 $classId = $user->class_id;
-            } elseif ($user->role === 'parent') {
+            } elseif ($user?->role === 'parent') {
                 $student = $user->linkedStudent;
                 $classId = $student?->class_id;
             }
@@ -108,6 +126,19 @@ class AcademicEventController extends Controller
                     fn (AcademicEvent $e) => $this->exclusionService->isEventApplicableToClass($e, $schoolClass->id, $schoolClass->level)
                 )->values();
             }
+        } elseif ($user && $user->role === 'parent') {
+            $children = $user->getLinkedStudents();
+            $events = $events->filter(function (AcademicEvent $e) use ($children) {
+                if ($e->scope_type === AcademicEvent::SCOPE_ALL) return true;
+                foreach ($children as $ch) {
+                    if ($ch->class_id && $this->exclusionService->isEventApplicableToClass($e, $ch->class_id, $ch->schoolClass?->level ?? 10)) {
+                        return true;
+                    }
+                }
+                return false;
+            })->values();
+        } elseif ($user && $user->role === 'student' && !$classId) {
+            $events = $events->filter(fn (AcademicEvent $e) => $e->scope_type === AcademicEvent::SCOPE_ALL)->values();
         }
 
         if ($request->filled('per_page')) {
@@ -133,6 +164,391 @@ class AcademicEventController extends Controller
             'success' => true,
             'message' => 'Daftar agenda kalender akademik berhasil diambil.',
             'data' => $events,
+        ], 200);
+    }
+
+    /**
+     * Endpoint personalisasi agenda kalender akademik multi-role.
+     * GET /api/academic-events/my-calendar
+     */
+    public function myCalendar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|min:2020|max:2099',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
+            'type' => 'nullable|string|in:' . implode(',', AcademicEvent::TYPES),
+            'class_id' => 'nullable|integer|exists:classes,id',
+            'grade' => 'nullable|string',
+            'only_affects_my_teaching' => 'nullable|boolean',
+            'child_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        $user = $request->user();
+        $role = $user->role;
+
+        // 1. Tentukan Rentang Tanggal
+        if ($request->filled('month') && $request->filled('year')) {
+            $startDate = Carbon::createFromDate($request->integer('year'), $request->integer('month'), 1)->startOfMonth();
+            $endDate = Carbon::createFromDate($request->integer('year'), $request->integer('month'), 1)->endOfMonth();
+            $month = $request->integer('month');
+            $year = $request->integer('year');
+        } elseif ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->input('start_date'))->startOfDay();
+            $endDate = Carbon::parse($request->input('end_date'))->endOfDay();
+            $month = (int) $startDate->month;
+            $year = (int) $startDate->year;
+        } else {
+            $now = Carbon::now('Asia/Jakarta');
+            $startDate = $now->copy()->startOfMonth();
+            $endDate = $now->copy()->endOfMonth();
+            $month = (int) $now->month;
+            $year = (int) $now->year;
+        }
+
+        $startStr = $startDate->toDateString();
+        $endStr = $endDate->toDateString();
+
+        // Query agenda dalam rentang tanggal
+        $query = AcademicEvent::query()
+            ->with('creator:id,name,role')
+            ->where(function ($q) use ($startStr, $endStr) {
+                $q->whereBetween('start_date', [$startStr, $endStr])
+                    ->orWhereBetween('end_date', [$startStr, $endStr])
+                    ->orWhere(function ($sub) use ($startStr, $endStr) {
+                        $sub->where('start_date', '<=', $startStr)
+                            ->where('end_date', '>=', $endStr);
+                    });
+            })
+            ->orderBy('start_date')
+            ->orderBy('id');
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->input('type'));
+        }
+
+        $allRawEvents = $query->get();
+
+        // Ambil data referensi kelas untuk batch lookup nama rombel
+        $allClassTargets = [];
+        foreach ($allRawEvents as $e) {
+            if ($e->scope_type === AcademicEvent::SCOPE_CLASS && !empty($e->scope_targets)) {
+                foreach ($e->scope_targets as $t) {
+                    $allClassTargets[] = (int) $t;
+                }
+            }
+        }
+        $classTargetMap = empty($allClassTargets) ? collect() : Classes::whereIn('id', array_unique($allClassTargets))->get(['id', 'name', 'level'])->keyBy('id');
+
+        // Struktur respon data kontekstual
+        $context = [
+            'taught_classes' => [],
+            'homeroom_class' => null,
+            'student' => null,
+            'children' => [],
+        ];
+
+        $filteredEvents = collect();
+        $dailyTeachingStatus = [];
+
+        // 2. Personalisasi Berdasarkan Role
+        if ($role === 'vice_principal') {
+            // Waka / Admin
+            $filteredEvents = $allRawEvents;
+
+            // Filter opsional tingkat untuk simulasi waka
+            if ($request->filled('grade')) {
+                $normGrade = $this->exclusionService->normalizeGrade($request->input('grade'));
+                $filteredEvents = $filteredEvents->filter(function (AcademicEvent $e) use ($normGrade) {
+                    if ($e->scope_type === AcademicEvent::SCOPE_ALL) return true;
+                    if ($e->scope_type === AcademicEvent::SCOPE_GRADE) {
+                        $targets = array_map(fn($t) => $this->exclusionService->normalizeGrade($t), $e->scope_targets ?? []);
+                        return in_array($normGrade, $targets, true);
+                    }
+                    if ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
+                        return Classes::whereIn('id', $e->scope_targets ?? [])
+                            ->get()
+                            ->some(fn($c) => $this->exclusionService->normalizeGrade($c->level) === $normGrade);
+                    }
+                    return false;
+                })->values();
+            }
+
+            // Filter opsional rombel spesifik
+            if ($request->filled('class_id')) {
+                $cId = $request->integer('class_id');
+                $targetClass = Classes::find($cId);
+                if ($targetClass) {
+                    $filteredEvents = $filteredEvents->filter(function (AcademicEvent $e) use ($targetClass) {
+                        return $this->exclusionService->isEventApplicableToClass($e, $targetClass->id, $targetClass->level);
+                    })->values();
+                }
+            }
+
+        } elseif ($role === 'teacher') {
+            // Guru Pengampu, Wali Kelas, & Kesiswaan
+            $schedules = Schedule::where('teacher_id', $user->id)
+                ->with('schoolClass:id,name,level')
+                ->get();
+
+            $taughtClasses = $schedules->map(fn($s) => $s->schoolClass)->filter()->unique('id')->values();
+            $taughtClassIds = $taughtClasses->pluck('id')->map('intval')->toArray();
+
+            $assignments = $user->assignments()->with('schoolClass:id,name,level')->get();
+            $homeroomAsgn = $assignments->firstWhere('type', 'wali_kelas');
+            $assignedClasses = $assignments->map(fn($a) => $a->schoolClass)->filter()->unique('id')->values();
+            $assignedClassIds = $assignedClasses->pluck('id')->map('intval')->toArray();
+
+            $allRelevantClasses = $taughtClasses->concat($assignedClasses)->unique('id')->values();
+            $allRelevantClassIds = $allRelevantClasses->pluck('id')->map('intval')->toArray();
+            $allRelevantGrades = $allRelevantClasses->pluck('level')
+                ->map(fn($l) => $this->exclusionService->normalizeGrade($l))
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $isGlobalKesiswaan = $user->assignments()->where('type', 'kesiswaan')->whereNull('class_id')->exists();
+
+            $context['taught_classes'] = $taughtClasses->map(fn($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'level' => $this->exclusionService->normalizeGrade($c->level),
+            ])->toArray();
+
+            if ($homeroomAsgn && $homeroomAsgn->schoolClass) {
+                $context['homeroom_class'] = [
+                    'id' => $homeroomAsgn->schoolClass->id,
+                    'name' => $homeroomAsgn->schoolClass->name,
+                    'level' => $this->exclusionService->normalizeGrade($homeroomAsgn->schoolClass->level),
+                ];
+            }
+
+            // Filter visibilitas agenda untuk guru
+            $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($allRelevantClassIds, $allRelevantGrades, $isGlobalKesiswaan) {
+                if ($e->scope_type === AcademicEvent::SCOPE_ALL) {
+                    return true;
+                }
+                if ($isGlobalKesiswaan) {
+                    return true;
+                }
+                if ($e->scope_type === AcademicEvent::SCOPE_GRADE) {
+                    $targets = array_map(fn($t) => $this->exclusionService->normalizeGrade($t), $e->scope_targets ?? []);
+                    return !empty(array_intersect($targets, $allRelevantGrades));
+                }
+                if ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
+                    $targets = array_map('intval', $e->scope_targets ?? []);
+                    return !empty(array_intersect($targets, $allRelevantClassIds));
+                }
+                return false;
+            })->values();
+
+            // Hitung status mengajar harian guru
+            $dailyTeachingStatus = $this->exclusionService->evaluateDailyTeachingStatus(
+                $user,
+                $schedules,
+                $startDate,
+                $endDate
+            );
+
+        } elseif ($role === 'student') {
+            // Siswa
+            $studentClass = $user->schoolClass;
+            $classId = $studentClass?->id;
+            $gradeLevel = $studentClass?->level ? $this->exclusionService->normalizeGrade($studentClass->level) : '10';
+
+            if ($studentClass) {
+                $context['student'] = [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'class_id' => $studentClass->id,
+                    'class_name' => $studentClass->name,
+                    'level' => $gradeLevel,
+                ];
+
+                $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($studentClass, $gradeLevel) {
+                    return $this->exclusionService->isEventApplicableToClass($e, $studentClass->id, $gradeLevel);
+                })->values();
+            } else {
+                $filteredEvents = $allRawEvents->filter(fn(AcademicEvent $e) => $e->scope_type === AcademicEvent::SCOPE_ALL)->values();
+            }
+
+        } elseif ($role === 'parent') {
+            // Orang Tua
+            $children = $user->getLinkedStudents();
+
+            if ($request->filled('child_id')) {
+                $targetChildId = $request->integer('child_id');
+                $selectedChild = $children->firstWhere('id', $targetChildId);
+
+                if (!$selectedChild) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Akses ditolak. Anda tidak memiliki akses ke data siswa tersebut.',
+                    ], 403);
+                }
+
+                $childClass = $selectedChild->schoolClass;
+                $cId = $childClass?->id;
+                $gLevel = $childClass?->level ? $this->exclusionService->normalizeGrade($childClass->level) : '10';
+
+                $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($cId, $gLevel) {
+                    if (!$cId) return $e->scope_type === AcademicEvent::SCOPE_ALL;
+                    return $this->exclusionService->isEventApplicableToClass($e, $cId, $gLevel);
+                })->values();
+
+            } else {
+                // Semua agenda yang relevan bagi seluruh anak orang tua ini
+                $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($children) {
+                    if ($e->scope_type === AcademicEvent::SCOPE_ALL) return true;
+                    foreach ($children as $ch) {
+                        if ($ch->class_id && $this->exclusionService->isEventApplicableToClass($e, $ch->class_id, $ch->schoolClass?->level ?? 10)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                })->values();
+            }
+
+            $context['children'] = $children->map(fn($ch) => [
+                'id' => $ch->id,
+                'name' => $ch->name,
+                'nis' => $ch->nis_nip,
+                'class_id' => $ch->class_id,
+                'class_name' => $ch->schoolClass?->name ?? 'Belum Ditentukan',
+                'level' => $ch->schoolClass?->level ? $this->exclusionService->normalizeGrade($ch->schoolClass->level) : '10',
+            ])->toArray();
+        }
+
+        // 3. Format & Perkayaan Atribut Event
+        $transformedEvents = $filteredEvents->map(function (AcademicEvent $e) use ($role, $user, $classTargetMap, $context) {
+            $item = $e->toArray();
+
+            // Sediakan daftar target_classes terformat jika scope_type = 'class'
+            if ($e->scope_type === AcademicEvent::SCOPE_CLASS && !empty($e->scope_targets)) {
+                $targets = array_map('intval', $e->scope_targets);
+                $item['target_classes'] = collect($targets)
+                    ->map(fn($id) => $classTargetMap->get($id))
+                    ->filter()
+                    ->values()
+                    ->toArray();
+            } else {
+                $item['target_classes'] = [];
+            }
+
+            // Panduan Kehadiran
+            $item['attendance_guidance'] = $this->exclusionService->getAttendanceGuidance($e);
+
+            // Perhitungan Dampak Mengajar bagi Guru
+            if ($role === 'teacher') {
+                $affectsMyTeaching = false;
+                $affectedClasses = [];
+
+                if ((bool) $e->disables_teaching) {
+                    $taughtClasses = $context['taught_classes'] ?? [];
+                    foreach ($taughtClasses as $tc) {
+                        $tcId = (int) $tc['id'];
+                        $tcLevel = $tc['level'];
+
+                        if ($this->exclusionService->isEventApplicableToClass($e, $tcId, $tcLevel)) {
+                            $schedules = Schedule::where('teacher_id', $user->id)
+                                ->where('class_id', $tcId)
+                                ->get();
+
+                            $hasMatchingDay = false;
+                            $eStart = Carbon::parse($e->start_date);
+                            $eEnd = Carbon::parse($e->end_date);
+                            $period = CarbonPeriod::create($eStart, $eEnd);
+
+                            foreach ($period as $pDate) {
+                                $isoDay = (int) $pDate->dayOfWeekIso;
+                                if ($schedules->contains(fn($s) => (int) $s->day_of_week === $isoDay)) {
+                                    $hasMatchingDay = true;
+                                    break;
+                                }
+                            }
+
+                            if ($hasMatchingDay) {
+                                $affectsMyTeaching = true;
+                                $affectedClasses[] = $tc['name'];
+                            }
+                        }
+                    }
+                }
+
+                $item['affects_my_teaching'] = $affectsMyTeaching;
+                $item['affected_my_classes'] = array_values(array_unique($affectedClasses));
+            } else {
+                $item['affects_my_teaching'] = false;
+                $item['affected_my_classes'] = [];
+            }
+
+            // Tagging Multi-Anak untuk Orang Tua
+            if ($role === 'parent') {
+                $applicableChildren = [];
+                $children = $context['children'] ?? [];
+
+                foreach ($children as $ch) {
+                    if ($e->scope_type === AcademicEvent::SCOPE_ALL) {
+                        $applicableChildren[] = [
+                            'id' => $ch['id'],
+                            'name' => $ch['name'],
+                            'class_name' => $ch['class_name'],
+                            'tag_label' => "Anak - {$ch['name']} ({$ch['class_name']})",
+                        ];
+                    } elseif (!empty($ch['class_id']) && $this->exclusionService->isEventApplicableToClass($e, $ch['class_id'], $ch['level'])) {
+                        $applicableChildren[] = [
+                            'id' => $ch['id'],
+                            'name' => $ch['name'],
+                            'class_name' => $ch['class_name'],
+                            'tag_label' => "Anak - {$ch['name']} ({$ch['class_name']})",
+                        ];
+                    }
+                }
+                $item['applicable_children'] = $applicableChildren;
+            } else {
+                $item['applicable_children'] = [];
+            }
+
+            return $item;
+        });
+
+        // Filter opsi only_affects_my_teaching untuk guru
+        if ($role === 'teacher' && $request->boolean('only_affects_my_teaching')) {
+            $transformedEvents = $transformedEvents->filter(function ($item) {
+                return (bool) ($item['affects_my_teaching'] ?? false) || ($item['type'] === AcademicEvent::TYPE_HOLIDAY && $item['scope_type'] === AcademicEvent::SCOPE_ALL);
+            })->values();
+        }
+
+        // Summary KPI
+        $holidayCount = $transformedEvents->filter(fn($e) => $e['type'] === AcademicEvent::TYPE_HOLIDAY)->count();
+        $classEventCount = $transformedEvents->filter(fn($e) => $e['type'] === AcademicEvent::TYPE_CLASS_EVENT || $e['type'] === AcademicEvent::TYPE_SCHOOL_EVENT)->count();
+        $examCount = $transformedEvents->filter(fn($e) => $e['type'] === AcademicEvent::TYPE_EXAM)->count();
+        $affectingCount = $transformedEvents->filter(fn($e) => !empty($e['affects_my_teaching']))->count();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kalender akademik berhasil dimuat.',
+            'data' => [
+                'role' => $role,
+                'can_manage' => $role === 'vice_principal',
+                'period' => [
+                    'month' => $month,
+                    'year' => $year,
+                    'start_date' => $startStr,
+                    'end_date' => $endStr,
+                ],
+                'context' => $context,
+                'summary' => [
+                    'total_events' => $transformedEvents->count(),
+                    'holiday_count' => $holidayCount,
+                    'special_event_count' => $classEventCount,
+                    'exam_count' => $examCount,
+                    'affecting_teaching_count' => $affectingCount,
+                ],
+                'daily_teaching_status' => (object) $dailyTeachingStatus,
+                'events' => $transformedEvents->values(),
+            ],
         ], 200);
     }
 
@@ -190,7 +606,7 @@ class AcademicEventController extends Controller
     /**
      * Menampilkan detail satu agenda.
      */
-    public function show(int|string $id): JsonResponse
+    public function show(Request $request, int|string $id): JsonResponse
     {
         $event = AcademicEvent::with('creator:id,name,role')->find($id);
 
@@ -199,6 +615,35 @@ class AcademicEventController extends Controller
                 'success' => false,
                 'message' => 'Agenda kalender akademik tidak ditemukan.',
             ], 404);
+        }
+
+        $user = $request->user();
+        if ($user && $user->role === 'student') {
+            if ($event->scope_type !== AcademicEvent::SCOPE_ALL) {
+                if (!$user->class_id || !$this->exclusionService->isEventApplicableToClass($event, $user->class_id, $user->schoolClass?->level ?? 10)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat agenda kelas ini.',
+                    ], 403);
+                }
+            }
+        } elseif ($user && $user->role === 'parent') {
+            if ($event->scope_type !== AcademicEvent::SCOPE_ALL) {
+                $children = $user->getLinkedStudents();
+                $isAllowed = false;
+                foreach ($children as $ch) {
+                    if ($ch->class_id && $this->exclusionService->isEventApplicableToClass($event, $ch->class_id, $ch->schoolClass?->level ?? 10)) {
+                        $isAllowed = true;
+                        break;
+                    }
+                }
+                if (!$isAllowed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat agenda kelas ini.',
+                    ], 403);
+                }
+            }
         }
 
         $data = $event->toArray();

@@ -64,7 +64,8 @@ api.interceptors.response.use(
 // Specific Auth & Profile API Services
 export const authApi = {
   login: (credentials) => api.post('/login', credentials),
-  loginWithGoogle: (idToken) => api.post('/auth/google', { id_token: idToken }),
+  loginWithGoogle: (idToken, deviceName = 'Web Browser') =>
+    api.post('/auth/google', { id_token: idToken, device_name: deviceName }),
   getMe: () => api.get('/me'),
   logout: () => api.post('/logout'),
   changePassword: (data) => api.patch('/me/password', data),
@@ -74,6 +75,7 @@ export const authApi = {
   requestPhoneOtp: (phone) => api.post('/me/phone', { phone_number: phone }),
   verifyPhoneOtp: (data) => api.post('/me/phone/verify', data),
   linkGoogle: (idToken) => api.post('/me/google-link', { id_token: idToken }),
+  unlinkGoogle: (password) => api.post('/me/google-unlink', { password }),
 };
 
 export default api;

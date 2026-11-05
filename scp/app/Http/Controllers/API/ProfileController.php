@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\VerifyEmailOtpMail;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\GoogleAuthService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,8 @@ use Illuminate\Support\Facades\Mail;
 class ProfileController extends Controller
 {
     public function __construct(
-        protected WhatsAppService $whatsAppService
+        protected WhatsAppService $whatsAppService,
+        protected GoogleAuthService $googleAuthService
     ) {}
 
     /**
@@ -276,7 +278,7 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $googleData = self::verifyGoogleIdToken($request->id_token);
+        $googleData = $this->googleAuthService->verifyIdToken($request->id_token);
 
         if (! $googleData) {
             return response()->json([
@@ -285,76 +287,67 @@ class ProfileController extends Controller
             ], 422);
         }
 
-        $googleId = $googleData['sub'];
-        $googleEmail = $googleData['email'] ?? null;
+        $result = $this->googleAuthService->linkAccount($user, $googleData);
 
-        // Cek apakah akun Google sudah dipakai user lain
-        if (User::where('google_id', $googleId)->where('id', '!=', $user->id)->exists()) {
+        if (! $result['success']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akun Google ini sudah terhubung dengan pengguna lain.',
+                'message' => $result['message'],
+                'errors' => [
+                    'google_id' => [$result['message']],
+                ],
             ], 422);
         }
 
-        $updates = [
-            'google_id' => $googleId,
-        ];
-
-        // PRD 5.2: Auto-mengisi email jika kosong
-        if (empty($user->email) && ! empty($googleEmail)) {
-            if (! User::where('email', $googleEmail)->where('id', '!=', $user->id)->exists()) {
-                $updates['email'] = $googleEmail;
-                $updates['email_verified_at'] = now();
-            }
-        }
-
-        $user->update($updates);
-
         return response()->json([
             'success' => true,
-            'message' => 'Akun Google berhasil ditautkan ke profil Anda.',
+            'message' => $result['message'],
             'data' => [
-                'user' => $user->fresh(),
+                'user' => $result['user'],
             ],
         ], 200);
     }
 
     /**
-     * Memverifikasi JWT ID Token Google via Google TokenInfo API
+     * Melepas tautan akun Google dengan konfirmasi kata sandi akun (Step-Up Auth)
+     * POST /api/me/google-unlink
+     */
+    public function unlinkGoogle(Request $request): JsonResponse
+    {
+        $request->validate([
+            'password' => 'required|string',
+        ], [
+            'password.required' => 'Kata sandi akun wajib diisi untuk konfirmasi keamanan.',
+        ]);
+
+        $user = $request->user();
+        $result = $this->googleAuthService->unlinkAccount($user, $request->input('password'));
+
+        if (! $result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+                'errors' => [
+                    'password' => [$result['message']],
+                ],
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'],
+            'data' => [
+                'user' => $result['user'],
+            ],
+        ], 200);
+    }
+
+    /**
+     * Memverifikasi JWT ID Token Google via Google TokenInfo API (static proxy)
      */
     public static function verifyGoogleIdToken(string $idToken): ?array
     {
-        try {
-            $response = Http::timeout(10)->get('https://oauth2.googleapis.com/tokeninfo', [
-                'id_token' => $idToken,
-            ]);
-
-            if (! $response->successful()) {
-                Log::warning('[GoogleAuth] Token verification failed: ' . $response->body());
-
-                return null;
-            }
-
-            $data = $response->json();
-            $expectedClientId = config('services.google.client_id');
-
-            // Verifikasi audience (aud) jika client id telah dikonfigurasi
-            if (! empty($expectedClientId) && isset($data['aud']) && $data['aud'] !== $expectedClientId) {
-                Log::warning("[GoogleAuth] Token audience mismatch. Expected: {$expectedClientId}, Got: " . ($data['aud'] ?? 'null'));
-
-                return null;
-            }
-
-            if (empty($data['sub'])) {
-                return null;
-            }
-
-            return $data;
-        } catch (\Throwable $e) {
-            Log::error('[GoogleAuth] Exception during token verification: ' . $e->getMessage());
-
-            return null;
-        }
+        return app(GoogleAuthService::class)->verifyIdToken($idToken);
     }
 
     /**

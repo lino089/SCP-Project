@@ -13,6 +13,8 @@ class LeaveRequest extends Model
 
     protected $fillable = [
         'student_id',
+        'class_id',
+        'academic_year',
         'applicant_id',
         'type',
         'category',
@@ -57,6 +59,7 @@ class LeaveRequest extends Model
     }
 
     protected $casts = [
+        'class_id' => 'integer',
         'start_date' => 'date:Y-m-d',
         'end_date' => 'date:Y-m-d',
         'verified_at' => 'datetime',
@@ -75,16 +78,21 @@ class LeaveRequest extends Model
 
     public function student(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'student_id');
+        return $this->belongsTo(User::class, 'student_id')->withTrashed();
+    }
+
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(Classes::class, 'class_id')->withTrashed();
     }
 
     public function applicant(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'applicant_id');
+        return $this->belongsTo(User::class, 'applicant_id')->withTrashed();
     }
 
     public function verifier(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'verified_by');
+        return $this->belongsTo(User::class, 'verified_by')->withTrashed();
     }
 }

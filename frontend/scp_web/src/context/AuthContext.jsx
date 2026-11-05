@@ -95,6 +95,38 @@ export function AuthProvider({ children }) {
     return res;
   }, []);
 
+  // Login via Google SSO ID Token
+  const loginWithGoogle = useCallback(async (idToken, deviceName = 'Web Browser') => {
+    const res = await authApi.loginWithGoogle(idToken, deviceName);
+    const authToken = res?.data?.token;
+    const mustChangePwd = Boolean(res?.data?.must_change_password);
+
+    if (authToken) {
+      localStorage.setItem('scp_token', authToken);
+      setToken(authToken);
+
+      try {
+        const meRes = await authApi.getMe();
+        const userData = meRes?.data;
+        if (userData) {
+          userData.must_change_password = mustChangePwd || Boolean(userData.must_change_password);
+          setUser(userData);
+          localStorage.setItem('scp_user', JSON.stringify(userData));
+          return { user: userData, mustChangePassword: userData.must_change_password };
+        }
+      } catch {
+        const fallbackUser = res?.data?.user || {
+          must_change_password: mustChangePwd,
+        };
+        setUser(fallbackUser);
+        localStorage.setItem('scp_user', JSON.stringify(fallbackUser));
+        return { user: fallbackUser, mustChangePassword: mustChangePwd };
+      }
+    }
+
+    return res;
+  }, []);
+
   // Logout method
   const logout = useCallback(async () => {
     try {
@@ -174,6 +206,7 @@ export function AuthProvider({ children }) {
     isLoading,
     mustChangePassword: Boolean(user?.must_change_password),
     login,
+    loginWithGoogle,
     logout,
     updateUserProfile,
     changePassword,
@@ -186,6 +219,7 @@ export function AuthProvider({ children }) {
     token,
     isLoading,
     login,
+    loginWithGoogle,
     logout,
     updateUserProfile,
     changePassword,

@@ -44,10 +44,15 @@ class TeacherLeaveRequestController extends Controller
             // Konteks Riwayat Izin Pribadi (untuk seluruh guru, termasuk guru kesiswaan)
             $query->where('teacher_id', $user->id);
         } elseif ($isVerification) {
-            // Konteks Antrean Verifikasi (Khusus Waka & Guru Kesiswaan)
+            // Konteks Antrean Verifikasi (Khusus Waka & Guru Kesiswaan, atau riwayat verifikasi pejabat lama)
             if (!$isVerifier) {
-                // Guru biasa tanpa penugasan kesiswaan tidak boleh melihat antrean verifikasi
-                $query->whereRaw('1 = 0');
+                $requestedStatus = $request->filled('status') ? $request->input('status') : 'pending';
+                if ($requestedStatus !== 'pending') {
+                    // Keputusan 1 Opsi A: Mantan petugas Kesiswaan tetap dapat melihat riwayat verifikasi pribadinya
+                    $query->where('approved_by', $user->id);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
             } elseif ($isWaka) {
                 // Waka melihat seluruh izin yang membutuhkan verifikasi (kecuali izin dirinya sendiri)
                 $query->where('teacher_id', '!=', $user->id);
@@ -102,7 +107,11 @@ class TeacherLeaveRequestController extends Controller
                 }
             } else {
                 // Guru reguler dan wali kelas hanya dapat melihat izin miliknya sendiri
-                $query->where('teacher_id', $user->id);
+                // serta izin yang pernah diverifikasi sendiri saat dulu menjabat Kesiswaan (Keputusan 1 Opsi A)
+                $query->where(function ($q) use ($user) {
+                    $q->where('teacher_id', $user->id)
+                      ->orWhere('approved_by', $user->id);
+                });
             }
         }
 
@@ -156,13 +165,13 @@ class TeacherLeaveRequestController extends Controller
 
         if ($isOwner || $isWaka) {
             $hasAccess = true;
+        } elseif ($leaveRequest->approved_by !== null && (int) $leaveRequest->approved_by === (int) $user->id) {
+            // Keputusan 1 Opsi A: Pernah disetujui / diproses sendiri oleh user ini (termasuk jika tugas kesiswaan sudah berakhir)
+            $hasAccess = true;
         } elseif ($isKesiswaan) {
-            // Jika pemohon adalah sesama guru kesiswaan, wewenang eksklusif Waka (anti-peer-approval)
+            // Jika pemohon adalah sesama guru kesiswaan aktif, wewenang eksklusif Waka (anti-peer-approval)
             if ($leaveRequest->teacher && $leaveRequest->teacher->isKesiswaan()) {
                 $hasAccess = false;
-            } elseif ((int) $leaveRequest->approved_by === (int) $user->id) {
-                // Pernah disetujui / diproses oleh user ini
-                $hasAccess = true;
             } else {
                 // Periksa apakah user memiliki wewenang atas izin ini via resolver
                 $hasAccess = $this->authorityResolver->canUserApprove($user, $leaveRequest);

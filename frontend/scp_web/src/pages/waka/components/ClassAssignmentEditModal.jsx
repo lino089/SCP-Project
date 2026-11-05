@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Shield, Trash2, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { UserCheck, Shield, Trash2, Plus, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import Modal from '../../../components/shared/Modal';
 import Button from '../../../components/shared/Button';
 import Select from '../../../components/shared/Select';
@@ -21,9 +21,29 @@ export default function ClassAssignmentEditModal({
   const [selectedWaliId, setSelectedWaliId] = useState('');
   const [selectedBkIdToAdd, setSelectedBkIdToAdd] = useState('');
   const [kesiswaanList, setKesiswaanList] = useState([]);
+  const [historyList, setHistoryList] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  const fetchClassHistory = useCallback(async (clsId) => {
+    if (!clsId) return;
+    setIsLoadingHistory(true);
+    try {
+      const res = await teacherAssignmentApi.getAssignmentHistories({
+        class_id: clsId,
+        is_active: 0,
+        per_page: 10,
+      });
+      const items = res?.data?.data || res?.data || [];
+      setHistoryList(Array.isArray(items) ? items : []);
+    } catch {
+      setHistoryList([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
 
   // Map guru yang sudah menjadi Wali Kelas di kelas lain (Aturan 1 Guru 1 Wali Kelas)
   const existingWaliMap = useMemo(() => {
@@ -42,14 +62,15 @@ export default function ClassAssignmentEditModal({
 
   // Sinkronisasi state saat modal dibuka
   useEffect(() => {
-    if (classItem) {
+    if (classItem && isOpen) {
       setSelectedWaliId(classItem.wali_kelas?.id ? String(classItem.wali_kelas.id) : '');
       setKesiswaanList(Array.isArray(classItem.kesiswaan) ? [...classItem.kesiswaan] : []);
       setSelectedBkIdToAdd('');
       setErrorMessage('');
       setSuccessMessage('');
+      fetchClassHistory(classItem.class_id);
     }
-  }, [classItem, isOpen]);
+  }, [classItem, isOpen, fetchClassHistory]);
 
   if (!classItem) return null;
 
@@ -98,18 +119,16 @@ export default function ClassAssignmentEditModal({
       }
       // 2. Jika wali kelas diganti ke guru lain
       else if (targetWaliId && targetWaliId !== currentWali?.id) {
-        if (currentWali?.assignment_id) {
-          // Cabut wali lama terlebih dahulu
-          await teacherAssignmentApi.revokeRole(currentWali.id, currentWali.assignment_id);
-        }
-        // Tugaskan wali kelas baru
+        // Tugaskan wali kelas baru (otomatis menonaktifkan pejabat lama via replace_existing)
         await teacherAssignmentApi.assignRole(targetWaliId, {
           type: 'wali_kelas',
           class_id: classItem.class_id,
+          replace_existing: true,
         });
       }
 
       setSuccessMessage('Penugasan Wali Kelas berhasil diperbarui.');
+      fetchClassHistory(classItem.class_id);
       onSaveSuccess?.();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -129,14 +148,14 @@ export default function ClassAssignmentEditModal({
       const res = await teacherAssignmentApi.assignRole(Number(selectedBkIdToAdd), {
         type: 'kesiswaan',
         class_id: classItem.class_id,
+        replace_existing: true,
       });
 
       const assignedItem = res?.data?.data || res?.data;
       const addedTeacher = teacherList.find((t) => t.id === Number(selectedBkIdToAdd));
 
       if (addedTeacher) {
-        setKesiswaanList((prev) => [
-          ...prev,
+        setKesiswaanList([
           {
             assignment_id: assignedItem?.id,
             id: addedTeacher.id,
@@ -147,7 +166,8 @@ export default function ClassAssignmentEditModal({
       }
 
       setSelectedBkIdToAdd('');
-      setSuccessMessage('Guru BK berhasil ditambahkan untuk kelas ini.');
+      setSuccessMessage('Guru BK berhasil ditetapkan untuk kelas ini.');
+      fetchClassHistory(classItem.class_id);
       onSaveSuccess?.();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -177,6 +197,7 @@ export default function ClassAssignmentEditModal({
 
       setKesiswaanList((prev) => prev.filter((k) => k.id !== bkItem.id));
       setSuccessMessage(`Penugasan BK ${bkItem.name} untuk kelas ini berhasil dicabut.`);
+      fetchClassHistory(classItem.class_id);
       onSaveSuccess?.();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -328,9 +349,56 @@ export default function ClassAssignmentEditModal({
               disabled={!selectedBkIdToAdd || isSubmitting}
               loading={isSubmitting}
             >
-              Tambah BK
+              {kesiswaanList.length > 0 ? 'Ganti BK' : 'Tetapkan BK'}
             </Button>
           </div>
+        </div>
+
+        {/* 3. Riwayat Penugasan Kelas Ini (Lampau) */}
+        <div className="bg-white p-4 border border-neutral-200 rounded-lg shadow-2xs">
+          <div className="assignment-section-header">
+            <Clock size={16} className="text-neutral-600" />
+            <span>Riwayat Penugasan Sebelumnya</span>
+          </div>
+          <p className="assignment-helper-text mb-3">
+            Catatan historis pejabat Wali Kelas &amp; Guru BK yang pernah bertugas pada kelas ini.
+          </p>
+
+          {isLoadingHistory ? (
+            <div className="text-xs text-neutral-400 italic py-2">Memuat riwayat penugasan...</div>
+          ) : historyList.length === 0 ? (
+            <div className="p-3 bg-neutral-50 rounded-lg border border-dashed border-neutral-200 text-center text-xs text-neutral-400 italic">
+              Belum ada riwayat pergantian penugasan pada kelas ini.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+              {historyList.map((hist) => (
+                <div
+                  key={hist.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-neutral-50 rounded-lg border border-neutral-200 text-xs gap-1"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={hist.type === 'wali_kelas' ? 'primary' : 'warning'}>
+                      {hist.type === 'wali_kelas' ? 'Wali Kelas' : 'Guru BK'}
+                    </Badge>
+                    <span className="font-semibold text-neutral-800">
+                      {hist.teacher?.name || `Guru #${hist.user_id}`}
+                    </span>
+                    {hist.academic_year && (
+                      <span className="text-neutral-500 text-[11px]">
+                        ({hist.academic_year})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    {hist.ended_at
+                      ? `Berakhir: ${new Date(hist.ended_at).toLocaleDateString('id-ID')}`
+                      : 'Nonaktif'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

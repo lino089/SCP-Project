@@ -4,6 +4,9 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Classes;
+use App\Models\StudentClassHistory;
+use App\Models\SystemConfiguration;
+use App\Models\TeacherAssignment;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -132,19 +135,35 @@ class SchoolClassController extends Controller
 
     /**
      * Promosi kenaikan kelas dan kelulusan massal akhir tahun ajaran (PRD 5.13).
+     * Mencatat riwayat kelas siswa (student_class_histories) dan secara otomatis
+     * menonaktifkan seluruh penugasan Wali Kelas & Kesiswaan aktif periode berjalan (Keputusan 6 Opsi B).
      */
     public function promoteClasses(Request $request): JsonResponse
     {
-        $result = DB::transaction(function () {
+        $actorId = $request->user()?->id;
+        $academicYear = SystemConfiguration::query()->value('academic_year') ?: '2026/2027';
+
+        $result = DB::transaction(function () use ($actorId, $academicYear) {
             $students = User::where('role', 'student')->with('schoolClass')->get();
 
             $promotedCount = 0;
             $heldBackCount = 0;
             $graduatedCount = 0;
+            $now = now();
 
             foreach ($students as $student) {
                 if ($student->is_held_back) {
-                    // Siswa tinggal kelas: reset flag untuk tahun ajaran baru, tidak ubah class_id
+                    // Siswa tinggal kelas: catat histori, reset flag untuk tahun ajaran baru, tidak ubah class_id
+                    StudentClassHistory::create([
+                        'student_id' => $student->id,
+                        'from_class_id' => $student->class_id,
+                        'to_class_id' => $student->class_id,
+                        'academic_year' => $academicYear,
+                        'action_type' => 'held_back',
+                        'processed_by' => $actorId,
+                        'processed_at' => $now,
+                    ]);
+
                     $student->update(['is_held_back' => false]);
                     $heldBackCount++;
                     continue;
@@ -154,29 +173,61 @@ class SchoolClassController extends Controller
 
                 if ($currentClass && $currentClass->next_class_id) {
                     // Naik ke kelas berikutnya
+                    StudentClassHistory::create([
+                        'student_id' => $student->id,
+                        'from_class_id' => $currentClass->id,
+                        'to_class_id' => $currentClass->next_class_id,
+                        'academic_year' => $academicYear,
+                        'action_type' => 'promoted',
+                        'processed_by' => $actorId,
+                        'processed_at' => $now,
+                    ]);
+
                     $student->update(['class_id' => $currentClass->next_class_id]);
                     $promotedCount++;
                 } elseif ($currentClass && is_null($currentClass->next_class_id)) {
                     // Kelas akhir (kelas 12): kelulusan
+                    StudentClassHistory::create([
+                        'student_id' => $student->id,
+                        'from_class_id' => $currentClass->id,
+                        'to_class_id' => null,
+                        'academic_year' => $academicYear,
+                        'action_type' => 'graduated',
+                        'processed_by' => $actorId,
+                        'processed_at' => $now,
+                    ]);
+
                     $student->update([
-                        'graduation_date' => now()->toDateString(),
+                        'graduation_date' => $now->toDateString(),
                         'class_id' => null,
                     ]);
                     $graduatedCount++;
                 }
             }
 
+            // Keputusan 6 Opsi B: Otomatis nonaktifkan seluruh penugasan Wali Kelas & Kesiswaan aktif
+            $deactivatedAssignmentsCount = TeacherAssignment::query()
+                ->where('is_active', true)
+                ->update([
+                    'is_active' => false,
+                    'ended_at' => $now,
+                    'revoked_by' => $actorId,
+                    'notes' => 'Berakhir otomatis saat eksekusi kenaikan kelas & pergantian tahun ajaran',
+                    'updated_at' => $now,
+                ]);
+
             return [
                 'total_students' => $students->count(),
                 'promoted' => $promotedCount,
                 'held_back' => $heldBackCount,
                 'graduated' => $graduatedCount,
+                'deactivated_assignments' => $deactivatedAssignmentsCount,
             ];
         });
 
         return response()->json([
             'success' => true,
-            'message' => 'Proses kenaikan kelas dan kelulusan berhasil diproses.',
+            'message' => 'Proses kenaikan kelas dan kelulusan berhasil diproses, serta penugasan Wali Kelas dan Kesiswaan periode berjalan telah diarsipkan.',
             'data' => $result,
         ], 200);
     }

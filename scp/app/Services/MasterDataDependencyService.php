@@ -58,8 +58,18 @@ class MasterDataDependencyService
 
             $hasAttendances = Attendance::whereHas('journal.schedule', fn($sq) => $sq->where('teacher_id', $id))->exists();
             $hasQuizzes = Schema::hasTable('ai_quizzes') && Quiz::where('teacher_id', $id)->exists();
+            $hasVerifiedStudentLeaves = LeaveRequest::where('verified_by', $id)->exists();
+            $hasVerifiedTeacherLeaves = Schema::hasTable('teacher_leave_requests')
+                && TeacherLeaveRequest::where('approved_by', $id)->exists();
+            $hasAssignmentHistory = Schema::hasTable('teacher_assignments')
+                && TeacherAssignment::where('user_id', $id)->exists();
 
-            return $hasJournals || $hasAttendances || $hasQuizzes;
+            return $hasJournals
+                || $hasAttendances
+                || $hasQuizzes
+                || $hasVerifiedStudentLeaves
+                || $hasVerifiedTeacherLeaves
+                || $hasAssignmentHistory;
         }
 
         if ($normalizedEntity === 'student') {

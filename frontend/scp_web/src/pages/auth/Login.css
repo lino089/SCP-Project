@@ -198,6 +198,35 @@
   gap: 8px;
 }
 
+.login-divider {
+  display: flex;
+  align-items: center;
+  margin: 0.25rem 0;
+  text-align: center;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.login-divider span {
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #9ca3af;
+  text-transform: lowercase;
+}
+
+.google-login-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+}
+
 .login-device-info {
   margin-top: 1.25rem;
   padding-top: 0.75rem;

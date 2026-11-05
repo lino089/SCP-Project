@@ -1,21 +1,66 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button, Input } from '../../components/shared';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { User, Lock } from 'lucide-react';
 import './Login.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, getHomeRoute } = useAuth();
+  const { login, loginWithGoogle, getHomeRoute } = useAuth();
+  const { isLoaded: isGoogleLoaded, renderGoogleButton } = useGoogleAuth();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const googleLoginBtnRef = useRef(null);
 
   const deviceName = `${navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Web'} Browser (${navigator.platform || 'Desktop'})`;
+
+  const handleGoogleSuccess = async (credential) => {
+    setIsLoading(true);
+    setError('');
+    setFieldErrors({});
+
+    try {
+      const result = await loginWithGoogle(credential, deviceName);
+      if (result?.mustChangePassword) {
+        navigate('/change-password', { replace: true });
+      } else {
+        navigate(getHomeRoute(), { replace: true });
+      }
+    } catch (err) {
+      if (err.status === 404) {
+        setError(
+          'Akun Google belum terhubung ke akun SCP Anda. Silakan login menggunakan NIS/NIP & kata sandi terlebih dahulu, kemudian hubungkan akun Google di menu profil.'
+        );
+      } else {
+        setError(
+          err.message || 'Gagal masuk menggunakan akun Google. Pastikan akun telah terhubung.'
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isGoogleLoaded && googleLoginBtnRef.current) {
+      renderGoogleButton(googleLoginBtnRef.current, {
+        onSuccess: handleGoogleSuccess,
+        onError: (err) => {
+          console.warn('[LoginPage] Google button error:', err);
+        },
+        text: 'signin_with',
+        theme: 'outline',
+        size: 'large',
+        width: '100%',
+      });
+    }
+  }, [isGoogleLoaded, renderGoogleButton]);
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -104,6 +149,15 @@ export default function LoginPage() {
             required
           />
 
+          <div className="flex justify-end pt-1 pb-2">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition"
+            >
+              Lupa kata sandi?
+            </Link>
+          </div>
+
           <div className="login-actions">
             <Button
               type="submit"
@@ -114,6 +168,14 @@ export default function LoginPage() {
             >
               Masuk
             </Button>
+
+            <div className="login-divider">
+              <span>atau</span>
+            </div>
+
+            <div className="google-login-container">
+              <div ref={googleLoginBtnRef} className="flex justify-center w-full min-h-[44px]" />
+            </div>
           </div>
         </form>
 

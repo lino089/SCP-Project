@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\LeaveRequest;
+use App\Models\SystemConfiguration;
 use App\Models\User;
 use App\Services\AcademicCalendarExclusionService;
 use Carbon\Carbon;
@@ -18,6 +19,27 @@ class LeaveRequestController extends Controller
         protected AcademicCalendarExclusionService $exclusionService
     ) {}
     /**
+     * Helper untuk memfilter query LeaveRequest berdasarkan snapshot class_id
+     * (dengan fallback ke student.class_id untuk data lama yang class_id-nya NULL).
+     */
+    private function applyClassFilter($query, array|int $classIds): void
+    {
+        $ids = array_values(array_filter(is_array($classIds) ? $classIds : [$classIds], fn ($v) => $v !== null));
+        if (empty($ids)) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($q) use ($ids) {
+            $q->whereIn('class_id', $ids)
+                ->orWhere(function ($sub) use ($ids) {
+                    $sub->whereNull('class_id')
+                        ->whereHas('student', fn ($sq) => $sq->whereIn('class_id', $ids));
+                });
+        });
+    }
+
+    /**
      * Menampilkan daftar perizinan siswa dengan scoping role & filter (PRD 9.6).
      * GET /api/leave-requests
      */
@@ -29,23 +51,68 @@ class LeaveRequestController extends Controller
             ->with([
                 'student:id,name,nis_nip,class_id',
                 'student.schoolClass:id,name,level',
+                'schoolClass:id,name,level',
                 'applicant:id,name,role',
                 'verifier:id,name,nis_nip',
             ]);
 
-        // Role Scoping:
-        if ($user->role === 'vice_principal' || ($user->role === 'teacher' && $user->isKesiswaan())) {
-            // Waka Kurikulum & Guru Kesiswaan: Melihat seluruh pengajuan izin sekolah
+        // Role Scoping (Keputusan 1A, 2A, 3A, 4A):
+        if ($user->role === 'vice_principal') {
+            // Waka Kurikulum: Melihat seluruh pengajuan izin sekolah
             if ($request->filled('class_id')) {
-                $query->whereHas('student', fn ($q) => $q->where('class_id', $request->integer('class_id')));
+                $this->applyClassFilter($query, $request->integer('class_id'));
             }
-        } elseif ($user->role === 'teacher' && $user->isWaliKelas()) {
-            // Wali Kelas: Otomatis ter-scoped hanya pada kelas binaannya
-            $waliClassIds = $user->assignments()->where('type', 'wali_kelas')->pluck('class_id');
-            $query->whereHas('student', fn ($q) => $q->whereIn('class_id', $waliClassIds));
+        } elseif ($user->role === 'teacher') {
+            $hasGlobalKesiswaan = $user->assignments()
+                ->where('type', 'kesiswaan')
+                ->whereNull('class_id')
+                ->exists();
 
-            if ($request->filled('class_id') && in_array($request->integer('class_id'), $waliClassIds->toArray())) {
-                $query->whereHas('student', fn ($q) => $q->where('class_id', $request->integer('class_id')));
+            if ($hasGlobalKesiswaan) {
+                // Petugas Kesiswaan Global: Melihat seluruh pengajuan izin sekolah
+                if ($request->filled('class_id')) {
+                    $this->applyClassFilter($query, $request->integer('class_id'));
+                }
+            } else {
+                // Gabungkan kelas binaan aktif Kesiswaan (Keputusan 4 Opsi A) dan kelas perwalian aktif Wali Kelas
+                $kesiswaanClassIds = $user->getKesiswaanClassIds();
+                $waliClassIds = $user->homeroomClassIds();
+                $allowedClassIds = array_values(array_unique(array_merge($kesiswaanClassIds, $waliClassIds)));
+                $hasVerifiedHistory = LeaveRequest::where('verified_by', $user->id)->exists();
+
+                if (empty($allowedClassIds) && !$hasVerifiedHistory) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat daftar perizinan.',
+                    ], 403);
+                }
+
+                $requestedStatus = $request->input('status') ?? $request->input('status_approval');
+                $includePersonalVerifiedHistory = ($requestedStatus !== 'pending');
+
+                $query->where(function ($scopeQ) use ($allowedClassIds, $user, $includePersonalVerifiedHistory) {
+                    if (!empty($allowedClassIds)) {
+                        $scopeQ->where(function ($classQ) use ($allowedClassIds) {
+                            $this->applyClassFilter($classQ, $allowedClassIds);
+                        });
+
+                        if ($includePersonalVerifiedHistory) {
+                            $scopeQ->orWhere('verified_by', $user->id);
+                        }
+                    } else {
+                        // Mantan pejabat Kesiswaan yang sudah tidak memiliki kelas aktif:
+                        // Hanya dapat melihat riwayat izin yang pernah diverifikasi sendiri (Keputusan 1 Opsi A)
+                        if ($includePersonalVerifiedHistory) {
+                            $scopeQ->where('verified_by', $user->id);
+                        } else {
+                            $scopeQ->whereRaw('1 = 0');
+                        }
+                    }
+                });
+
+                if ($request->filled('class_id')) {
+                    $this->applyClassFilter($query, $request->integer('class_id'));
+                }
             }
         } elseif ($user->role === 'student') {
             // Siswa: Auto-scoped hanya perizinan miliknya
@@ -54,7 +121,6 @@ class LeaveRequestController extends Controller
             // Orang Tua: Auto-scoped hanya perizinan anaknya
             $query->where('student_id', $user->linked_student_id);
         } else {
-            // Guru reguler tanpa tugas kesiswaan/wali kelas tidak memiliki akses rekap perizinan
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat daftar perizinan.',
@@ -126,17 +192,21 @@ class LeaveRequestController extends Controller
         $leaveRequest = LeaveRequest::with([
             'student:id,name,nis_nip,class_id',
             'student.schoolClass:id,name,level',
+            'schoolClass:id,name,level',
             'applicant:id,name,role',
             'verifier:id,name,nis_nip',
         ])->findOrFail($id);
 
-        $isWaka = ($user->role === 'vice_principal');
-        $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
-        $isWaliKelas = ($user->role === 'teacher' && $user->isWaliKelas($leaveRequest->student?->class_id));
-        $isStudentOwner = ($user->role === 'student' && $leaveRequest->student_id === $user->id);
-        $isParentOwner = ($user->role === 'parent' && $leaveRequest->student_id === $user->linked_student_id);
+        $effectiveClassId = $leaveRequest->class_id ?? $leaveRequest->student?->class_id;
 
-        if (!$isWaka && !$isKesiswaan && !$isWaliKelas && !$isStudentOwner && !$isParentOwner) {
+        $isWaka = ($user->role === 'vice_principal');
+        $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan($effectiveClassId !== null ? (int) $effectiveClassId : null));
+        $isWaliKelas = ($user->role === 'teacher' && $effectiveClassId !== null && $user->isWaliKelas((int) $effectiveClassId));
+        $isHistoricalVerifier = ($user->role === 'teacher' && $leaveRequest->verified_by !== null && (int) $leaveRequest->verified_by === (int) $user->id);
+        $isStudentOwner = ($user->role === 'student' && (int) $leaveRequest->student_id === (int) $user->id);
+        $isParentOwner = ($user->role === 'parent' && (int) $leaveRequest->student_id === (int) $user->linked_student_id);
+
+        if (!$isWaka && !$isKesiswaan && !$isWaliKelas && !$isHistoricalVerifier && !$isStudentOwner && !$isParentOwner) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melihat detail perizinan ini.',
@@ -261,9 +331,13 @@ class LeaveRequestController extends Controller
             }
         }
 
-        // 5. Simpan record perizinan
+        // 5. Simpan record perizinan beserta snapshot class_id & academic_year
+        $academicYear = SystemConfiguration::query()->value('academic_year') ?: '2026/2027';
+
         $leaveRequest = LeaveRequest::create([
             'student_id' => $studentId,
+            'class_id' => $student?->class_id,
+            'academic_year' => $academicYear,
             'applicant_id' => $user->id,
             'type' => $request->type,
             'category' => $request->category,
@@ -281,26 +355,29 @@ class LeaveRequestController extends Controller
             'data' => $leaveRequest->fresh([
                 'student:id,name,nis_nip,class_id',
                 'student.schoolClass:id,name,level',
+                'schoolClass:id,name,level',
                 'applicant:id,name,role',
             ]),
         ], 201);
     }
 
     /**
-     * Memverifikasi izin (Kesiswaan/Waka) ATAU mengedit pengajuan selama pending (Siswa/Ortu) (PRD 5.10 & 9.6).
+     * Memverifikasi izin (Kesiswaan kelas binaan/Waka) ATAU mengedit pengajuan selama pending (Siswa/Ortu) (PRD 5.10 & 9.6).
      * PATCH /api/leave-requests/{id}
      */
     public function update(Request $request, $id): JsonResponse
     {
-        $leaveRequest = LeaveRequest::findOrFail($id);
+        $leaveRequest = LeaveRequest::with('student:id,class_id')->findOrFail($id);
         $user = $request->user();
 
-        $isWaka = ($user->role === 'vice_principal');
-        $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
-        $isOwner = ($leaveRequest->applicant_id === $user->id || $leaveRequest->student_id === $user->id);
+        $effectiveClassId = $leaveRequest->class_id ?? $leaveRequest->student?->class_id;
 
-        // Cabang 1: Verifikasi oleh Guru Kesiswaan atau Waka Kurikulum
-        if ($isWaka || $isKesiswaan) {
+        $isWaka = ($user->role === 'vice_principal');
+        $isKesiswaanForClass = ($user->role === 'teacher' && $user->isKesiswaan($effectiveClassId !== null ? (int) $effectiveClassId : null));
+        $isOwner = ((int) $leaveRequest->applicant_id === (int) $user->id || (int) $leaveRequest->student_id === (int) $user->id);
+
+        // Cabang 1: Verifikasi oleh Guru Kesiswaan Kelas Binaan (Keputusan 3A & 4A) atau Waka Kurikulum
+        if ($isWaka || $isKesiswaanForClass) {
             // Jika ada payload verifikasi status
             if ($request->has('status') || $request->has('status_approval')) {
                 $request->validate([
@@ -329,6 +406,7 @@ class LeaveRequestController extends Controller
                     'data' => $leaveRequest->fresh([
                         'student:id,name,nis_nip,class_id',
                         'student.schoolClass:id,name,level',
+                        'schoolClass:id,name,level',
                         'applicant:id,name,role',
                         'verifier:id,name,nis_nip',
                     ]),

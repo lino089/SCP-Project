@@ -189,6 +189,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           </NavLink>
 
           <NavLink
+            to="/teacher/calendar"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <Calendar size={16} strokeWidth={1.5} />
+            <span>Kalender Akademik</span>
+          </NavLink>
+
+          <NavLink
             to="/teacher/schedule"
             className={({ isActive }) =>
               `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
@@ -282,6 +293,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           </NavLink>
 
           <NavLink
+            to="/student/calendar"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <Calendar size={16} strokeWidth={1.5} />
+            <span>Kalender &amp; Kegiatan</span>
+          </NavLink>
+
+          <NavLink
             to="/student/schedule"
             className={({ isActive }) =>
               `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
@@ -333,6 +355,17 @@ export default function Sidebar({ isOpen = false, onClose }) {
           >
             <Eye size={16} strokeWidth={1.5} />
             <span>Monitoring Anak</span>
+          </NavLink>
+
+          <NavLink
+            to="/parent/calendar"
+            className={({ isActive }) =>
+              `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+            }
+            onClick={() => onClose?.()}
+          >
+            <Calendar size={16} strokeWidth={1.5} />
+            <span>Kalender Sekolah</span>
           </NavLink>
         </>
       );

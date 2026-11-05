@@ -91,6 +91,7 @@ export const recycleBinApi = {
 
 export const teacherAssignmentApi = {
   getAssignmentMatrix: () => api.get('/teachers/assignments/matrix'),
+  getAssignmentHistories: (params) => api.get('/teachers/assignments/histories', { params }),
   assignRole: (teacherId, data) => api.post(`/teachers/${teacherId}/assignments`, data),
   revokeRole: (teacherId, assignmentId) => api.delete(`/teachers/${teacherId}/assignments/${assignmentId}`),
   importPreview: (formData) =>

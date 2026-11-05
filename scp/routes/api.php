@@ -4,6 +4,7 @@ use App\Http\Controllers\API\AcademicEventController;
 use App\Http\Controllers\API\AcademicSettingController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\ForgotPasswordController;
 use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\LeaveRequestController;
 use App\Http\Controllers\API\MasterDataSummaryController;
@@ -33,6 +34,14 @@ Route::get('/ping', function () {
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/auth/google', [AuthController::class, 'loginWithGoogle']);
 
+// Pemulihan Kata Sandi Mandiri (Forgot Password via Email OTP)
+Route::prefix('auth/forgot-password')->group(function () {
+    Route::post('/check-identity', [ForgotPasswordController::class, 'checkIdentity']);
+    Route::post('/send-otp', [ForgotPasswordController::class, 'sendOtp']);
+    Route::post('/verify-otp', [ForgotPasswordController::class, 'verifyOtp']);
+    Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+});
+
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -43,6 +52,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/me/phone', [ProfileController::class, 'requestPhoneOtp']);
     Route::post('/me/phone/verify', [ProfileController::class, 'verifyPhoneOtp']);
     Route::post('/me/google-link', [ProfileController::class, 'linkGoogle']);
+    Route::post('/me/google-unlink', [ProfileController::class, 'unlinkGoogle']);
     Route::patch('/me/password', [ProfileController::class, 'changePassword']);
     Route::post('/me/verify-password', [AuthController::class, 'verifyPassword']);
 
@@ -58,6 +68,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
 
     // Kalender Akademik & Agenda Khusus KBM (Read-only untuk seluruh user terautentikasi)
+    Route::get('/academic-events/my-calendar', [AcademicEventController::class, 'myCalendar']);
     Route::get('/academic-events/check-exemption', [AcademicEventController::class, 'checkExemption']);
     Route::get('/academic-events', [AcademicEventController::class, 'index']);
     Route::get('/academic-events/{id}', [AcademicEventController::class, 'show']);
@@ -118,6 +129,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/teachers/import-template', [TeacherController::class, 'downloadTemplate']);
         Route::post('/teachers/import', [TeacherController::class, 'import']);
         Route::get('/teachers/assignments/matrix', [TeacherController::class, 'getAssignmentMatrix']);
+        Route::get('/teachers/assignments/histories', [TeacherController::class, 'getAssignmentHistories']);
         Route::post('/teachers/assignments/import-preview', [TeacherController::class, 'importPreview']);
         Route::post('/teachers/assignments/import-commit', [TeacherController::class, 'importCommit']);
         Route::post('/teachers', [TeacherController::class, 'store']);

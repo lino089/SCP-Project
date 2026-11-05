@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
   CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { Button, Input, Badge } from '../../components/shared';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { Button, Input, Badge, Modal } from '../../components/shared';
 import { authApi } from '../../services/api';
 import './Profile.css';
 
@@ -32,7 +34,86 @@ export default function ProfilePage() {
   const [waError, setWaError] = useState('');
 
   // Google Linking state
+  const { isLoaded: isGoogleLoaded, renderGoogleButton } = useGoogleAuth();
   const [googleConnected, setGoogleConnected] = useState(Boolean(user?.google_id));
+  const [googleMsg, setGoogleMsg] = useState('');
+  const [googleError, setGoogleError] = useState('');
+  const [unlinkModalOpen, setUnlinkModalOpen] = useState(false);
+  const [unlinkPassword, setUnlinkPassword] = useState('');
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [unlinkError, setUnlinkError] = useState('');
+  const googleBtnRef = useRef(null);
+
+  useEffect(() => {
+    setGoogleConnected(Boolean(user?.google_id));
+  }, [user?.google_id]);
+
+  const handleLinkGoogle = async (credential) => {
+    setGoogleError('');
+    setGoogleMsg('');
+
+    try {
+      const res = await authApi.linkGoogle(credential);
+      const updatedUser = res?.data?.user;
+      if (updatedUser) {
+        updateUserProfile(updatedUser);
+        if (updatedUser.email && !email) {
+          setEmail(updatedUser.email);
+          setEmailVerified(true);
+        }
+      }
+      setGoogleConnected(true);
+      if (googleBtnRef.current) {
+        googleBtnRef.current.innerHTML = '';
+      }
+      setGoogleMsg(res?.message || 'Akun Google berhasil ditautkan ke akun SCP Anda.');
+    } catch (err) {
+      setGoogleError(err.message || 'Gagal menautkan akun Google. Pastikan akun belum digunakan oleh pengguna lain.');
+    }
+  };
+
+  const handleUnlinkGoogle = async () => {
+    if (!unlinkPassword) {
+      setUnlinkError('Kata sandi akun wajib diisi untuk konfirmasi keamanan.');
+      return;
+    }
+
+    setUnlinkLoading(true);
+    setUnlinkError('');
+
+    try {
+      const res = await authApi.unlinkGoogle(unlinkPassword);
+      updateUserProfile({
+        google_id: null,
+        google_email: null,
+        google_linked_at: null,
+      });
+      setGoogleConnected(false);
+      setUnlinkModalOpen(false);
+      setUnlinkPassword('');
+      setGoogleMsg(res?.message || 'Tautan akun Google berhasil dilepas.');
+    } catch (err) {
+      setUnlinkError(err.message || 'Kata sandi tidak valid.');
+    } finally {
+      setUnlinkLoading(false);
+    }
+  };
+
+  // Render Google button container when not linked and GIS script is loaded
+  useEffect(() => {
+    if (!googleConnected && isGoogleLoaded && googleBtnRef.current) {
+      googleBtnRef.current.innerHTML = '';
+      renderGoogleButton(googleBtnRef.current, {
+        onSuccess: handleLinkGoogle,
+        onError: (err) => setGoogleError(err.message || 'Gagal menghubungkan akun Google.'),
+        text: 'continue_with',
+        theme: 'outline',
+        size: 'medium',
+      });
+    } else if (googleConnected && googleBtnRef.current) {
+      googleBtnRef.current.innerHTML = '';
+    }
+  }, [googleConnected, isGoogleLoaded, renderGoogleButton]);
 
   // Password change state
   const [oldPassword, setOldPassword] = useState('');
@@ -403,25 +484,62 @@ export default function ProfilePage() {
             <p className="text-xs text-gray-500 mb-3">
               Tautkan akun Google untuk mempermudah login sekali klik tanpa perlu mengetik kata sandi.
             </p>
+
+            {googleMsg && (
+              <div className="p-3 mb-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-700 text-xs flex items-center gap-2">
+                <CheckCircle size={15} className="flex-shrink-0" />
+                <span>{googleMsg}</span>
+              </div>
+            )}
+
+            {googleError && (
+              <div className="p-3 mb-3 bg-red-50 border border-red-200 rounded text-red-600 text-xs flex items-center gap-2">
+                <AlertCircle size={15} className="flex-shrink-0" />
+                <span>{googleError}</span>
+              </div>
+            )}
+
             {googleConnected ? (
-              <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-xs font-medium">
-                <span className="flex items-center gap-2">
+              <div
+                key="google-linked-card"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg gap-3"
+              >
+                <div className="flex items-center gap-2.5">
                   <span className="status-dot status-dot--success" />
-                  <span>Akun Google Terhubung</span>
-                </span>
-                <span className="text-[11px] text-emerald-600 font-semibold">Aktif</span>
+                  <div>
+                    <span className="text-xs font-semibold text-emerald-900 block">Akun Google Terhubung</span>
+                    <span className="text-[11px] text-emerald-700 font-mono">
+                      {user?.google_email || user?.email || 'Akun Google aktif'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <span className="text-[11px] text-emerald-600 font-semibold px-2 py-0.5 bg-emerald-100 rounded">
+                    Aktif
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUnlinkPassword('');
+                      setUnlinkError('');
+                      setUnlinkModalOpen(true);
+                    }}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 text-xs py-1 px-2.5 h-auto"
+                  >
+                    Lepas Tautan
+                  </Button>
+                </div>
               </div>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setGoogleConnected(true);
-                  updateUserProfile({ google_id: 'google_linked_demo' });
-                }}
-              >
-                Tautkan Akun Google Saya
-              </Button>
+              <div key="google-unlinked-card" className="space-y-3">
+                <div className="flex items-center">
+                  <div ref={googleBtnRef} className="inline-block min-h-[40px]" />
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Klik tombol di atas untuk menautkan akun Google Anda ke akun SCP.
+                </p>
+              </div>
             )}
           </div>
 
@@ -487,6 +605,74 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Konfirmasi Pelepasan Tautan Google (Step-Up Authentication) */}
+      <Modal
+        isOpen={unlinkModalOpen}
+        onClose={() => {
+          if (!unlinkLoading) {
+            setUnlinkModalOpen(false);
+            setUnlinkError('');
+            setUnlinkPassword('');
+          }
+        }}
+        title="Lepas Tautan Akun Google"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUnlinkModalOpen(false);
+                setUnlinkError('');
+                setUnlinkPassword('');
+              }}
+              disabled={unlinkLoading}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleUnlinkGoogle}
+              loading={unlinkLoading}
+            >
+              Ya, Lepas Tautan
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 py-1">
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Demi keamanan data akun Anda, masukkan <strong>kata sandi akun SCP</strong> saat ini untuk mengonfirmasi pelepasan tautan akun Google (
+            <span className="font-semibold text-gray-800">
+              {user?.google_email || user?.email}
+            </span>
+            ).
+          </p>
+
+          {unlinkError && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-600 flex items-center gap-2">
+              <AlertCircle size={14} className="flex-shrink-0" />
+              <span>{unlinkError}</span>
+            </div>
+          )}
+
+          <Input
+            type="password"
+            label="Kata Sandi Akun SCP"
+            placeholder="Masukkan kata sandi akun Anda"
+            value={unlinkPassword}
+            onChange={(e) => {
+              setUnlinkPassword(e.target.value);
+              if (unlinkError) setUnlinkError('');
+            }}
+            required
+            autoFocus
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -28,6 +28,8 @@ use Laravel\Sanctum\HasApiTokens;
     'class_id',
     'linked_student_id',
     'google_id',
+    'google_email',
+    'google_linked_at',
     'phone_number',
     'graduation_date',
     'is_held_back',
@@ -56,6 +58,7 @@ class User extends Authenticatable
             'student_number' => 'integer',
             'is_held_back' => 'boolean',
             'is_active' => 'boolean',
+            'google_linked_at' => 'datetime',
             'archived_at' => 'datetime',
         ];
     }
@@ -103,11 +106,32 @@ class User extends Authenticatable
     }
 
     /**
-     * Relasi ke penugasan tambahan guru (Kesiswaan / Wali Kelas)
+     * Relasi ke penugasan tambahan guru yang SEDANG AKTIF (Kesiswaan / Wali Kelas)
      */
     public function assignments(): HasMany
     {
-        return $this->hasMany(TeacherAssignment::class, 'user_id');
+        return $this->hasMany(TeacherAssignment::class, 'user_id')
+            ->where('is_active', true);
+    }
+
+    /**
+     * Relasi ke seluruh riwayat penugasan tambahan guru (aktif maupun lampau/nonaktif)
+     */
+    public function assignmentHistories(): HasMany
+    {
+        return $this->hasMany(TeacherAssignment::class, 'user_id')
+            ->orderByDesc('started_at')
+            ->orderByDesc('id');
+    }
+
+    /**
+     * Relasi riwayat kenaikan/perpindahan kelas siswa
+     */
+    public function classHistories(): HasMany
+    {
+        return $this->hasMany(StudentClassHistory::class, 'student_id')
+            ->orderByDesc('processed_at')
+            ->orderByDesc('id');
     }
 
     /**
@@ -206,6 +230,70 @@ class User extends Authenticatable
     public function linkedStudent(): BelongsTo
     {
         return $this->belongsTo(User::class, 'linked_student_id');
+    }
+
+    /**
+     * Mengambil seluruh siswa yang terhubung dengan akun orang tua ini.
+     * Mendukung anak tunggal maupun multi-anak dari akun wali dengan kontak/identitas yang sama.
+     *
+     * @return \Illuminate\Support\Collection<int, User>
+     */
+    public function getLinkedStudents(): \Illuminate\Support\Collection
+    {
+        if ($this->role !== 'parent') {
+            return collect();
+        }
+
+        $students = collect();
+        if ($this->linked_student_id) {
+            $primary = $this->linkedStudent;
+            if ($primary) {
+                $students->push($primary);
+            }
+        }
+
+        // Cari akun wali lain yang memiliki phone_number, email, atau google_id yang sama dan valid
+        $hasIdentifier = false;
+        $query = static::where('role', 'parent')
+            ->where('id', '!=', $this->id)
+            ->whereNotNull('linked_student_id');
+
+        $query->where(function ($sub) use (&$hasIdentifier) {
+            if (!empty($this->phone_number)) {
+                $sub->orWhere('phone_number', $this->phone_number);
+                $hasIdentifier = true;
+            }
+            if (!empty($this->email)) {
+                $sub->orWhere('email', $this->email);
+                $hasIdentifier = true;
+            }
+            if (!empty($this->google_id)) {
+                $sub->orWhere('google_id', $this->google_id);
+                $hasIdentifier = true;
+            }
+        });
+
+        if ($hasIdentifier) {
+            $otherParentStudentIds = $query->pluck('linked_student_id')->filter()->unique();
+            if ($otherParentStudentIds->isNotEmpty()) {
+                $siblings = static::whereIn('id', $otherParentStudentIds)
+                    ->where('role', 'student')
+                    ->with('schoolClass:id,name,level')
+                    ->get();
+                foreach ($siblings as $sib) {
+                    if (!$students->contains('id', $sib->id)) {
+                        $students->push($sib);
+                    }
+                }
+            }
+        }
+
+        // Pastikan relasi schoolClass termuat
+        $students->each(function ($student) {
+            $student->loadMissing('schoolClass:id,name,level');
+        });
+
+        return $students->values();
     }
 
     /**

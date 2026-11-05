@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\GoogleAuthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -112,14 +113,14 @@ class AuthController extends Controller
      * Login Single Sign-On (SSO) menggunakan Google ID Token
      * POST /api/auth/google
      */
-    public function loginWithGoogle(Request $request)
+    public function loginWithGoogle(Request $request, GoogleAuthService $googleAuthService)
     {
         $request->validate([
             'id_token' => 'required|string',
             'device_name' => 'required|string',
         ]);
 
-        $googleData = ProfileController::verifyGoogleIdToken($request->id_token);
+        $googleData = $googleAuthService->verifyIdToken($request->id_token);
 
         if (! $googleData) {
             return response()->json([
@@ -128,38 +129,33 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $googleId = $googleData['sub'];
-        $user = User::where('google_id', $googleId)->first();
+        $result = $googleAuthService->loginWithGoogle($googleData, $request->device_name);
 
-        if (! $user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akun Google belum terhubung ke akun SCP mana pun. Silakan login menggunakan NIS/NIP dan tautkan akun Google di menu profil.',
-            ], 404);
-        }
+        if (! $result['success']) {
+            $status = match ($result['status']) {
+                'not_linked' => 404,
+                'inactive' => 403,
+                default => 422,
+            };
 
-        if ($user->is_active === false) {
-            return response()->json([
+            $response = [
                 'success' => false,
-                'message' => 'Akun Anda telah dinonaktifkan atau berada di tempat sampah. Silakan hubungi pihak Waka/Administrator sekolah.',
-                'errors' => [
+                'message' => $result['message'],
+            ];
+
+            if ($result['status'] === 'inactive') {
+                $response['errors'] = [
                     'account' => ['Akun telah dinonaktifkan atau berada di tempat sampah.'],
-                ],
-            ], 403);
-        }
+                ];
+            }
 
-        $expiresAt = now()->addMinutes((int) (config('sanctum.expiration') ?? 43200));
-        $token = $user->createToken($request->device_name, ['*'], $expiresAt);
+            return response()->json($response, $status);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil Login dengan Google',
-            'data' => [
-                'token' => $token->plainTextToken,
-                'expires_at' => $expiresAt,
-                'must_change_password' => (bool) $user->must_change_password,
-                'user' => $user->load('assignments'),
-            ],
+            'message' => $result['message'],
+            'data' => $result['data'],
         ], 200);
     }
 

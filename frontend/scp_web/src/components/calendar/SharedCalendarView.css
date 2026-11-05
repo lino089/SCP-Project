@@ -1,0 +1,343 @@
+/* SharedCalendarView.css - Exness Clean Precision Styling */
+
+.shared-calendar-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Toolbar & Navigasi Bulan */
+.shared-calendar-toolbar {
+  background: #FFFFFF;
+  padding: 12px 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+@media (min-width: 640px) {
+  .shared-calendar-toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.shared-calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shared-calendar-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.shared-calendar-nav-btn:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
+
+.shared-calendar-nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shared-calendar-today-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.shared-calendar-today-btn:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
+
+.shared-calendar-month-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1E293B;
+  margin-left: 6px;
+}
+
+.shared-calendar-toolbar-extra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Calendar Grid Wrapper */
+.shared-calendar-grid-wrapper {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.shared-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  text-align: center;
+}
+
+.shared-calendar-weekday-cell {
+  padding: 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shared-calendar-weekday-cell--weekend {
+  color: #EF4444;
+}
+
+.shared-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: #E2E8F0;
+  gap: 1px;
+}
+
+.shared-calendar-day-cell {
+  background: #FFFFFF;
+  min-height: 110px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.1s ease;
+  position: relative;
+}
+
+.shared-calendar-day-cell:hover {
+  background: #F8FAFC;
+}
+
+.shared-calendar-day-cell--outside {
+  background: #FAFAFA;
+  color: #94A3B8;
+}
+
+.shared-calendar-day-cell--today {
+  background: #EFF6FF;
+}
+
+.shared-calendar-day-cell--today .shared-calendar-day-num {
+  background: #2563EB;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.shared-calendar-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.shared-calendar-day-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.shared-calendar-day-cell--outside .shared-calendar-day-num {
+  color: #94A3B8;
+}
+
+.shared-calendar-add-btn {
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.shared-calendar-day-cell:hover .shared-calendar-add-btn {
+  opacity: 1;
+}
+
+.shared-calendar-add-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+/* Teacher Status Tag in Calendar Day Cell */
+.shared-calendar-teacher-status {
+  margin-bottom: 4px;
+}
+
+.shared-calendar-teacher-pill {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.shared-calendar-teacher-pill--free {
+  background-color: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+
+.shared-calendar-teacher-pill--partial {
+  background-color: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+/* Event Chips */
+.shared-calendar-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  max-height: 80px;
+}
+
+.shared-calendar-event-chip {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.1s ease;
+  border-left-width: 3px;
+  border-style: solid;
+  line-height: 1.25;
+}
+
+.shared-calendar-event-chip:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.96);
+}
+
+.shared-calendar-event-chip--holiday {
+  background-color: #FEF2F2;
+  color: #991B1B;
+  border-color: #EF4444;
+}
+
+.shared-calendar-event-chip--school_event,
+.shared-calendar-event-chip--class_event {
+  background-color: #FFFBEB;
+  color: #92400E;
+  border-color: #F59E0B;
+}
+
+.shared-calendar-event-chip--exam {
+  background-color: #EEF2FF;
+  color: #3730A3;
+  border-color: #4F46E5;
+}
+
+/* Legend Bar */
+.shared-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.shared-calendar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shared-calendar-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.shared-calendar-legend-dot--holiday {
+  background-color: #EF4444;
+}
+
+.shared-calendar-legend-dot--event {
+  background-color: #F59E0B;
+}
+
+.shared-calendar-legend-dot--exam {
+  background-color: #4F46E5;
+}
+
+.shared-calendar-legend-dot--free {
+  background-color: #22C55E;
+}
+
+.shared-calendar-legend-dot--partial {
+  background-color: #F59E0B;
+}
+
+/* Mobile Scroll & Responsive Grid */
+@media (max-width: 768px) {
+  .shared-calendar-grid-wrapper {
+    overflow-x: auto;
+  }
+  .shared-calendar-weekdays,
+  .shared-calendar-days {
+    min-width: 600px;
+  }
+  .shared-calendar-day-cell {
+    min-height: 95px;
+    padding: 6px;
+  }
+}

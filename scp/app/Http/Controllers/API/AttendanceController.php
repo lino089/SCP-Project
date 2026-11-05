@@ -11,6 +11,27 @@ use Illuminate\Http\Request;
 class AttendanceController extends Controller
 {
     /**
+     * Helper untuk memfilter presensi berdasarkan kelas tempat sesi KBM berlangsung (journal.schedule.class_id),
+     * sehingga saat siswa naik kelas atau lulus, histori presensinya tidak ikut berpindah kelas.
+     */
+    private function applyClassFilter($query, array|int $classIds): void
+    {
+        $ids = array_values(array_filter(is_array($classIds) ? $classIds : [$classIds], fn ($v) => $v !== null));
+        if (empty($ids)) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($q) use ($ids) {
+            $q->whereHas('journal.schedule', fn ($sq) => $sq->whereIn('class_id', $ids))
+                ->orWhere(function ($sub) use ($ids) {
+                    $sub->whereNull('journal_id')
+                        ->whereHas('student', fn ($sq) => $sq->whereIn('class_id', $ids));
+                });
+        });
+    }
+
+    /**
      * Menampilkan rekapitulasi presensi multi-role (PRD 9.6).
      * GET /api/attendances
      */
@@ -25,21 +46,22 @@ class AttendanceController extends Controller
                 'journal:id,schedule_id,date,status,topic_description',
                 'journal.schedule.subject:id,name',
                 'journal.schedule.teacher:id,name',
+                'journal.schedule.schoolClass:id,name,level',
             ]);
 
         // Role Scoping:
         if ($user->role === 'vice_principal' || ($user->role === 'teacher' && $user->isKesiswaan())) {
             // Waka Kurikulum & Guru Kesiswaan: Melihat data presensi seluruh sekolah
             if ($request->filled('class_id')) {
-                $query->whereHas('student', fn ($q) => $q->where('class_id', $request->integer('class_id')));
+                $this->applyClassFilter($query, $request->integer('class_id'));
             }
         } elseif ($user->role === 'teacher' && $user->isWaliKelas()) {
-            // Wali Kelas: Otomatis ter-scoped hanya siswa pada kelas yang diampunya
-            $waliClassIds = $user->assignments()->where('type', 'wali_kelas')->pluck('class_id');
-            $query->whereHas('student', fn ($q) => $q->whereIn('class_id', $waliClassIds));
+            // Wali Kelas: Otomatis ter-scoped hanya pada kelas yang diampunya (berdasarkan kelas jadwal KBM)
+            $waliClassIds = $user->homeroomClassIds();
+            $this->applyClassFilter($query, $waliClassIds);
 
-            if ($request->filled('class_id') && in_array($request->integer('class_id'), $waliClassIds->toArray())) {
-                $query->whereHas('student', fn ($q) => $q->where('class_id', $request->integer('class_id')));
+            if ($request->filled('class_id') && in_array($request->integer('class_id'), $waliClassIds, true)) {
+                $this->applyClassFilter($query, $request->integer('class_id'));
             }
         } elseif ($user->role === 'teacher') {
             // Guru Mapel Reguler: Ter-scoped pada jurnal jadwal miliknya atau yang digantikannya
@@ -49,7 +71,7 @@ class AttendanceController extends Controller
             });
 
             if ($request->filled('class_id')) {
-                $query->whereHas('student', fn ($q) => $q->where('class_id', $request->integer('class_id')));
+                $this->applyClassFilter($query, $request->integer('class_id'));
             }
         } elseif ($user->role === 'student') {
             // Siswa: Auto-scoped hanya data presensi dirinya sendiri

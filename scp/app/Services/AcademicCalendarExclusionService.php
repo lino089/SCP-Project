@@ -188,4 +188,100 @@ class AcademicCalendarExclusionService
             })->values();
         }
     }
+
+    /**
+     * Resolusi panduan kepastian kehadiran bagi Siswa dan Orang Tua.
+     */
+    public function getAttendanceGuidance(AcademicEvent $event): string
+    {
+        if ($event->type === AcademicEvent::TYPE_HOLIDAY) {
+            return 'Hari Libur Resmi Sekolah — Siswa libur dan belajar mandiri di rumah.';
+        }
+
+        if ((bool) $event->disables_teaching) {
+            if ($event->type === AcademicEvent::TYPE_EXAM) {
+                return 'Masa Penilaian / Ujian — Siswa wajib hadir mengikuti asesmen sesuai jadwal. KBM reguler dialihkan.';
+            }
+
+            return 'Kegiatan Wajib Sekolah/Lapangan — Siswa wajib hadir mengikuti agenda kegiatan. KBM reguler di kelas ditiadakan.';
+        }
+
+        return 'Kegiatan Pendamping Sekolah — Proses Belajar Mengajar (KBM) reguler tetap berjalan normal.';
+    }
+
+    /**
+     * Mengevaluasi status mengajar harian guru untuk setiap tanggal dalam rentang tertentu.
+     * Mengembalikan array dengan key 'YYYY-MM-DD' => status info.
+     *
+     * @param \App\Models\User $teacher
+     * @param \Illuminate\Support\Collection $schedules
+     * @param \Carbon\Carbon $startDate
+     * @param \Carbon\Carbon $endDate
+     * @return array<string, array>
+     */
+    public function evaluateDailyTeachingStatus(
+        $teacher,
+        Collection $schedules,
+        Carbon $startDate,
+        Carbon $endDate
+    ): array {
+        $dailyStatus = [];
+        $period = CarbonPeriod::create($startDate, $endDate);
+
+        // Preload events for this range
+        $this->preloadEventsForRange($startDate, $endDate);
+
+        foreach ($period as $dt) {
+            $dateStr = $dt->toDateString();
+            // Di SCP, Senin = 1, Minggu = 7 (ISO-8601 day of week)
+            $dayOfWeek = (int) $dt->dayOfWeekIso;
+
+            // Jadwal guru pada hari tersebut
+            $daySchedules = $schedules->filter(fn ($s) => (int) $s->day_of_week === $dayOfWeek);
+
+            if ($daySchedules->isEmpty()) {
+                continue;
+            }
+
+            $exemptedClassNames = [];
+            $activeClassNames = [];
+
+            foreach ($daySchedules as $sched) {
+                $cId = (int) $sched->class_id;
+                $level = $sched->schoolClass?->level ?? 10;
+                $cName = $sched->schoolClass?->name ?? "Kelas #{$cId}";
+
+                $disablingEvent = $this->getActiveDisablingEvent($cId, $level, $dateStr);
+
+                if ($disablingEvent !== null) {
+                    $exemptedClassNames[$cId] = $cName;
+                } else {
+                    $activeClassNames[$cId] = $cName;
+                }
+            }
+
+            $exemptedCount = count($exemptedClassNames);
+            $activeCount = count($activeClassNames);
+
+            if ($exemptedCount > 0 && $activeCount === 0) {
+                $dailyStatus[$dateStr] = [
+                    'date' => $dateStr,
+                    'status' => 'full_free',
+                    'label' => 'Jadwal Anda Bebas',
+                    'exempted_classes' => array_values($exemptedClassNames),
+                    'active_classes' => [],
+                ];
+            } elseif ($exemptedCount > 0 && $activeCount > 0) {
+                $dailyStatus[$dateStr] = [
+                    'date' => $dateStr,
+                    'status' => 'partial_teaching',
+                    'label' => 'KBM Parsial: Tetap Mengajar di ' . implode(', ', array_values($activeClassNames)),
+                    'exempted_classes' => array_values($exemptedClassNames),
+                    'active_classes' => array_values($activeClassNames),
+                ];
+            }
+        }
+
+        return $dailyStatus;
+    }
 }

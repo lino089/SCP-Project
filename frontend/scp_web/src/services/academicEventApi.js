@@ -5,6 +5,7 @@ import api from './api';
  */
 export const academicEventApi = {
   getEvents: (params) => api.get('/academic-events', { params }),
+  getMyCalendar: (params) => api.get('/academic-events/my-calendar', { params }),
   getEventById: (id) => api.get(`/academic-events/${id}`),
   checkExemption: (params) => api.get('/academic-events/check-exemption', { params }),
   createEvent: (data) => api.post('/academic-events', data),

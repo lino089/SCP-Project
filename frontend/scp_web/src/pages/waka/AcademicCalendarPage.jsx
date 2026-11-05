@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Trash2,
   Edit2,
@@ -13,7 +11,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import academicEventApi from '../../services/academicEventApi';
+import { classApi } from '../../services/masterDataApi';
 import AcademicEventModal from './components/AcademicEventModal';
+import SharedCalendarView from '../../components/calendar/SharedCalendarView';
 import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
@@ -25,15 +25,19 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-const WEEKDAY_NAMES = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-
 export default function AcademicCalendarPage() {
   const today = useMemo(() => new Date(), []);
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth() + 1); // 1 - 12
   const [events, setEvents] = useState([]);
+  const [summaryData, setSummaryData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters
   const [filterType, setFilterType] = useState('ALL');
+  const [filterGrade, setFilterGrade] = useState('ALL');
+  const [filterClassId, setFilterClassId] = useState('ALL');
+  const [classesList, setClassesList] = useState([]);
 
   // Feedback notifications
   const [feedbackMessage, setFeedbackMessage] = useState(null);
@@ -60,24 +64,44 @@ export default function AcademicCalendarPage() {
     setTimeout(() => setErrorMessage(null), 5000);
   };
 
+  // Muat daftar kelas untuk dropdown filter rombel
+  useEffect(() => {
+    classApi.getClasses({ per_page: 100 })
+      .then((res) => {
+        if (res.data && Array.isArray(res.data)) {
+          setClassesList(res.data);
+        } else if (res.data?.data && Array.isArray(res.data.data)) {
+          setClassesList(res.data.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const loadEvents = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await academicEventApi.getEvents({
+      const params = {
         year: currentYear,
         month: currentMonth,
-      });
-      if (res.data?.success && Array.isArray(res.data.data)) {
+      };
+
+      if (filterType !== 'ALL') params.type = filterType;
+      if (filterGrade !== 'ALL') params.grade = filterGrade;
+      if (filterClassId !== 'ALL') params.class_id = Number(filterClassId);
+
+      const res = await academicEventApi.getMyCalendar(params);
+      if (res.data?.success && res.data.data) {
+        setEvents(res.data.data.events || []);
+        setSummaryData(res.data.data.summary || null);
+      } else if (Array.isArray(res.data?.data)) {
         setEvents(res.data.data);
-      } else if (Array.isArray(res.data)) {
-        setEvents(res.data);
       }
     } catch (err) {
       showToastError(err.response?.data?.message || err.message || 'Gagal memuat agenda kalender akademik.');
     } finally {
       setIsLoading(false);
     }
-  }, [currentYear, currentMonth]);
+  }, [currentYear, currentMonth, filterType, filterGrade, filterClassId]);
 
   useEffect(() => {
     loadEvents();
@@ -107,83 +131,16 @@ export default function AcademicCalendarPage() {
     setCurrentMonth(today.getMonth() + 1);
   };
 
-  // Kalkulasi Grid Tanggal Bulanan (Senin - Minggu)
-  const calendarDays = useMemo(() => {
-    const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1);
-    const lastDayOfMonth = new Date(currentYear, currentMonth, 0);
-
-    // Dapatkan hari dalam minggu untuk tanggal 1 (0 = Minggu, 1 = Senin, dst.)
-    let startDayOfWeek = firstDayOfMonth.getDay();
-    // Konversi ke format Senin = 0, Minggu = 6
-    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
-
-    const days = [];
-    const prevMonthLastDay = new Date(currentYear, currentMonth - 1, 0).getDate();
-
-    // Hari dari bulan sebelumnya untuk mengisi slot awal
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-      const dayNum = prevMonthLastDay - i;
-      const prevDate = new Date(currentYear, currentMonth - 2, dayNum);
-      const dateStr = prevDate.toISOString().split('T')[0];
-      days.push({
-        dateStr,
-        dayNumber: dayNum,
-        isCurrentMonth: false,
-        isWeekend: prevDate.getDay() === 0 || prevDate.getDay() === 6,
-      });
-    }
-
-    // Hari dari bulan aktif
-    for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
-      const curDate = new Date(currentYear, currentMonth - 1, i);
-      const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      days.push({
-        dateStr,
-        dayNumber: i,
-        isCurrentMonth: true,
-        isWeekend: curDate.getDay() === 0 || curDate.getDay() === 6,
-      });
-    }
-
-    // Sisa slot untuk melengkapi baris terakhir kelipatan 7
-    const remaining = (7 - (days.length % 7)) % 7;
-    for (let i = 1; i <= remaining; i++) {
-      const nextDate = new Date(currentYear, currentMonth, i);
-      const dateStr = nextDate.toISOString().split('T')[0];
-      days.push({
-        dateStr,
-        dayNumber: i,
-        isCurrentMonth: false,
-        isWeekend: nextDate.getDay() === 0 || nextDate.getDay() === 6,
-      });
-    }
-
-    return days;
-  }, [currentYear, currentMonth]);
-
-  // Mapping Event ke Tanggal Grid
-  const eventsByDate = useMemo(() => {
-    const map = {};
-    events.forEach((e) => {
-      if (filterType !== 'ALL' && e.type !== filterType) {
-        return;
-      }
-
-      const start = e.start_date;
-      const end = e.end_date;
-
-      calendarDays.forEach((day) => {
-        if (day.dateStr >= start && day.dateStr <= end) {
-          if (!map[day.dateStr]) map[day.dateStr] = [];
-          map[day.dateStr].push(e);
-        }
-      });
-    });
-    return map;
-  }, [events, calendarDays, filterType]);
-
   // KPI Summary
   const kpiData = useMemo(() => {
+    if (summaryData) {
+      return {
+        totalAgenda: summaryData.total_events || 0,
+        holidayCount: summaryData.holiday_count || 0,
+        classEventCount: (summaryData.class_event_count || 0) + (summaryData.school_event_count || 0),
+        examCount: summaryData.exam_count || 0,
+      };
+    }
     const holidays = events.filter((e) => e.type === 'holiday');
     const classEvents = events.filter((e) => e.type === 'class_event' || e.type === 'school_event');
     const exams = events.filter((e) => e.type === 'exam');
@@ -193,7 +150,7 @@ export default function AcademicCalendarPage() {
       classEventCount: classEvents.length,
       examCount: exams.length,
     };
-  }, [events]);
+  }, [events, summaryData]);
 
   const handleOpenCreateModal = (prefillDate = null) => {
     setEditingEvent(prefillDate ? { start_date: prefillDate, end_date: prefillDate } : null);
@@ -249,6 +206,10 @@ export default function AcademicCalendarPage() {
       return <Badge variant="info">Tingkat {grades}</Badge>;
     }
     if (e.scope_type === 'class') {
+      if (Array.isArray(e.target_classes) && e.target_classes.length > 0) {
+        const names = e.target_classes.map((c) => c.name).join(', ');
+        return <Badge variant="warning">{names}</Badge>;
+      }
       const count = (e.scope_targets || []).length;
       return <Badge variant="warning">{count} Rombel</Badge>;
     }
@@ -269,6 +230,68 @@ export default function AcademicCalendarPage() {
         return <Badge variant="secondary">{type}</Badge>;
     }
   };
+
+  // Filter rombel berdasarkan grade terpilih
+  const filteredClassOptions = useMemo(() => {
+    if (filterGrade === 'ALL') return classesList;
+    return classesList.filter((c) => {
+      const lvl = String(c.level || '').toUpperCase();
+      if (filterGrade === '10') return lvl === '10' || lvl === 'X';
+      if (filterGrade === '11') return lvl === '11' || lvl === 'XI';
+      if (filterGrade === '12') return lvl === '12' || lvl === 'XII';
+      return true;
+    });
+  }, [classesList, filterGrade]);
+
+  // Toolbar kanan untuk SharedCalendarView
+  const calendarToolbarRight = (
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Filter Kategori */}
+      <select
+        value={filterType}
+        onChange={(e) => setFilterType(e.target.value)}
+        className="h-8 px-2.5 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-blue-500"
+        title="Filter Kategori Agenda"
+      >
+        <option value="ALL">Semua Kategori</option>
+        <option value="holiday">Hari Libur Resmi</option>
+        <option value="school_event">Kegiatan Sekolah</option>
+        <option value="class_event">Kegiatan Tingkat/Rombel</option>
+        <option value="exam">Masa Ujian / Asesmen</option>
+      </select>
+
+      {/* Filter Tingkat */}
+      <select
+        value={filterGrade}
+        onChange={(e) => {
+          setFilterGrade(e.target.value);
+          setFilterClassId('ALL');
+        }}
+        className="h-8 px-2.5 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-blue-500"
+        title="Filter Tingkat Kelas"
+      >
+        <option value="ALL">Semua Tingkat</option>
+        <option value="10">Tingkat 10 (X)</option>
+        <option value="11">Tingkat 11 (XI)</option>
+        <option value="12">Tingkat 12 (XII)</option>
+      </select>
+
+      {/* Filter Rombel */}
+      <select
+        value={filterClassId}
+        onChange={(e) => setFilterClassId(e.target.value)}
+        className="h-8 px-2.5 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-blue-500"
+        title="Filter Rombel Kelas"
+      >
+        <option value="ALL">Semua Rombel</option>
+        {filteredClassOptions.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
     <div className="academic-calendar-container">
@@ -337,128 +360,22 @@ export default function AcademicCalendarPage() {
         />
       </div>
 
-      {/* Toolbar Filter & Navigasi Bulan */}
-      <div className="bg-white p-3 border border-gray-200 rounded-lg mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handlePrevMonth}
-            className="calendar-nav-btn"
-            title="Bulan Sebelumnya"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={handleNextMonth}
-            className="calendar-nav-btn"
-            title="Bulan Berikutnya"
-          >
-            <ChevronRight size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={handleCurrentMonth}
-            className="px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 transition"
-          >
-            Hari Ini
-          </button>
-
-          <span className="text-base sm:text-lg font-bold text-gray-800 ml-2">
-            {MONTH_NAMES[currentMonth - 1]} {currentYear}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-500">Filter Kategori:</span>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="h-8 px-2.5 text-xs border border-gray-300 rounded bg-white focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="ALL">Semua Agenda</option>
-            <option value="holiday">Hari Libur Resmi</option>
-            <option value="school_event">Kegiatan Sekolah</option>
-            <option value="class_event">Kegiatan Tingkat/Rombel</option>
-            <option value="exam">Masa Ujian / Asesmen</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Grid Kalender Bulanan */}
-      <div className="calendar-grid-wrapper mb-6">
-        <div className="calendar-weekdays-row">
-          {WEEKDAY_NAMES.map((name, i) => (
-            <div
-              key={name}
-              className={`calendar-weekday-cell ${i >= 5 ? 'calendar-weekday-cell--weekend' : ''}`}
-            >
-              {name}
-            </div>
-          ))}
-        </div>
-
-        <div className="calendar-days-grid">
-          {calendarDays.map((day) => {
-            const isToday =
-              day.dateStr ===
-              `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const dayEvents = eventsByDate[day.dateStr] || [];
-
-            return (
-              <div
-                key={day.dateStr}
-                className={`calendar-day-cell ${!day.isCurrentMonth ? 'calendar-day-cell--outside' : ''} ${
-                  isToday ? 'calendar-day-cell--today' : ''
-                }`}
-              >
-                <div className="calendar-day-header">
-                  <span className="calendar-day-number">{day.dayNumber}</span>
-                  {day.isCurrentMonth && (
-                    <button
-                      type="button"
-                      className="calendar-add-event-btn"
-                      title={`Tambah agenda pada ${day.dateStr}`}
-                      onClick={() => handleOpenCreateModal(day.dateStr)}
-                    >
-                      <Plus size={14} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="calendar-events-list">
-                  {dayEvents.map((evt) => (
-                    <div
-                      key={`${evt.id}-${day.dateStr}`}
-                      className={`calendar-event-chip calendar-event-chip--${evt.type}`}
-                      title={`${evt.title} (${evt.type}) - Klik untuk edit`}
-                      onClick={() => handleOpenEditModal(evt)}
-                    >
-                      {evt.title}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Bar Keterangan Warna (Legend) */}
-      <div className="calendar-legend-bar mb-6">
-        <span className="font-semibold text-gray-700">Keterangan:</span>
-        <div className="calendar-legend-item">
-          <div className="calendar-legend-dot calendar-legend-dot--holiday" />
-          <span>Libur Nasional &amp; Resmi (KBM Libur)</span>
-        </div>
-        <div className="calendar-legend-item">
-          <div className="calendar-legend-dot calendar-legend-dot--event" />
-          <span>Kegiatan Khusus Sekolah / Tingkat / Rombel</span>
-        </div>
-        <div className="calendar-legend-item">
-          <div className="calendar-legend-dot calendar-legend-dot--exam" />
-          <span>Masa Penilaian / Ujian</span>
-        </div>
+      {/* Shared Calendar Component */}
+      <div className="mb-6">
+        <SharedCalendarView
+          year={currentYear}
+          month={currentMonth}
+          events={events}
+          canManage={true}
+          userRole="waka"
+          onPrevMonth={handlePrevMonth}
+          onNextMonth={handleNextMonth}
+          onToday={handleCurrentMonth}
+          onDateClick={handleOpenCreateModal}
+          onEventClick={handleOpenEditModal}
+          toolbarRight={calendarToolbarRight}
+          isLoading={isLoading}
+        />
       </div>
 
       {/* Tabel Rincian Agenda Bulan Ini */}
@@ -472,7 +389,7 @@ export default function AcademicCalendarPage() {
 
         {events.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-xs">
-            Belum ada agenda kegiatan yang didaftarkan pada bulan ini.
+            Belum ada agenda kegiatan yang didaftarkan pada bulan ini sesuai filter yang dipilih.
           </div>
         ) : (
           <div className="overflow-x-auto">
