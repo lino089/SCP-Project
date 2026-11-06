@@ -18,11 +18,11 @@ class AIService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.ai.base_url', 'https://9router.wekanz.id/v1');
+        $this->baseUrl = config('services.ai.base_url', 'https://generativelanguage.googleapis.com/v1beta/openai');
         $this->apiKey = config('services.ai.api_key');
-        $this->model = config('services.ai.model', 'ag/gemini-3.8-flash');
-        $this->timeout = (int) config('services.ai.timeout', 45);
-        $this->verifySsl = (bool) config('services.ai.verify_ssl', false);
+        $this->model = config('services.ai.model', 'gemini-1.5-flash');
+        $this->timeout = (int) config('services.ai.timeout', 60);
+        $this->verifySsl = (bool) config('services.ai.verify_ssl', true);
     }
 
     /**
@@ -229,10 +229,14 @@ SYS;
     }
 
     /**
-     * Kirim permintaan ke 9router AI endpoint.
+     * Kirim permintaan ke Google AI Studio OpenAI-compatible endpoint.
      */
     protected function sendChatCompletion(array $messages, float $temperature = 0.5): string
     {
+        if (empty($this->apiKey)) {
+            throw new Exception("Kunci API Google AI (AI_API_KEY) belum dikonfigurasi di file .env. Silakan atur API Key atau buat kuis secara manual.");
+        }
+
         $url = rtrim($this->baseUrl, '/') . '/chat/completions';
 
         $payload = [
@@ -254,15 +258,23 @@ SYS;
         if ($response->failed()) {
             $status = $response->status();
             $body = $response->body();
-            Log::error("9router AI Request Failed ({$status}): {$body}");
-            throw new Exception("Gagal berkomunikasi dengan layanan AI ({$status}): {$body}");
+            Log::error("Google AI Studio Request Failed ({$status}): {$body}");
+
+            if ($status === 429) {
+                throw new Exception("Batas kecepatan Google AI tercapai (Rate Limit 15 RPM). Silakan tunggu sekitar 1 menit sebelum mencoba kembali.");
+            }
+            if ($status === 401 || $status === 403) {
+                throw new Exception("Autentikasi Google AI gagal ({$status}). Pastikan AI_API_KEY di file .env sudah valid dan aktif.");
+            }
+
+            throw new Exception("Gagal berkomunikasi dengan layanan Google AI ({$status}): {$body}");
         }
 
         $content = $response->json('choices.0.message.content');
 
         if (empty($content)) {
-            Log::warning("9router AI Response empty content: " . $response->body());
-            throw new Exception("Layanan AI mengembalikan respons kosong.");
+            Log::warning("Google AI Studio Response empty content: " . $response->body());
+            throw new Exception("Layanan Google AI mengembalikan respons kosong.");
         }
 
         return (string) $content;

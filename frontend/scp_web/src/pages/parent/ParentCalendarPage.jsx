@@ -4,13 +4,11 @@ import {
   AlertCircle,
   RefreshCw,
   UserCheck,
-  CheckCircle2,
   Sparkles,
   Info,
   Clock,
   ChevronRight,
 } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
 import academicEventApi from '../../services/academicEventApi';
 import SharedCalendarView from '../../components/calendar/SharedCalendarView';
 import UpcomingEventsList from '../../components/calendar/UpcomingEventsList';
@@ -24,11 +22,7 @@ const MONTH_NAMES = [
 ];
 
 export default function ParentCalendarPage() {
-  const { user } = useAuth();
   const today = useMemo(() => new Date(), []);
-  const todayIso = useMemo(() => {
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  }, [today]);
 
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth() + 1);

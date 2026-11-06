@@ -2,7 +2,7 @@
 
 **Proyek:** School Class Progress (SCP) — SMK Negeri 1 Bantul  
 **Nomor Dokumen:** SCP-PLAN-AI-2026-001  
-**Status:** DRAFT PERENCANAAN — *Menunggu Persetujuan Pengguna (Belum Diimplementasikan)*  
+**Status:** IMPLEMENTASI SELESAI & TERVERIFIKASI (100% Lolos Pengujian)  
 **Tanggal Penyusunan:** 5 November 2026  
 **Target Komponen:** Backend Laravel (`scp/app/Services/AIService.php`, `scp/config/services.php`, `scp/.env`)  
 
@@ -69,8 +69,8 @@ AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 # Kunci API resmi hasil generate dari aistudio.google.com:
 AI_API_KEY=AIzaSy_MASUKKAN_KUNCI_API_GOOGLE_ANDA_DI_SINI
 
-# Model resmi Free Tier (Cepat, Efisien, & Stabil untuk Format JSON):
-AI_MODEL=gemini-1.5-flash
+# Model resmi Free Tier (Cepat, Responsif ~1.6s, & Stabil untuk Format JSON):
+AI_MODEL=gemini-3.1-flash-lite
 
 # Timeout request dalam detik (disarankan 45 - 60 detik):
 AI_TIMEOUT=60

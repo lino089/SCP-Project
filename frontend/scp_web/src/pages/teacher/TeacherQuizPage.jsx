@@ -57,6 +57,7 @@ export default function TeacherQuizPage() {
     title: '',
     class_id: '',
     class_name: '',
+    selected_class_ids: [],
     due_date: '',
     max_attempts: '2',
   });
@@ -107,14 +108,14 @@ export default function TeacherQuizPage() {
 
   const [loadError, setLoadError] = useState(null);
 
-  // Fetch initial data dari API database riil
+  // Fetch initial data dari API database riil (hanya memuat kelas yang diajar guru)
   const loadData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const [quizRes, classRes] = await Promise.all([
         quizApi.getQuizzes({ per_page: 50 }),
-        masterDataApi.classes.getClasses(),
+        masterDataApi.classes.getClasses({ my_taught_only: 1, all: 1 }),
       ]);
       if (quizRes?.data) setQuizzes(Array.isArray(quizRes.data) ? quizRes.data : []);
       if (classRes?.data) setClassList(Array.isArray(classRes.data) ? classRes.data : []);
@@ -188,13 +189,15 @@ export default function TeacherQuizPage() {
   // 1. Inisialisasi Kuis Baru
   const handleOpenCreateModal = () => {
     if (classOptions.length === 0) {
-      showToast('Daftar kelas belum termuat atau masih kosong. Harap tunggu sebentar.', 'error');
+      showToast('Anda belum memiliki jadwal mengajar aktif yang terdaftar. Hubungi Waka Kurikulum.', 'error');
       return;
     }
+    const defaultClassId = classOptions[0]?.value || '';
     setCreateForm({
       title: '',
-      class_id: classOptions[0]?.value || '',
+      class_id: defaultClassId,
       class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
+      selected_class_ids: defaultClassId ? [defaultClassId] : [],
       due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       max_attempts: '2',
     });
@@ -207,10 +210,28 @@ export default function TeacherQuizPage() {
       showToast('Judul kuis wajib diisi.', 'error');
       return;
     }
+    const selectedClasses = createForm.selected_class_ids?.length > 0 
+      ? createForm.selected_class_ids 
+      : createForm.class_id ? [createForm.class_id] : [];
+
+    if (selectedClasses.length === 0) {
+      showToast('Pilih minimal satu kelas target yang Anda ajar.', 'error');
+      return;
+    }
+
     try {
-      const res = await quizApi.createQuiz(createForm);
+      const payload = {
+        title: createForm.title.trim(),
+        class_id: selectedClasses[0],
+        class_ids: selectedClasses,
+        due_date: createForm.due_date,
+        max_attempts: Number(createForm.max_attempts) || 1,
+      };
+
+      const res = await quizApi.createQuiz(payload);
       const quizObj = res?.data || res;
       if (quizObj && (quizObj.id || quizObj.title)) {
+        quizObj.target_class_ids = res?.target_class_ids || selectedClasses;
         setQuizzes((prev) => [quizObj, ...prev.filter((q) => q.id !== quizObj.id)]);
         setCurrentQuiz(quizObj);
         setIsCreateModalOpen(false);
@@ -263,7 +284,7 @@ export default function TeacherQuizPage() {
     }
 
     setIsGenerating(true);
-    setGenProgressMsg('Mengirim instruksi prompt ke AI Gateway (Model: ag/gemini-3.8-flash)...');
+    setGenProgressMsg('Mengirim instruksi prompt ke Google AI Studio (Model: Gemini 3.1 Flash Lite)...');
 
     try {
       const payload = {
@@ -505,7 +526,7 @@ export default function TeacherQuizPage() {
     });
   };
 
-  // Konfirmasi Publikasikan Kuis
+  // Konfirmasi Publikasikan Kuis (dengan duplikasi paralel jika dipilih)
   const handlePublishQuiz = () => {
     if (quizQuestions.length === 0) {
       showToast('Kuis belum memiliki butir soal. Tambahkan soal sebelum mempublikasikan.', 'error');
@@ -517,24 +538,61 @@ export default function TeacherQuizPage() {
       return;
     }
 
+    const otherClassIds = (currentQuiz?.target_class_ids || []).filter(
+      (cid) => Number(cid) !== Number(currentQuiz.class_id)
+    );
+
+    const targetNames = classList
+      .filter((c) => (currentQuiz?.target_class_ids || [currentQuiz.class_id]).map(Number).includes(Number(c.id)))
+      .map((c) => c.name)
+      .join(', ') || currentQuiz.schoolClass?.name || 'terkait';
+
     setConfirmDialog({
       isOpen: true,
       title: 'Publikasikan Kuis ke Siswa?',
-      message: `Kuis "${currentQuiz.title}" akan diterbitkan dan dapat dikerjakan oleh siswa Kelas ${currentQuiz.schoolClass?.name || 'terkait'}. Lanjutkan?`,
+      message: otherClassIds.length > 0
+        ? `Kuis "${currentQuiz.title}" akan diterbitkan secara paralel ke kelas: ${targetNames}. Seluruh butir soal akan otomatis disinkronkan ke masing-masing kelas. Lanjutkan?`
+        : `Kuis "${currentQuiz.title}" akan diterbitkan dan dapat dikerjakan oleh siswa Kelas ${currentQuiz.schoolClass?.name || 'terkait'}. Lanjutkan?`,
       onConfirm: async () => {
         try {
-          const res = await quizApi.updateQuizStatus(currentQuiz.id, { status: 'published' });
+          const res = await quizApi.updateQuizStatus(currentQuiz.id, {
+            status: 'published',
+            duplicate_to_class_ids: otherClassIds,
+          });
           const updatedQuiz = res?.data || res;
           if (updatedQuiz) {
-            setQuizzes((prev) =>
-              prev.map((q) => (q.id === currentQuiz.id ? { ...q, status: 'published' } : q))
-            );
+            await loadData();
             setCurrentQuiz((prev) => ({ ...prev, status: 'published' }));
             setIsPreviewModalOpen(false);
             showToast('Kuis berhasil dipublikasikan dan aktif untuk siswa!', 'success');
           }
         } catch (err) {
           showToast(err.message || err.response?.data?.message || 'Gagal mempublikasikan kuis.', 'error');
+        } finally {
+          setConfirmDialog((c) => ({ ...c, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  // Batalkan & Hapus Kuis Permanen (Keputusan 1: Alt C & Keputusan 2: Alt A)
+  const handleDeleteQuiz = (quiz) => {
+    const subCount = Number(quiz.submissions_count || 0);
+    const confirmMessage = subCount > 0
+      ? `Perhatian: Sudah terdapat ${subCount} siswa yang mengumpulkan jawaban pada kuis "${quiz.title}". Membatalkan kuis akan menghapus seluruh data kuis beserta lembar jawaban siswa secara permanen. Apakah Anda yakin ingin menghapus kuis ini?`
+      : `Kuis "${quiz.title}" akan dibatalkan dan dihapus secara permanen dari sistem. Tindakan ini tidak dapat dibatalkan. Lanjutkan?`;
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Batalkan & Hapus Kuis?',
+      message: confirmMessage,
+      onConfirm: async () => {
+        try {
+          await quizApi.deleteQuiz(quiz.id);
+          showToast(`Kuis "${quiz.title}" berhasil dibatalkan dan dihapus.`, 'success');
+          loadData();
+        } catch (err) {
+          showToast(err.message || err.response?.data?.message || 'Gagal menghapus kuis.', 'error');
         } finally {
           setConfirmDialog((c) => ({ ...c, isOpen: false }));
         }
@@ -697,21 +755,19 @@ export default function TeacherQuizPage() {
       key: 'actions',
       label: 'Aksi Pengelolaan',
       align: 'right',
-      renderCell: (row) => {
-        if (row.status === 'generating') {
-          return (
+      renderCell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {row.status === 'generating' && (
             <Button
               variant="secondary"
               size="sm"
               icon={RotateCw}
               onClick={() => handleOpenPreviewModal(row)}
             >
-              Cek Status / Review
+              Cek Status
             </Button>
-          );
-        }
-        if (row.status === 'draft_review') {
-          return (
+          )}
+          {row.status === 'draft_review' && (
             <Button
               variant="secondary"
               size="sm"
@@ -720,19 +776,29 @@ export default function TeacherQuizPage() {
             >
               Review &amp; Edit
             </Button>
-          );
-        }
-        return (
+          )}
+          {(row.status === 'published' || row.status === 'published_result') && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Users}
+              onClick={() => handleOpenSubmissionsModal(row)}
+            >
+              Kelola Nilai
+            </Button>
+          )}
           <Button
-            variant="secondary"
+            variant="ghost"
             size="sm"
-            icon={Users}
-            onClick={() => handleOpenSubmissionsModal(row)}
+            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            icon={Trash2}
+            onClick={() => handleDeleteQuiz(row)}
+            title="Batalkan &amp; Hapus Kuis"
           >
-            Kelola Nilai
+            Hapus
           </Button>
-        );
-      },
+        </div>
+      ),
     },
   ];
 
@@ -892,19 +958,83 @@ export default function TeacherQuizPage() {
             required
           />
 
-          <Select
-            label="Target Rombel Kelas"
-            options={classOptions}
-            value={createForm.class_id}
-            onChange={(e) => {
-              const selectedOpt = classOptions.find((c) => c.value === e.target.value);
-              setCreateForm({
-                ...createForm,
-                class_id: e.target.value,
-                class_name: selectedOpt?.label?.replace('Kelas ', '') || '',
-              });
-            }}
-          />
+          <div className="form-group">
+            <div className="flex items-center justify-between mb-1">
+              <label className="form-label font-semibold text-slate-800 text-xs">
+                Target Rombel Kelas yang Diajar (Wajib)
+              </label>
+              {classOptions.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allIds = classOptions.map((c) => c.value);
+                    const allSelected = allIds.every((id) => createForm.selected_class_ids.includes(id));
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      selected_class_ids: allSelected ? [allIds[0]] : allIds,
+                      class_id: allSelected ? allIds[0] : allIds[0],
+                      class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
+                    }));
+                  }}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {classOptions.every((c) => createForm.selected_class_ids.includes(c.value)) ? 'Batalkan Pilih Semua' : 'Pilih Semua Kelas'}
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Centang satu atau lebih kelas yang Anda ampu untuk mendistribusikan kuis ini secara paralel.
+            </p>
+
+            {classOptions.length === 0 ? (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                Belum ada jadwal mengajar aktif yang terdaftar untuk akun Anda. Harap hubungi Waka Kurikulum.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2.5 bg-slate-50">
+                {classOptions.map((c) => {
+                  const isChecked = createForm.selected_class_ids.includes(c.value);
+                  return (
+                    <label
+                      key={c.value}
+                      className={`flex items-center gap-2.5 p-2 rounded cursor-pointer transition text-xs font-medium border ${
+                        isChecked
+                          ? 'bg-blue-50/80 text-blue-900 border-blue-200 shadow-xs'
+                          : 'bg-white hover:bg-slate-100/70 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          const exists = createForm.selected_class_ids.includes(c.value);
+                          let updated;
+                          if (exists) {
+                            updated = createForm.selected_class_ids.filter((id) => id !== c.value);
+                          } else {
+                            updated = [...createForm.selected_class_ids, c.value];
+                          }
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            selected_class_ids: updated,
+                            class_id: updated[0] || '',
+                            class_name: classOptions.find((opt) => opt.value === updated[0])?.label || '',
+                          }));
+                        }}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                      <span className="flex-1">{c.label}</span>
+                      {isChecked && (
+                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                          Target
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input

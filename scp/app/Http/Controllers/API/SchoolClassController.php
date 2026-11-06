@@ -24,12 +24,26 @@ class SchoolClassController extends Controller
             'per_page' => 'nullable|integer|min:1|max:1000',
             'search' => 'nullable|string|max:100',
             'all' => 'nullable|in:true,false,1,0',
+            'my_taught_only' => 'nullable|in:true,false,1,0',
         ]);
 
         $perPage = $request->integer('per_page', 15);
         $search = $request->input('search');
 
         $query = Classes::query()->with('nextClass:id,name,level');
+
+        $user = $request->user();
+        if ($request->boolean('my_taught_only') && $user && $user->role === 'teacher') {
+            $scheduleClassIds = \App\Models\Schedule::where('teacher_id', $user->id)
+                ->pluck('class_id')
+                ->filter()
+                ->unique()
+                ->toArray();
+            $asgnClassIds = $user->assignments()->whereNotNull('class_id')->pluck('class_id')->toArray();
+            $myClassIds = array_values(array_unique(array_merge($scheduleClassIds, $asgnClassIds)));
+
+            $query->whereIn('id', $myClassIds);
+        }
 
         if ($search) {
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';

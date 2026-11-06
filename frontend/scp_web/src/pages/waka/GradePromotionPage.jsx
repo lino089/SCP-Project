@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Pencil,
-  RotateCcw,
   ArrowRight,
   Search,
-  Calendar,
 } from 'lucide-react';
 import {
   Button,
@@ -732,8 +730,8 @@ export default function GradePromotionPage() {
                           const isRowLoading = holdingBackStudentId === student.id;
 
                           // Transisi teks
-                          let transitionText = '';
-                          let statusLabel = '';
+                          let transitionText;
+                          let statusLabel;
                           if (isHeldBack) {
                             transitionText = `${classItem.name} → ${classItem.name} (Tetap)`;
                             statusLabel = 'Tinggal Kelas';

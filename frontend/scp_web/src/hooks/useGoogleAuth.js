@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const GIS_SCRIPT_ID = 'google-identity-services-script';
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
@@ -7,12 +7,10 @@ export function useGoogleAuth() {
   const [isLoaded, setIsLoaded] = useState(Boolean(window.google?.accounts?.id));
   const [loadError, setLoadError] = useState(null);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-  const initCallbackRef = useRef(null);
 
   // Load Google Identity Services script dynamically
   useEffect(() => {
     if (window.google?.accounts?.id) {
-      setIsLoaded(true);
       return;
     }
 

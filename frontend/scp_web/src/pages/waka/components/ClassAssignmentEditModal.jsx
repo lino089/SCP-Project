@@ -72,13 +72,14 @@ export default function ClassAssignmentEditModal({
     }
   }, [classItem, isOpen, fetchClassHistory]);
 
-  if (!classItem) return null;
+  const classId = classItem?.class_id;
 
   // Options untuk dropdown Wali Kelas
   const waliOptions = useMemo(() => {
     const defaultOption = [{ value: '', label: '-- Kosongkan / Belum Ditugaskan --' }];
+    if (!classId) return defaultOption;
     const teachers = teacherList.map((t) => {
-      const isAssignedOther = existingWaliMap[t.id] && existingWaliMap[t.id].classId !== classItem.class_id;
+      const isAssignedOther = existingWaliMap[t.id] && existingWaliMap[t.id].classId !== classId;
       const otherClass = isAssignedOther ? existingWaliMap[t.id].className : '';
       return {
         value: String(t.id),
@@ -89,12 +90,12 @@ export default function ClassAssignmentEditModal({
       };
     });
     return [...defaultOption, ...teachers];
-  }, [teacherList, existingWaliMap, classItem.class_id]);
+  }, [teacherList, existingWaliMap, classId]);
 
   // Options untuk dropdown tambah Guru BK (kecualikan yang sudah ditugaskan di kelas ini)
   const bkOptions = useMemo(() => {
-    const currentBkIds = new Set(kesiswaanList.map((k) => k.id));
     const defaultOption = [{ value: '', label: '-- Pilih Guru BK untuk Ditambahkan --' }];
+    const currentBkIds = new Set(kesiswaanList.map((k) => k.id));
     const availableTeachers = teacherList
       .filter((t) => !currentBkIds.has(t.id))
       .map((t) => ({
@@ -103,6 +104,8 @@ export default function ClassAssignmentEditModal({
       }));
     return [...defaultOption, ...availableTeachers];
   }, [teacherList, kesiswaanList]);
+
+  if (!classItem) return null;
 
   // Handler simpan perubahan Wali Kelas
   const handleSaveWaliKelas = async () => {

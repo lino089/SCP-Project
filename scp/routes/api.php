@@ -108,6 +108,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/academic-events', [AcademicEventController::class, 'store']);
         Route::put('/academic-events/{id}', [AcademicEventController::class, 'update']);
         Route::delete('/academic-events/{id}', [AcademicEventController::class, 'destroy']);
+        Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
 
         // 9.3 Master Data Classes
         Route::post('/classes', [SchoolClassController::class, 'store']);
@@ -185,6 +186,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // 9.8 Sistem Kuis Berbantuan AI (Guru)
         Route::post('/quizzes', [QuizController::class, 'store']);
         Route::patch('/quizzes/{id}', [QuizController::class, 'update']);
+        Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
         Route::patch('/quizzes/{id}/publish', [QuizController::class, 'publish']);
         Route::post('/quizzes/{id}/generate-prompt', [QuizController::class, 'generatePrompt']);
         Route::post('/quizzes/{id}/extract-document', [QuizController::class, 'extractDocument']);

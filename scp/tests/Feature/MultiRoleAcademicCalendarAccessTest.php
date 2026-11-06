@@ -210,6 +210,7 @@ class MultiRoleAcademicCalendarAccessTest extends TestCase
         Sanctum::actingAs($this->teacher);
 
         // Guru hanya mengajar Kelas 10
+        // Sesuai Keputusan 4: Guru & Kesiswaan dapat melihat seluruh agenda kegiatan sekolah
         $res = $this->getJson('/api/academic-events/my-calendar?month=11&year=2026');
         $res->assertStatus(200)
             ->assertJsonPath('data.role', 'teacher')
@@ -218,18 +219,31 @@ class MultiRoleAcademicCalendarAccessTest extends TestCase
         $events = collect($res->json('data.events'));
         $titles = $events->pluck('title');
 
-        // Harus melihat event all dan event grade 10
+        // Keputusan 4: Guru melihat seluruh agenda sekolah untuk koordinasi KBM & kesiswaan
         $this->assertTrue($titles->contains('Hari Pahlawan Nasional'));
         $this->assertTrue($titles->contains('Perkemahan Pramuka Blok Kelas X'));
+        $this->assertTrue($titles->contains('Kunjungan Industri Kelas XI'));
+        $this->assertTrue($titles->contains('Uji Kompetensi Keahlian XII'));
 
-        // Tidak boleh melihat event grade 11 dan 12 yang tidak terkait
-        $this->assertFalse($titles->contains('Kunjungan Industri Kelas XI'));
-        $this->assertFalse($titles->contains('Uji Kompetensi Keahlian XII'));
-
-        // Cek flag affects_my_teaching pada event Pramuka (karena guru mengajar di Senin 9 Nov)
+        // Cek flag affects_my_teaching & is_my_scope pada event Pramuka (guru mengajar di Senin 9 Nov)
         $pramukaEvent = $events->firstWhere('title', 'Perkemahan Pramuka Blok Kelas X');
         $this->assertTrue($pramukaEvent['affects_my_teaching']);
+        $this->assertTrue($pramukaEvent['is_my_scope']);
         $this->assertContains('X RPL 1', $pramukaEvent['affected_my_classes']);
+
+        // Event kelas 11 tidak berdampak pada jam ajar guru ini
+        $industriEvent = $events->firstWhere('title', 'Kunjungan Industri Kelas XI');
+        $this->assertFalse($industriEvent['affects_my_teaching']);
+        $this->assertFalse($industriEvent['is_my_scope']);
+
+        // Uji filter opsional only_my_scope jika guru ingin mempersempit tampilan
+        $resScope = $this->getJson('/api/academic-events/my-calendar?month=11&year=2026&only_my_scope=1');
+        $resScope->assertStatus(200);
+        $scopeTitles = collect($resScope->json('data.events'))->pluck('title');
+        $this->assertTrue($scopeTitles->contains('Hari Pahlawan Nasional'));
+        $this->assertTrue($scopeTitles->contains('Perkemahan Pramuka Blok Kelas X'));
+        $this->assertFalse($scopeTitles->contains('Kunjungan Industri Kelas XI'));
+        $this->assertFalse($scopeTitles->contains('Uji Kompetensi Keahlian XII'));
 
         // Cek daily_teaching_status pada 2026-11-09
         $daily = $res->json('data.daily_teaching_status.2026-11-09');
@@ -245,6 +259,35 @@ class MultiRoleAcademicCalendarAccessTest extends TestCase
             'type' => 'school_event',
             'scope_type' => 'all',
         ])->assertStatus(403);
+    }
+
+    public function test_kesiswaan_teacher_can_view_all_school_events_with_context(): void
+    {
+        $kesiswaanTeacher = User::create([
+            'name' => 'Guru Kesiswaan',
+            'email' => 'kesiswaan@example.com',
+            'nis_nip' => '198501012010011003',
+            'role' => 'teacher',
+            'password' => Hash::make('password123'),
+        ]);
+
+        $kesiswaanTeacher->assignments()->create([
+            'type' => 'kesiswaan',
+            'class_id' => null, // Global Kesiswaan
+        ]);
+
+        Sanctum::actingAs($kesiswaanTeacher);
+
+        $res = $this->getJson('/api/academic-events/my-calendar?month=11&year=2026');
+        $res->assertStatus(200)
+            ->assertJsonPath('data.context.is_kesiswaan', true)
+            ->assertJsonPath('data.context.is_global_kesiswaan', true);
+
+        $titles = collect($res->json('data.events'))->pluck('title');
+        $this->assertTrue($titles->contains('Hari Pahlawan Nasional'));
+        $this->assertTrue($titles->contains('Perkemahan Pramuka Blok Kelas X'));
+        $this->assertTrue($titles->contains('Kunjungan Industri Kelas XI'));
+        $this->assertTrue($titles->contains('Uji Kompetensi Keahlian XII'));
     }
 
     public function test_student_grade_and_class_isolation(): void

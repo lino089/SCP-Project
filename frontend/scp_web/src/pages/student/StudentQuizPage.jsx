@@ -19,6 +19,7 @@ import {
   Modal,
   Table,
   ConfirmDialog,
+  Tabs,
 } from '../../components/shared';
 import './StudentQuiz.css';
 
@@ -27,6 +28,7 @@ export default function StudentQuizPage() {
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [activeTab, setActiveTab] = useState('all');
 
   // Active quiz taking states
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -128,14 +130,15 @@ export default function StudentQuizPage() {
   // 1. Mulai Mengerjakan Kuis
   const handleStartQuiz = async (quiz) => {
     try {
-      const res = await quizApi.getQuizQuestions(quiz.id);
-      const questionsList = res?.data?.questions || res?.data || res?.questions || [];
+      const res = await quizApi.getQuizDetail(quiz.id);
+      const quizDetail = res?.data || res;
+      const questionsList = quizDetail?.questions || [];
       if (Array.isArray(questionsList) && questionsList.length > 0) {
-        setActiveQuiz(quiz);
+        setActiveQuiz(quizDetail);
         setQuestions(questionsList);
         setCurrentQuestionIdx(0);
         setSubmissionComplete(false);
-        const durationMins = Number(quiz.duration_minutes || quiz.duration || 30);
+        const durationMins = Number(quizDetail.duration_minutes || quizDetail.duration || 30);
         setTimeLeftSeconds(durationMins * 60);
 
         // Check sessionStorage for draft answers
@@ -206,6 +209,7 @@ export default function StudentQuizPage() {
         sessionStorage.removeItem(`quiz_draft_${activeQuiz.id}`);
         setSubmissionComplete(true);
         showToast('Jawaban berhasil dikumpulkan! Evaluasi penilaian asinkron sedang diproses AI.', 'success');
+        loadQuizzes();
       }
     } catch (err) {
       showToast(err.message || err.response?.data?.message || 'Gagal mengirimkan jawaban kuis.', 'error');
@@ -234,6 +238,100 @@ export default function StudentQuizPage() {
       setLoadingSubmission(false);
     }
   };
+
+  // Helper untuk menentukan status & aksi pengerjaan kuis siswa
+  const getQuizStatusInfo = useCallback((quiz) => {
+    // 1. Apakah hasil penilaian sudah dirilis oleh guru?
+    if (quiz.status === 'published_result') {
+      return {
+        key: 'published_result',
+        label: 'Hasil Tersedia',
+        variant: 'info',
+        canTake: false,
+        canViewResult: true,
+        actionLabel: 'Lihat Nilai & Ulasan',
+      };
+    }
+
+    const submissions = Array.isArray(quiz.submissions) ? quiz.submissions : [];
+    const maxAttempts = Number(quiz.max_attempts || 1);
+    const attemptsUsed = submissions.length;
+    const isExpired = quiz.due_date ? new Date(quiz.due_date) < new Date() : false;
+    const hasDraft = typeof window !== 'undefined' && !!sessionStorage.getItem(`quiz_draft_${quiz.id}`);
+
+    // 2. Siswa telah menghabiskan kesempatan pengerjaan
+    if (attemptsUsed >= maxAttempts) {
+      return {
+        key: 'completed',
+        label: 'Sudah Mengumpulkan',
+        variant: 'success',
+        canTake: false,
+        canViewResult: false,
+        actionLabel: 'Selesai Dikerjakan',
+        note: `${attemptsUsed}/${maxAttempts} Percobaan Selesai`,
+      };
+    }
+
+    // 3. Batas waktu pengerjaan telah lewat
+    if (isExpired) {
+      return {
+        key: 'expired',
+        label: 'Batas Waktu Habis',
+        variant: 'danger',
+        canTake: false,
+        canViewResult: false,
+        actionLabel: 'Waktu Berakhir',
+      };
+    }
+
+    // 4. Masih dalam proses pengerjaan (ada draft tersimpan)
+    if (hasDraft) {
+      return {
+        key: 'in_progress',
+        label: 'Sedang Dikerjakan',
+        variant: 'warning',
+        canTake: true,
+        canViewResult: false,
+        actionLabel: 'Lanjutkan Pengerjaan',
+      };
+    }
+
+    // 5. Belum Dikerjakan (atau masih ada sisa percobaan)
+    return {
+      key: 'ready',
+      label: 'Belum Dikerjakan',
+      variant: 'primary',
+      canTake: true,
+      canViewResult: false,
+      actionLabel: attemptsUsed > 0 ? `Kerjakan Ulang (${attemptsUsed + 1}/${maxAttempts})` : 'Mulai Kerjakan',
+    };
+  }, []);
+
+  // Filter & Tabs Navigasi
+  const pendingQuizzes = useMemo(
+    () => quizzes.filter((q) => getQuizStatusInfo(q).canTake),
+    [quizzes, getQuizStatusInfo]
+  );
+
+  const historyQuizzes = useMemo(
+    () => quizzes.filter((q) => !getQuizStatusInfo(q).canTake),
+    [quizzes, getQuizStatusInfo]
+  );
+
+  const tabs = useMemo(
+    () => [
+      { id: 'all', label: 'Semua Kuis', count: quizzes.length },
+      { id: 'pending', label: 'Perlu Dikerjakan', count: pendingQuizzes.length },
+      { id: 'history', label: 'Riwayat Selesai', count: historyQuizzes.length },
+    ],
+    [quizzes.length, pendingQuizzes.length, historyQuizzes.length]
+  );
+
+  const filteredQuizzes = useMemo(() => {
+    if (activeTab === 'pending') return pendingQuizzes;
+    if (activeTab === 'history') return historyQuizzes;
+    return quizzes;
+  }, [activeTab, pendingQuizzes, historyQuizzes, quizzes]);
 
   // Table Columns
   const columns = [
@@ -287,10 +385,19 @@ export default function StudentQuizPage() {
       key: 'status',
       label: 'Status Kuis',
       renderCell: (row) => {
-        if (row.status === 'published_result') {
-          return <Badge variant="info" dot>Hasil Tersedia</Badge>;
-        }
-        return <Badge variant="success" dot>Sedang Berlangsung</Badge>;
+        const info = getQuizStatusInfo(row);
+        return (
+          <div className="flex flex-col gap-0.5">
+            <Badge variant={info.variant} dot>
+              {info.label}
+            </Badge>
+            {info.note && (
+              <span className="text-[10px] text-slate-500 font-mono">
+                {info.note}
+              </span>
+            )}
+          </div>
+        );
       },
     },
     {
@@ -298,7 +405,8 @@ export default function StudentQuizPage() {
       label: 'Aksi',
       align: 'right',
       renderCell: (row) => {
-        if (row.status === 'published_result') {
+        const info = getQuizStatusInfo(row);
+        if (info.canViewResult) {
           return (
             <Button
               variant="secondary"
@@ -306,18 +414,29 @@ export default function StudentQuizPage() {
               icon={Eye}
               onClick={() => handleInspectResults(row)}
             >
-              Lihat Nilai &amp; Ulasan
+              {info.actionLabel}
+            </Button>
+          );
+        }
+        if (info.canTake) {
+          return (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={FileQuestion}
+              onClick={() => handleStartQuiz(row)}
+            >
+              {info.actionLabel}
             </Button>
           );
         }
         return (
           <Button
-            variant="primary"
+            variant="ghost"
             size="sm"
-            icon={FileQuestion}
-            onClick={() => handleStartQuiz(row)}
+            disabled
           >
-            Mulai Kerjakan
+            {info.actionLabel}
           </Button>
         );
       },
@@ -366,14 +485,25 @@ export default function StudentQuizPage() {
         </div>
       )}
 
+      {/* Filter Tabs */}
+      <div style={{ marginBottom: '1rem' }}>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      </div>
+
       {/* Tabel Kuis Aktif */}
       <div className="student-quiz-table-wrap">
         <Table
           columns={columns}
-          data={quizzes}
+          data={filteredQuizzes}
           isLoading={loading}
           pageSize={10}
-          emptyMessage="Tidak ada kuis aktif yang ditugaskan ke kelas Anda saat ini."
+          emptyMessage={
+            activeTab === 'pending'
+              ? 'Hebat! Tidak ada kuis yang perlu Anda kerjakan saat ini.'
+              : activeTab === 'history'
+              ? 'Belum ada riwayat kuis yang selesai dikerjakan.'
+              : 'Tidak ada kuis aktif yang ditugaskan ke kelas Anda saat ini.'
+          }
         />
       </div>
 

@@ -54,6 +54,14 @@ class QuizFeatureTest extends TestCase
             'must_change_password' => false,
         ]);
 
+        \App\Models\TeacherAssignment::create([
+            'user_id' => $this->teacher->id,
+            'type' => 'wali_kelas',
+            'class_id' => $this->schoolClass->id,
+            'academic_year' => '2025/2026',
+            'is_active' => true,
+        ]);
+
         $this->otherTeacher = User::create([
             'name' => 'Ibu Siti Guru',
             'email' => 'siti@example.com',
@@ -287,7 +295,7 @@ class QuizFeatureTest extends TestCase
         ];
 
         Http::fake([
-            'https://9router.wekanz.id/v1/chat/completions' => Http::response([
+            '*chat/completions*' => Http::response([
                 'id' => 'chatcmpl-test',
                 'choices' => [
                     [
@@ -367,7 +375,7 @@ class QuizFeatureTest extends TestCase
         ];
 
         Http::fake([
-            'https://9router.wekanz.id/v1/chat/completions' => Http::response([
+            '*chat/completions*' => Http::response([
                 'id' => 'chatcmpl-test-doc',
                 'choices' => [
                     [
@@ -536,7 +544,7 @@ class QuizFeatureTest extends TestCase
 
         // Mock AI untuk penilaian esai
         Http::fake([
-            'https://9router.wekanz.id/v1/chat/completions' => Http::response([
+            '*chat/completions*' => Http::response([
                 'id' => 'chatcmpl-grade-test',
                 'choices' => [
                     [
@@ -816,5 +824,152 @@ class QuizFeatureTest extends TestCase
                     'best_score' => 92.5,
                 ],
             ]);
+    }
+
+    public function test_teacher_cannot_create_quiz_for_unassigned_class(): void
+    {
+        Sanctum::actingAs($this->teacher);
+
+        $response = $this->postJson('/api/quizzes', [
+            'title' => 'Kuis Kelas Ilegal',
+            'class_id' => $this->otherClass->id,
+            'due_date' => now()->addDays(2)->format('Y-m-d H:i:s'),
+            'max_attempts' => 1,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Akses ditolak. Anda hanya dapat membuat kuis untuk kelas yang Anda ajar.',
+            ]);
+    }
+
+    public function test_teacher_can_delete_quiz_with_hard_delete_cascade(): void
+    {
+        Sanctum::actingAs($this->teacher);
+
+        $quiz = Quiz::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->schoolClass->id,
+            'title' => 'Kuis Untuk Dihapus',
+            'status' => 'published',
+            'due_date' => now()->addDays(2),
+            'max_attempts' => 1,
+        ]);
+
+        $question = QuizQuestion::create([
+            'quiz_id' => $quiz->id,
+            'question_text' => 'Soal 1',
+            'question_type' => 'multiple_choice',
+            'options' => ['A' => '1', 'B' => '2'],
+            'correct_answer' => 'A',
+        ]);
+
+        $submission = QuizSubmission::create([
+            'quiz_id' => $quiz->id,
+            'student_id' => $this->student->id,
+            'attempt_number' => 1,
+            'answers_payload' => [],
+            'grading_status' => 'graded',
+            'ai_score' => 80.0,
+        ]);
+
+        $deleteRes = $this->deleteJson("/api/quizzes/{$quiz->id}");
+
+        $deleteRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'quiz_id' => $quiz->id,
+                    'deleted_submissions_count' => 1,
+                ],
+            ]);
+
+        $this->assertDatabaseMissing('ai_quizzes', ['id' => $quiz->id]);
+        $this->assertDatabaseMissing('quiz_questions', ['id' => $question->id]);
+        $this->assertDatabaseMissing('quiz_submissions', ['id' => $submission->id]);
+    }
+
+    public function test_teacher_can_duplicate_quiz_to_parallel_classes_on_publish(): void
+    {
+        // Beri guru penugasan untuk otherClass juga
+        \App\Models\TeacherAssignment::create([
+            'user_id' => $this->teacher->id,
+            'type' => 'wali_kelas',
+            'class_id' => $this->otherClass->id,
+            'academic_year' => '2025/2026',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($this->teacher);
+
+        $quiz = Quiz::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->schoolClass->id,
+            'title' => 'Kuis Algoritma Pemrograman',
+            'status' => 'draft_review',
+            'due_date' => now()->addDays(3),
+            'max_attempts' => 2,
+        ]);
+
+        QuizQuestion::create([
+            'quiz_id' => $quiz->id,
+            'question_text' => 'Apa itu rekursi?',
+            'question_type' => 'essay',
+            'correct_answer' => 'Fungsi memanggil dirinya sendiri',
+        ]);
+
+        $publishRes = $this->patchJson("/api/quizzes/{$quiz->id}/publish", [
+            'duplicate_to_class_ids' => [$this->otherClass->id],
+        ]);
+
+        $publishRes->assertStatus(200);
+
+        // Pastikan kuis asli published
+        $this->assertDatabaseHas('ai_quizzes', [
+            'id' => $quiz->id,
+            'class_id' => $this->schoolClass->id,
+            'status' => 'published',
+        ]);
+
+        // Pastikan kuis duplikasi terbuat untuk otherClass
+        $this->assertDatabaseHas('ai_quizzes', [
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->otherClass->id,
+            'title' => 'Kuis Algoritma Pemrograman',
+            'status' => 'published',
+        ]);
+
+        $cloned = Quiz::where('class_id', $this->otherClass->id)->first();
+        $this->assertNotNull($cloned);
+        $this->assertEquals(1, $cloned->questions()->count());
+    }
+
+    public function test_student_sees_their_own_submissions_in_quiz_index(): void
+    {
+        $quiz = Quiz::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->schoolClass->id,
+            'title' => 'Kuis Logika Digital',
+            'status' => 'published',
+            'due_date' => now()->addDays(1),
+            'max_attempts' => 2,
+        ]);
+
+        QuizSubmission::create([
+            'quiz_id' => $quiz->id,
+            'student_id' => $this->student->id,
+            'attempt_number' => 1,
+            'answers_payload' => [],
+            'grading_status' => 'pending',
+        ]);
+
+        Sanctum::actingAs($this->student);
+
+        $response = $this->getJson('/api/quizzes');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.0.id', $quiz->id)
+            ->assertJsonPath('data.0.submissions.0.attempt_number', 1);
     }
 }

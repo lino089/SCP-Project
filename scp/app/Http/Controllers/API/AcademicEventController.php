@@ -182,6 +182,8 @@ class AcademicEventController extends Controller
             'class_id' => 'nullable|integer|exists:classes,id',
             'grade' => 'nullable|string',
             'only_affects_my_teaching' => 'nullable|boolean',
+            'only_my_scope' => 'nullable|boolean',
+            'only_my_classes' => 'nullable|boolean',
             'child_id' => 'nullable|integer|exists:users,id',
         ]);
 
@@ -309,12 +311,18 @@ class AcademicEventController extends Controller
                 ->toArray();
 
             $isGlobalKesiswaan = $user->assignments()->where('type', 'kesiswaan')->whereNull('class_id')->exists();
+            $isKesiswaan = $user->assignments()->where('type', 'kesiswaan')->exists();
 
             $context['taught_classes'] = $taughtClasses->map(fn($c) => [
                 'id' => $c->id,
                 'name' => $c->name,
                 'level' => $this->exclusionService->normalizeGrade($c->level),
             ])->toArray();
+
+            $context['is_kesiswaan'] = $isKesiswaan;
+            $context['is_global_kesiswaan'] = $isGlobalKesiswaan;
+            $context['relevant_class_ids'] = $allRelevantClassIds;
+            $context['relevant_grades'] = $allRelevantGrades;
 
             if ($homeroomAsgn && $homeroomAsgn->schoolClass) {
                 $context['homeroom_class'] = [
@@ -324,24 +332,26 @@ class AcademicEventController extends Controller
                 ];
             }
 
-            // Filter visibilitas agenda untuk guru
-            $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($allRelevantClassIds, $allRelevantGrades, $isGlobalKesiswaan) {
-                if ($e->scope_type === AcademicEvent::SCOPE_ALL) {
-                    return true;
-                }
-                if ($isGlobalKesiswaan) {
-                    return true;
-                }
-                if ($e->scope_type === AcademicEvent::SCOPE_GRADE) {
-                    $targets = array_map(fn($t) => $this->exclusionService->normalizeGrade($t), $e->scope_targets ?? []);
-                    return !empty(array_intersect($targets, $allRelevantGrades));
-                }
-                if ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
-                    $targets = array_map('intval', $e->scope_targets ?? []);
-                    return !empty(array_intersect($targets, $allRelevantClassIds));
-                }
-                return false;
-            })->values();
+            // Keputusan 4: Guru dan Kesiswaan dapat melihat seluruh agenda kegiatan sekolah (all, grade, class).
+            // Filter hanya berlaku jika guru secara sengaja meminta penyempitan via only_my_scope / only_my_classes
+            if ($request->boolean('only_my_scope') || $request->boolean('only_my_classes')) {
+                $filteredEvents = $allRawEvents->filter(function (AcademicEvent $e) use ($allRelevantClassIds, $allRelevantGrades) {
+                    if ($e->scope_type === AcademicEvent::SCOPE_ALL) {
+                        return true;
+                    }
+                    if ($e->scope_type === AcademicEvent::SCOPE_GRADE) {
+                        $targets = array_map(fn($t) => $this->exclusionService->normalizeGrade($t), $e->scope_targets ?? []);
+                        return !empty(array_intersect($targets, $allRelevantGrades));
+                    }
+                    if ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
+                        $targets = array_map('intval', $e->scope_targets ?? []);
+                        return !empty(array_intersect($targets, $allRelevantClassIds));
+                    }
+                    return false;
+                })->values();
+            } else {
+                $filteredEvents = $allRawEvents;
+            }
 
             // Hitung status mengajar harian guru
             $dailyTeachingStatus = $this->exclusionService->evaluateDailyTeachingStatus(
@@ -478,9 +488,25 @@ class AcademicEventController extends Controller
 
                 $item['affects_my_teaching'] = $affectsMyTeaching;
                 $item['affected_my_classes'] = array_values(array_unique($affectedClasses));
+
+                // Hitung is_my_scope untuk visualisasi guru & kesiswaan
+                $isMyScope = false;
+                if ($e->scope_type === AcademicEvent::SCOPE_ALL) {
+                    $isMyScope = true;
+                } elseif ($e->scope_type === AcademicEvent::SCOPE_GRADE) {
+                    $relGrades = $context['relevant_grades'] ?? [];
+                    $targets = array_map(fn($t) => $this->exclusionService->normalizeGrade($t), $e->scope_targets ?? []);
+                    $isMyScope = !empty(array_intersect($targets, $relGrades));
+                } elseif ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
+                    $relClassIds = $context['relevant_class_ids'] ?? [];
+                    $targets = array_map('intval', $e->scope_targets ?? []);
+                    $isMyScope = !empty(array_intersect($targets, $relClassIds));
+                }
+                $item['is_my_scope'] = $isMyScope;
             } else {
                 $item['affects_my_teaching'] = false;
                 $item['affected_my_classes'] = [];
+                $item['is_my_scope'] = true;
             }
 
             // Tagging Multi-Anak untuk Orang Tua

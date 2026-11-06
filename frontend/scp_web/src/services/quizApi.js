@@ -84,6 +84,14 @@ export const quizApi = {
   },
 
   /**
+   * Membatalkan & menghapus kuis secara permanen (DELETE /api/quizzes/{id})
+   * (Keputusan 1: Alt C & Keputusan 2: Alt A)
+   */
+  async deleteQuiz(id) {
+    return api.delete(`/quizzes/${id}`);
+  },
+
+  /**
    * Mengambil daftar submissions pengerjaan kuis siswa (GET /api/quizzes/{id}/submissions)
    */
   async getQuizSubmissions(id) {

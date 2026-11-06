@@ -4,6 +4,7 @@ import {
   PlayCircle,
   CheckCircle,
   AlertTriangle,
+  AlertCircle,
   ShieldCheck,
   ArrowLeft,
   X,
@@ -466,7 +467,7 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Menandai Guru Berhalangan Hadir (Jam Kosong) oleh Kesiswaan
+  // Menandai Guru Berhalangan Hadir (Jam Kosong) oleh Kesiswaan / Waka
   const handleMarkTeacherAbsent = async () => {
     if (!schedule) return;
     const confirm = window.confirm(
@@ -475,13 +476,14 @@ export default function TeacherJournalPage() {
     if (!confirm) return;
 
     try {
-      await journalApi.markTeacherAbsent(journalId || schedule.id, {
+      await journalApi.markTeacherAbsent(journalId, {
         schedule_id: schedule.id,
       });
       alert('Jadwal berhasil ditandai sebagai Guru Berhalangan Hadir (teacher_absent).');
       navigate('/teacher/schedule');
-    } catch {
-      alert('Gagal menandai status jam kosong.');
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Gagal menandai status jam kosong.';
+      alert(msg);
     }
   };
 
@@ -512,6 +514,12 @@ export default function TeacherJournalPage() {
     // Validasi topik materi (wajib minimal 10 karakter jika bukan mode pengganti kesiswaan)
     if (!isSubstituteMode && (!topic || topic.trim().length < 10)) {
       setErrorMessage('Deskripsi topik materi pembelajaran wajib diisi minimal 10 karakter.');
+      return;
+    }
+
+    const targetJournalId = journalId || schedule?.journal_id;
+    if (!targetJournalId) {
+      setErrorMessage('Sesi jurnal belum terdaftar di sistem. Silakan buka kelas terlebih dahulu.');
       return;
     }
 
@@ -566,7 +574,7 @@ export default function TeacherJournalPage() {
         }
       });
 
-      const res = await journalApi.completeJournal(journalId || schedule.id, formData);
+      const res = await journalApi.completeJournal(targetJournalId, formData);
       if (res.data) {
         setSavedJournalData(res.data);
       }
@@ -1021,7 +1029,9 @@ export default function TeacherJournalPage() {
                     >
                       {isSubstituteMode
                         ? 'Mulai Presensi & Ambil Alih Kelas'
-                        : 'Mulai & Buka Kelas Sekarang'}
+                        : schedule?.journal_status === 'ongoing'
+                          ? 'Lanjutkan Presensi & Jurnal'
+                          : 'Mulai & Buka Kelas Sekarang'}
                     </Button>
                   </>
                 )}

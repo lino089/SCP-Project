@@ -134,7 +134,7 @@ export default function TopBar({ onToggleSidebar }) {
 
         {/* Academic Year & Semester Badge */}
         <div className="web-topbar__academic-badge hidden md:inline-flex items-center px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-700 text-[11.5px] font-mono font-medium">
-          2025/2026 Ganjil
+          {user?.academic_year || '2025/2026 Ganjil'}
         </div>
 
         {/* Utility Bar */}

@@ -1,13 +1,11 @@
 import { useState, useMemo, useRef } from 'react';
 import {
-  Upload,
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
   XCircle,
   AlertCircle,
   ArrowRight,
-  RotateCw,
   Info,
 } from 'lucide-react';
 import Modal from '../../../components/shared/Modal';

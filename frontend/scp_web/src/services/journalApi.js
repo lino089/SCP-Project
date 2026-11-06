@@ -76,10 +76,17 @@ export const journalApi = {
 
   /**
    * Menandai status teacher_absent (Guru Berhalangan Hadir / Jam Kosong)
-   * PATCH /api/journals/{id}
+   * Jika sesi jurnal sudah dibuka (id tersedia): PATCH /api/journals/{id}
+   * Jika sesi jurnal belum dibuka (id null): POST /api/journals dengan status 'teacher_absent'
    */
   async markTeacherAbsent(id, payload = {}) {
-    return api.patch(`/journals/${id}`, payload);
+    if (id) {
+      return api.patch(`/journals/${id}`, payload);
+    }
+    return api.post('/journals', {
+      ...payload,
+      status: 'teacher_absent',
+    });
   },
 
   /**

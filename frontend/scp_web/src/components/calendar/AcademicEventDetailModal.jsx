@@ -1,4 +1,4 @@
-import { Calendar, Clock, Layers, Users, BookOpen, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
+import { Calendar, Layers, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';

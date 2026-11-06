@@ -36,11 +36,11 @@ return [
     ],
 
     'ai' => [
-        'base_url' => env('AI_BASE_URL', 'https://9router.wekanz.id/v1'),
+        'base_url' => env('AI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai'),
         'api_key' => env('AI_API_KEY'),
-        'model' => env('AI_MODEL', 'ag/gemini-3.8-flash'),
-        'timeout' => (int) env('AI_TIMEOUT', 45),
-        'verify_ssl' => env('AI_VERIFY_SSL', false),
+        'model' => env('AI_MODEL', 'gemini-3.1-flash-lite'),
+        'timeout' => (int) env('AI_TIMEOUT', 60),
+        'verify_ssl' => (bool) env('AI_VERIFY_SSL', true),
     ],
 
     'fonnte' => [

@@ -157,6 +157,11 @@ export default function TeacherCalendarPage() {
             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">
               {user?.name || 'Guru'}
             </span>
+            {contextData?.is_kesiswaan && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+                Kesiswaan
+              </span>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Pantau jadwal agenda sekolah, hari libur resmi, kegiatan khusus KBM, dan otomatisasi penyesuaian jadwal mengajar Anda.

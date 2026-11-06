@@ -34,7 +34,10 @@ class QuizController extends Controller
         } elseif ($user->role === 'student') {
             // Siswa hanya melihat kuis kelasnya yang published atau published_result
             $query->where('class_id', $user->class_id)
-                ->whereIn('status', ['published', 'published_result']);
+                ->whereIn('status', ['published', 'published_result'])
+                ->with(['submissions' => function ($sq) use ($user) {
+                    $sq->where('student_id', $user->id)->orderByDesc('attempt_number');
+                }]);
         } elseif ($user->role === 'parent') {
             // Orang tua melihat kuis kelas anak yang sudah published_result
             $linkedStudent = $user->linkedStudent;
@@ -94,14 +97,51 @@ class QuizController extends Controller
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'class_id' => ['required', 'integer', 'exists:classes,id'],
+            'class_id' => ['required_without:class_ids', 'nullable', 'integer', 'exists:classes,id'],
+            'class_ids' => ['nullable', 'array', 'min:1'],
+            'class_ids.*' => ['integer', 'exists:classes,id'],
             'due_date' => ['required', 'date', 'after:now'],
             'max_attempts' => ['required', 'integer', 'min:1'],
         ]);
 
+        $targetClassIds = [];
+        if ($request->filled('class_ids')) {
+            $targetClassIds = array_values(array_unique(array_map('intval', $request->input('class_ids'))));
+        } elseif (!empty($validated['class_id'])) {
+            $targetClassIds = [(int) $validated['class_id']];
+        }
+
+        if (empty($targetClassIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pilih minimal satu kelas target.',
+                'errors' => ['class_id' => ['Kelas target wajib dipilih.']],
+            ], 422);
+        }
+
+        // Validasi hak mengajar guru terhadap kelas yang dipilih
+        if ($user->role === 'teacher') {
+            $scheduleClassIds = \App\Models\Schedule::where('teacher_id', $user->id)->pluck('class_id')->filter()->toArray();
+            $asgnClassIds = $user->assignments()->whereNotNull('class_id')->pluck('class_id')->toArray();
+            $allowedClassIds = array_values(array_unique(array_merge($scheduleClassIds, $asgnClassIds)));
+
+            $unauthorized = array_diff($targetClassIds, $allowedClassIds);
+            if (!empty($unauthorized)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Akses ditolak. Anda hanya dapat membuat kuis untuk kelas yang Anda ajar.',
+                    'errors' => [
+                        'class_id' => ['Satu atau lebih kelas yang dipilih bukan merupakan kelas ajar Anda.'],
+                    ],
+                ], 422);
+            }
+        }
+
+        $primaryClassId = $targetClassIds[0];
+
         $quiz = Quiz::create([
             'teacher_id' => $user->id,
-            'class_id' => $validated['class_id'],
+            'class_id' => $primaryClassId,
             'title' => $validated['title'],
             'status' => 'draft_review',
             'due_date' => $validated['due_date'],
@@ -114,6 +154,7 @@ class QuizController extends Controller
             'success' => true,
             'message' => 'Kuis berhasil dibuat dalam status draft review.',
             'data' => $quiz,
+            'target_class_ids' => $targetClassIds,
         ], 201);
     }
 
@@ -530,6 +571,36 @@ class QuizController extends Controller
     }
 
     /**
+     * Membatalkan & menghapus kuis secara permanen (Keputusan 1: Alt C & Keputusan 2: Alt A).
+     */
+    public function destroy($id, Request $request): JsonResponse
+    {
+        $quiz = Quiz::withCount('submissions')->findOrFail($id);
+        $user = $request->user();
+
+        if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Anda bukan pembuat kuis ini.',
+            ], 403);
+        }
+
+        $submissionsCount = $quiz->submissions_count;
+
+        // Cascade delete kuis beserta questions & submissions
+        $quiz->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Kuis '{$quiz->title}' berhasil dibatalkan dan dihapus permanen" . ($submissionsCount > 0 ? " beserta {$submissionsCount} jawaban siswa yang terdampak." : "."),
+            'data' => [
+                'quiz_id' => (int) $id,
+                'deleted_submissions_count' => $submissionsCount,
+            ],
+        ], 200);
+    }
+
+    /**
      * Konfirmasi & Publikasikan Kuis (draft_review -> published).
      */
     public function publish($id, Request $request): JsonResponse
@@ -552,6 +623,37 @@ class QuizController extends Controller
         }
 
         $quiz->update(['status' => 'published']);
+
+        // Duplikasi ke kelas paralel lainnya jika dipilih (Keputusan 3: Alternatif B)
+        if ($request->filled('duplicate_to_class_ids') && is_array($request->input('duplicate_to_class_ids'))) {
+            $otherClassIds = array_values(array_unique(array_map('intval', $request->input('duplicate_to_class_ids'))));
+            $otherClassIds = array_filter($otherClassIds, fn($cid) => (int)$cid !== (int)$quiz->class_id);
+
+            if (!empty($otherClassIds)) {
+                $questions = $quiz->questions()->get();
+
+                foreach ($otherClassIds as $otherId) {
+                    $clonedQuiz = Quiz::create([
+                        'teacher_id' => $quiz->teacher_id,
+                        'class_id' => $otherId,
+                        'title' => $quiz->title,
+                        'status' => 'published',
+                        'due_date' => $quiz->due_date,
+                        'max_attempts' => $quiz->max_attempts,
+                    ]);
+
+                    foreach ($questions as $q) {
+                        QuizQuestion::create([
+                            'quiz_id' => $clonedQuiz->id,
+                            'question_text' => $q->question_text,
+                            'question_type' => $q->question_type,
+                            'options' => $q->options,
+                            'correct_answer' => $q->correct_answer,
+                        ]);
+                    }
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -588,6 +690,37 @@ class QuizController extends Controller
                     'success' => false,
                     'message' => 'Kuis belum memiliki butir soal. Tambahkan atau generate soal terlebih dahulu sebelum mempublikasikan.',
                 ], 422);
+            }
+
+            // Duplikasi ke kelas paralel lainnya jika dipilih (Keputusan 3: Alternatif B)
+            if ($request->filled('duplicate_to_class_ids') && is_array($request->input('duplicate_to_class_ids'))) {
+                $otherClassIds = array_values(array_unique(array_map('intval', $request->input('duplicate_to_class_ids'))));
+                $otherClassIds = array_filter($otherClassIds, fn($cid) => (int)$cid !== (int)$quiz->class_id);
+
+                if (!empty($otherClassIds)) {
+                    $questions = $quiz->questions()->get();
+
+                    foreach ($otherClassIds as $otherId) {
+                        $clonedQuiz = Quiz::create([
+                            'teacher_id' => $quiz->teacher_id,
+                            'class_id' => $otherId,
+                            'title' => $validated['title'] ?? $quiz->title,
+                            'status' => 'published',
+                            'due_date' => $validated['due_date'] ?? $quiz->due_date,
+                            'max_attempts' => $validated['max_attempts'] ?? $quiz->max_attempts,
+                        ]);
+
+                        foreach ($questions as $q) {
+                            QuizQuestion::create([
+                                'quiz_id' => $clonedQuiz->id,
+                                'question_text' => $q->question_text,
+                                'question_type' => $q->question_type,
+                                'options' => $q->options,
+                                'correct_answer' => $q->correct_answer,
+                            ]);
+                        }
+                    }
+                }
             }
         }
 

@@ -1,14 +1,11 @@
 import { useMemo } from 'react';
 import {
   Calendar,
-  Clock,
-  MapPin,
   FileText,
   AlertCircle,
   CheckCircle2,
   Users,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
 
 const INDONESIAN_MONTHS = [
