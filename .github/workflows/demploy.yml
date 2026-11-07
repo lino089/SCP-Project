@@ -1,0 +1,47 @@
+name: Deploy to Tencent Cloud VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            echo "🚀 Memulai proses update School Class Progress..."
+
+            # 1. Pindah ke folder proyek & pull kode terbaru
+            cd /var/www/SCP-Project
+            git pull origin main
+
+            # 2. Update Backend (Laravel)
+            cd /var/www/SCP-Project/scp
+            composer install --no-dev --optimize-autoloader --no-interaction
+            php artisan migrate --force
+            php artisan optimize:clear
+            php artisan optimize
+
+            # Pastikan izin file storage & log tetap aman
+            sudo chmod -R 775 storage bootstrap/cache
+
+            # 3. Update & Build Frontend (React)
+            cd /var/www/SCP-Project/frontend/scp_web
+            npm install --production=false
+            npm run build
+            sudo chown -R www-data:www-data dist
+
+            # 4. Reload Nginx
+            sudo systemctl reload nginx
+
+            echo "✅ Deployment selesai! Website berhasil diperbarui."
