@@ -54,10 +54,13 @@ export default function ParentCalendarPage() {
       }
 
       const res = await academicEventApi.getMyCalendar(params);
-      if (res.data?.success && res.data.data) {
-        setEvents(res.data.data.events || []);
-        const children = res.data.data.context?.children || [];
+      const payload = res?.data ?? res;
+      if (payload?.events) {
+        setEvents(payload.events || []);
+        const children = payload.context?.children || [];
         setChildrenList(children);
+      } else if (Array.isArray(payload)) {
+        setEvents(payload);
       }
     } catch (err) {
       setErrorMessage(

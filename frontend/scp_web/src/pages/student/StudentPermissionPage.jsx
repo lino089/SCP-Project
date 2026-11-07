@@ -96,8 +96,9 @@ export default function StudentPermissionPage() {
           date: targetDate,
         });
         if (cancel) return;
-        if (res?.data?.data?.disabling_event) {
-          const dev = res.data.data.disabling_event;
+        const exData = res?.data ?? res;
+        if (exData?.disabling_event) {
+          const dev = exData.disabling_event;
           setDateWarning(
             `Perhatian: Tanggal ${targetDate} bertepatan dengan agenda "${dev.title}" di mana KBM ditiadakan. Pengajuan izin tidak diperlukan untuk hari tersebut.`
           );

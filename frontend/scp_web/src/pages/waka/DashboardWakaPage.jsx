@@ -100,11 +100,12 @@ export default function DashboardWakaPage() {
         masterDataSummaryApi.getSummary(),
         academicSettingApi.getCycleHistory(),
         scheduleApi.getMissingJournals().catch(() => ({ data: [] })),
-        academicEventApi.checkExemption({ date: todayStr }).catch(() => ({ data: { data: {} } })),
+        academicEventApi.checkExemption({ date: todayStr }).catch(() => null),
       ]);
 
       // Agenda Kalender Akademik Hari Ini
-      const activeEvts = eventRes?.data?.data?.active_events || [];
+      const exData = eventRes?.data ?? eventRes;
+      const activeEvts = exData?.active_events || [];
       setTodayEvents(activeEvts);
 
       // 1. Settings

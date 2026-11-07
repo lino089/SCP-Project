@@ -1,0 +1,51 @@
+/* ============================================================
+ * ProgressBar — thin track, soft fill
+ * ============================================================ */
+
+.progressbar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.progressbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progressbar-label {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.progressbar-value {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.progressbar-track {
+  height: 6px;
+  width: 100%;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface-subtle);
+  overflow: hidden;
+}
+
+.progressbar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-text-primary);
+  transition: width var(--transition-normal);
+}
+
+.progressbar-fill--success { background-color: var(--color-success-fg); }
+.progressbar-fill--accent { background-color: var(--color-action); }
+.progressbar-fill--primary { background-color: var(--color-text-primary); }
+.progressbar-fill--warning { background-color: var(--color-warning-fg); }
+.progressbar-fill--error { background-color: var(--color-danger-fg); }

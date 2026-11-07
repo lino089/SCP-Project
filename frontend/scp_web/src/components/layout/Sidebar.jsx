@@ -14,6 +14,7 @@ import {
   UserCheck,
   Eye,
   User,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import './Sidebar.css';
@@ -163,6 +164,16 @@ export default function Sidebar({ isOpen = false, onClose }) {
                 >
                   Monitoring &amp; Rekap
                 </NavLink>
+
+                <NavLink
+                  to="/teacher/attendance-recap"
+                  className={({ isActive }) =>
+                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
+                  }
+                  onClick={() => onClose?.()}
+                >
+                  Rekap Kehadiran
+                </NavLink>
               </div>
             )}
           </div>
@@ -242,6 +253,19 @@ export default function Sidebar({ isOpen = false, onClose }) {
             <FileQuestion size={16} strokeWidth={1.5} />
             <span>Manajemen Kuis AI</span>
           </NavLink>
+
+          {(isKesiswaan() || isWaliKelas() || hasRole('waka')) && (
+            <NavLink
+              to="/teacher/attendance-recap"
+              className={({ isActive }) =>
+                `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+              }
+              onClick={() => onClose?.()}
+            >
+              <Users size={16} strokeWidth={1.5} />
+              <span>Rekap Kehadiran Siswa</span>
+            </NavLink>
+          )}
 
           {(isKesiswaan() || isWaliKelas() || hasRole('waka')) && (
             <NavLink

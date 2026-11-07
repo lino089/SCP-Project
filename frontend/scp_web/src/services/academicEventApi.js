@@ -11,6 +11,12 @@ export const academicEventApi = {
   createEvent: (data) => api.post('/academic-events', data),
   updateEvent: (id, data) => api.put(`/academic-events/${id}`, data),
   deleteEvent: (id) => api.delete(`/academic-events/${id}`),
+  importPreview: (formData) =>
+    api.post('/academic-events/import-preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }),
+  importCommit: (payload) => api.post('/academic-events/import-commit', payload),
 };
 
 export default academicEventApi;

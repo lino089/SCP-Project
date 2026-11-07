@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Button, Input } from '../../components/shared';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
-import { User, Lock } from 'lucide-react';
+import { User, Lock, ArrowLeft } from 'lucide-react';
 import './Login.css';
 
 export default function LoginPage() {
@@ -100,6 +100,19 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
+        {/* Navigasi Kembali ke Beranda */}
+        <div className="login-top-bar">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="login-back-btn"
+            title="Kembali ke Beranda Utama"
+          >
+            <ArrowLeft size={14} />
+            <span>Kembali ke Beranda</span>
+          </button>
+        </div>
+
         {/* Header */}
         <div className="login-header">
           <span className="login-brand-text">School Class Progress</span>
@@ -182,6 +195,14 @@ export default function LoginPage() {
         {/* Device Information */}
         <div className="login-device-info">
           Perangkat terdeteksi: <strong className="font-mono text-gray-400">{deviceName}</strong>
+        </div>
+
+        {/* Footer Navigation Kembali ke Beranda */}
+        <div className="login-footer-nav">
+          <Link to="/" className="login-footer-back-link">
+            <ArrowLeft size={13} />
+            <span>Kembali ke Beranda Utama</span>
+          </Link>
         </div>
       </div>
     </div>

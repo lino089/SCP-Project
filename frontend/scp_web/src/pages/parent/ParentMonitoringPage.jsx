@@ -82,7 +82,7 @@ export default function ParentMonitoringPage() {
       setChildSchedules(schedList);
 
       // 5. Agenda Kalender Akademik Hari Ini
-      const eventData = eventRes?.data?.data;
+      const eventData = eventRes?.data ?? eventRes;
       if (eventData?.disabling_event) {
         setChildEvent(eventData.disabling_event);
       } else if (eventData?.active_events && eventData.active_events.length > 0) {

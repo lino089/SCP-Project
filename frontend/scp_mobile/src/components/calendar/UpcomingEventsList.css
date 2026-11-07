@@ -1,0 +1,110 @@
+/* ============================================================
+ * UpcomingEventsList — flat list items, no nested borders
+ * ============================================================ */
+
+.upcoming-events-list {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.upcoming-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+  background-color: transparent;
+  text-align: left;
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
+.upcoming-events-list > .upcoming-event-card:first-child {
+  border-top: none;
+}
+
+.upcoming-event-card:hover {
+  background-color: var(--color-surface-subtle);
+}
+
+.upcoming-event-card:active {
+  background-color: var(--color-border-light);
+}
+
+/* Type is conveyed by the badge only — no coloured card borders */
+.upcoming-event-card--holiday,
+.upcoming-event-card--school_event,
+.upcoming-event-card--class_event,
+.upcoming-event-card--exam {
+  border-left: none;
+}
+
+.upcoming-event-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upcoming-event-card__date {
+  font-family: var(--font-family-mono);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.upcoming-event-card__title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-heading);
+}
+
+.upcoming-event-card__desc {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.upcoming-event-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.upcoming-event-card__teacher-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.upcoming-event-card__children-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-badge);
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}

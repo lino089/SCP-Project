@@ -1,0 +1,43 @@
+/* ============================================================
+ * MobileLayout — single source of page padding & canvas colour
+ * Pages must NOT add their own padding (Sprint 4).
+ * ============================================================ */
+
+.mobile-layout {
+  min-height: 100dvh;
+  background-color: var(--color-bg-app);
+  display: flex;
+  justify-content: center;
+}
+
+.mobile-layout__frame {
+  width: 100%;
+  max-width: var(--mobile-max-width);
+  min-height: 100dvh;
+  background-color: var(--color-bg-app);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.mobile-layout__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom) + 20px);
+}
+
+.mobile-layout__content {
+  width: 100%;
+  padding: 16px var(--page-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 720px) {
+  .mobile-layout__frame {
+    border-left: 1px solid var(--color-border-subtle);
+    border-right: 1px solid var(--color-border-subtle);
+  }
+}

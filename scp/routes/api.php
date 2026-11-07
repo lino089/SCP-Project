@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\AcademicEventController;
 use App\Http\Controllers\API\AcademicSettingController;
 use App\Http\Controllers\API\AttendanceController;
+use App\Http\Controllers\API\AttendanceRecapController;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\ForgotPasswordController;
 use App\Http\Controllers\API\JournalController;
@@ -67,6 +68,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/attendances', [AttendanceController::class, 'index']);
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
 
+    // Rekap Kehadiran Siswa (Wali Kelas & Kesiswaan / Waka)
+    Route::middleware('role:vice_principal,teacher')->prefix('attendance-recap')->group(function () {
+        Route::get('/classes', [AttendanceRecapController::class, 'classes']);
+        Route::get('/summary', [AttendanceRecapController::class, 'summary']);
+        Route::get('/student/{studentId}', [AttendanceRecapController::class, 'studentHistory']);
+        Route::get('/export', [AttendanceRecapController::class, 'export']);
+    });
+
     // Kalender Akademik & Agenda Khusus KBM (Read-only untuk seluruh user terautentikasi)
     Route::get('/academic-events/my-calendar', [AcademicEventController::class, 'myCalendar']);
     Route::get('/academic-events/check-exemption', [AcademicEventController::class, 'checkExemption']);
@@ -105,6 +114,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/academic-settings/cycle-history', [AcademicSettingController::class, 'cycleHistory']);
 
         // Kalender Akademik (Mutasi Agenda Khusus Waka)
+        Route::post('/academic-events/import-preview', [AcademicEventController::class, 'importPreview']);
+        Route::post('/academic-events/import-commit', [AcademicEventController::class, 'importCommit']);
         Route::post('/academic-events', [AcademicEventController::class, 'store']);
         Route::put('/academic-events/{id}', [AcademicEventController::class, 'update']);
         Route::delete('/academic-events/{id}', [AcademicEventController::class, 'destroy']);

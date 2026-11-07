@@ -1,0 +1,311 @@
+/* ============================================
+ * GLOBAL STYLES, RESET & SEMANTIC UTILITIES — SCP Mobile
+ * Design language: institutional / premium fintech
+ * (clean white surfaces, hairline borders, blue action, yellow brand)
+ * Reference: frontend/scp_mobile/ui_redesign_plan.md
+ * ============================================ */
+
+@import "tailwindcss";
+@import './tokens.css';
+
+/* Tailwind `font-sans` dipetakan ke token tipografi proyek di tokens.css
+ * supaya tidak jatuh ke stack default browser (ui-sans-serif/system-ui). */
+@theme {
+  --font-sans: var(--font-family);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-normal);
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-app);
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-heading);
+    color: var(--color-text-primary);
+    letter-spacing: 0;
+  }
+
+  h1 { font-size: var(--font-size-page-title); letter-spacing: var(--tracking-page-title); font-weight: var(--font-weight-bold); }
+  h2 { font-size: var(--font-size-lg); }
+  h3 { font-size: var(--font-size-md); }
+  h4 { font-size: var(--font-size-base); }
+
+  p {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+
+  a {
+    color: var(--color-text-primary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-size: inherit;
+    touch-action: manipulation;
+  }
+
+  input, select, textarea {
+    font-family: inherit;
+    font-size: 16px; /* Prevents iOS Safari auto-zoom on focus */
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-action);
+    outline-offset: 2px;
+  }
+}
+
+/* ============================================================
+ * SEMANTIC UTILITIES
+ * Implemented as plain classes (not @apply) so they can be used
+ * from any .jsx and stay overridable by Tailwind utilities.
+ * ============================================================ */
+
+.font-mono {
+  font-family: var(--font-family-mono);
+}
+
+/* Uniform icon weight across the whole app (design doc §2.5: 1.5–1.75px).
+   Lucide renders stroke-width as a presentation attribute; CSS wins. */
+.lucide {
+  stroke-width: var(--icon-stroke);
+}
+
+/* --- Surfaces --------------------------------------------------- */
+.surface-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.surface-card--flat {
+  box-shadow: none;
+}
+
+.surface-tile {
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--radius-input);
+}
+
+/* Multi-line field (textarea) — same visual weight as Input */
+.field-area {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  box-shadow: none;
+  color: var(--color-text-primary);
+}
+
+.field-area:focus {
+  outline: none;
+  border-color: var(--color-action);
+  box-shadow: 0 0 0 3px var(--color-action-soft);
+}
+
+/* --- Page / section hierarchy ----------------------------------- */
+.page-title {
+  margin: 0;
+  font-size: var(--font-size-page-title);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-page-title);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.card-title {
+  margin: 0;
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--color-text-primary);
+}
+
+.text-meta {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.text-caption {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-metric);
+  color: var(--color-text-primary);
+  line-height: 1.15;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+}
+
+.section-label {
+  font-size: var(--font-size-section);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-section);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+}
+
+.section-action {
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-action);
+  white-space: nowrap;
+}
+
+/* --- Lists ------------------------------------------------------ */
+.list-divider > * + * {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.zebra-list > *:nth-child(even) {
+  background-color: var(--color-zebra);
+}
+
+/* --- Icon tiles (replaces pastel containers) --------------------- */
+.icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-input);
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}
+
+.icon-tile--sm {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+}
+
+.icon-tile--action {
+  background-color: var(--color-action-soft);
+  color: var(--color-action);
+}
+
+.icon-tile--brand {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-text);
+}
+
+/* --- Pills / chips ---------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-subtle);
+  background-color: var(--color-surface);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.chip--active {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chip--action-active {
+  border-color: var(--color-action);
+  background-color: var(--color-action-soft);
+  color: var(--color-action);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* --- Field label ------------------------------------------------- */
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-section);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+/* --- Scrollbars -------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* --- Safe area helpers ------------------------------------------- */
+.pb-safe {
+  padding-bottom: var(--safe-area-bottom);
+}
+
+.pt-safe {
+  padding-top: var(--safe-area-top);
+}

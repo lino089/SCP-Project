@@ -92,8 +92,9 @@ export default function TeacherSchedulePage() {
       }
 
       academicEventApi.checkExemption().then((res) => {
-        if (res.data?.data) {
-          setTodayExemption(res.data.data);
+        const exData = res?.data ?? res;
+        if (exData && (exData.disabling_event !== undefined || exData.is_teaching_exempted !== undefined)) {
+          setTodayExemption(exData);
         }
       }).catch(() => {});
     } catch {

@@ -107,7 +107,7 @@ export default function StudentSchedulePage() {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
       const eventRes = await academicEventApi.checkExemption({ for_my_class: 1, date: todayStr });
-      const evtData = eventRes?.data?.data;
+      const evtData = eventRes?.data ?? eventRes;
       if (evtData?.disabling_event) {
         setTodayEvent(evtData.disabling_event);
       } else if (evtData?.active_events && evtData.active_events.length > 0) {

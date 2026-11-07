@@ -7,6 +7,7 @@ import { WebLayout } from '../components/layout';
 import { LoadingOverlay } from '../components/feedback';
 
 // Lazy-loaded Pages (Route-Based Code Splitting)
+const LandingPage = lazy(() => import('../pages/landing/LandingPage'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage'));
 const ChangePasswordPage = lazy(() => import('../pages/auth/ChangePasswordPage'));
@@ -25,6 +26,7 @@ const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPag
 const TeacherLeavePage = lazy(() => import('../pages/teacher/TeacherLeavePage'));
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
+const StudentAttendanceRecapPage = lazy(() => import('../pages/teacher/StudentAttendanceRecapPage'));
 const StudentHomePage = lazy(() => import('../pages/student/StudentHomePage'));
 const StudentCalendarPage = lazy(() => import('../pages/student/StudentCalendarPage'));
 const StudentSchedulePage = lazy(() => import('../pages/student/StudentSchedulePage'));
@@ -37,6 +39,10 @@ export default function AppRouter() {
   return (
     <Suspense fallback={<LoadingOverlay fixed message="Memuat antarmuka..." />}>
       <Routes>
+        {/* Public Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/landing" element={<LandingPage />} />
+
         {/* Public Routes */}
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
@@ -75,7 +81,7 @@ export default function AppRouter() {
               <Route path="/web/monitoring" element={<MonitoringRecapPage />} />
             </Route>
 
-            {/* Teacher Permission Verification (Kesiswaan, Wali Kelas, or Waka) */}
+            {/* Teacher Permission Verification & Student Attendance Recap (Kesiswaan, Wali Kelas, or Waka) */}
             <Route
               element={
                 <RoleRoute
@@ -86,6 +92,7 @@ export default function AppRouter() {
               }
             >
               <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
+              <Route path="/teacher/attendance-recap" element={<StudentAttendanceRecapPage />} />
             </Route>
 
             {/* Standard Teacher Routes */}
@@ -115,9 +122,8 @@ export default function AppRouter() {
           </Route>
         </Route>
 
-        {/* Fallback & Root Redirection */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* Fallback Redirection */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
   );

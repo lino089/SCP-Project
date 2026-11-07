@@ -58,11 +58,14 @@ export default function TeacherCalendarPage() {
       }
 
       const res = await academicEventApi.getMyCalendar(params);
-      if (res.data?.success && res.data.data) {
-        setEvents(res.data.data.events || []);
-        setDailyTeachingStatus(res.data.data.daily_teaching_status || {});
-        setSummaryData(res.data.data.summary || null);
-        setContextData(res.data.data.context || null);
+      const payload = res?.data ?? res;
+      if (payload?.events) {
+        setEvents(payload.events || []);
+        setDailyTeachingStatus(payload.daily_teaching_status || {});
+        setSummaryData(payload.summary || null);
+        setContextData(payload.context || null);
+      } else if (Array.isArray(payload)) {
+        setEvents(payload);
       }
     } catch (err) {
       setErrorMessage(

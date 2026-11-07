@@ -76,7 +76,7 @@ export default function StudentHomePage() {
         leaveApi.getAttendances({ per_page: 50 }),
         schedPromise,
         quizApi.getQuizzes({ per_page: 20 }),
-        academicEventApi.checkExemption({ for_my_class: 1, date: todayStr }).catch(() => ({ data: { data: {} } })),
+        academicEventApi.checkExemption({ for_my_class: 1, date: todayStr }).catch(() => null),
       ]);
 
       // 1. Rekapitulasi Presensi
@@ -93,7 +93,7 @@ export default function StudentHomePage() {
       setActiveQuizzes(filteredQuizzes);
 
       // 4. Agenda Khusus Kelas Hari Ini
-      const eventData = eventRes?.data?.data;
+      const eventData = eventRes?.data ?? eventRes;
       if (eventData?.disabling_event) {
         setActiveEvent(eventData.disabling_event);
       } else if (eventData?.active_events && eventData.active_events.length > 0) {

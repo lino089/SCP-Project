@@ -1,0 +1,206 @@
+/* ============================================
+ * DESIGN TOKENS — SCP Mobile
+ * Institutional / premium fintech visual language.
+ * Reference: frontend/scp_mobile/ui_redesign_plan.md
+ *
+ * Migration note: legacy token names are preserved as aliases at the
+ * bottom of this file so un-migrated components keep resolving to the
+ * new values. Aliases are removed only after the final audit.
+ * ============================================ */
+
+:root {
+  /* ---------------------------------------------------------
+   * SURFACES
+   * --------------------------------------------------------- */
+  --color-bg-app: #F8F9FA;          /* application canvas */
+  --color-surface: #FFFFFF;         /* card, sheet, modal */
+  --color-surface-subtle: #F1F3F6;  /* chip base, segmented base, icon tile */
+  --color-surface-hover: #F1F3F6;
+  --color-zebra: #F8FAFC;           /* zebra striping for long lists */
+
+  /* ---------------------------------------------------------
+   * BORDERS
+   * --------------------------------------------------------- */
+  --color-border-subtle: #EDF0F5;   /* default 1px divider / card border */
+  --color-border-strong: #CBD5E1;   /* input borders */
+  --color-border-light: #F1F3F6;
+
+  /* ---------------------------------------------------------
+   * TEXT HIERARCHY
+   * --------------------------------------------------------- */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #8A94A6;
+
+  /* ---------------------------------------------------------
+   * BRAND ACCENT (Exness Yellow — retained per D-1)
+   * Reserved for brand identity marks, never for primary CTAs.
+   * --------------------------------------------------------- */
+  --color-brand: #FFDE00;
+  --color-brand-strong: #F5D400;
+  --color-brand-text: #0F172A;
+  --color-brand-soft: rgba(255, 222, 0, 0.16);
+
+  /* ---------------------------------------------------------
+   * ACTION (primary interactive colour)
+   * --------------------------------------------------------- */
+  --color-action: #0066FF;
+  --color-action-hover: #0052CC;
+  --color-action-soft: rgba(0, 102, 255, 0.08);
+  --color-action-border: rgba(0, 102, 255, 0.24);
+  --color-action-text: #FFFFFF;
+  --color-inverse-text: #FFFFFF;
+  --color-danger-strong: #C21D1D;
+  --color-success-strong: #047857;
+
+  /* ---------------------------------------------------------
+   * SEMANTIC / STATUS
+   * --------------------------------------------------------- */
+  --color-success-fg: #059669;
+  --color-success-bg: #E8F8F0;
+  --color-success-border: #C8EEDC;
+
+  --color-danger-fg: #E02424;
+  --color-danger-bg: #FDE8E8;
+  --color-danger-border: #F8CFCF;
+
+  --color-warning-fg: #D97706;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-border: #FBE3A5;
+
+  --color-info-fg: #0066FF;
+  --color-info-bg: #EFF6FF;
+  --color-info-border: #D6E6FF;
+
+  --color-neutral-fg: #64748B;
+  --color-neutral-bg: #F1F3F6;
+  --color-neutral-border: #EDF0F5;
+
+  --color-overlay: rgba(15, 23, 42, 0.55);
+  --color-overlay-soft: rgba(15, 23, 42, 0.32);
+
+  /* ---------------------------------------------------------
+   * TYPOGRAPHY
+   * --------------------------------------------------------- */
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'JetBrains Mono', monospace;
+
+  --font-size-page-title: 22px;
+  --font-size-section: 12px;
+  --font-size-card-title: 15px;
+  --font-size-body: 13px;
+  --font-size-caption: 12px;
+  --font-size-badge: 11px;
+
+  --font-size-xs: 0.6875rem;   /* 11px — badge / mono meta only */
+  --font-size-sm: 0.75rem;     /* 12px — caption */
+  --font-size-base: 0.875rem;  /* 14px */
+  --font-size-md: 1rem;        /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.75rem;    /* 28px */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-heading: 1.35;
+  --line-height-normal: 1.45;
+  --line-height-relaxed: 1.6;
+
+  --tracking-page-title: -0.5px;
+  --tracking-section: 0.8px;
+  --tracking-badge: 0.2px;
+  --tracking-metric: -0.2px;
+
+  /* ---------------------------------------------------------
+   * SPACING
+   * --------------------------------------------------------- */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+
+  /* ---------------------------------------------------------
+   * RADIUS (single scale, no ad-hoc values)
+   * --------------------------------------------------------- */
+  --radius-badge: 6px;
+  --radius-sm: 8px;
+  --radius-input: 10px;
+  --radius-md: 10px;
+  --radius-card: 14px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-sheet: 20px;
+  --radius-pill: 9999px;
+  --radius-full: 9999px;
+
+  /* ---------------------------------------------------------
+   * ELEVATION (flat-first; shadows are near-invisible)
+   * --------------------------------------------------------- */
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.03);
+  --shadow-elevated: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --shadow-pill: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sheet: 0 -4px 20px rgba(15, 23, 42, 0.10);
+  --shadow-none: none;
+
+  /* Legacy shadow aliases (kept for un-migrated styles) */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.06);
+
+  /* ---------------------------------------------------------
+   * ICONOGRAPHY
+   * --------------------------------------------------------- */
+  --icon-stroke: 1.75;
+  --icon-size-sm: 16px;
+  --icon-size-md: 18px;
+  --icon-size-lg: 20px;
+
+  /* ---------------------------------------------------------
+   * TRANSITIONS
+   * --------------------------------------------------------- */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-sheet: 250ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ---------------------------------------------------------
+   * MOBILE LAYOUT & SAFE AREA
+   * --------------------------------------------------------- */
+  --topbar-height: 56px;
+  --bottom-nav-height: 60px;
+  --touch-target-min: 44px;
+  --touch-control-height: 44px;
+  --mobile-max-width: 768px;
+  --page-gutter: 16px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* =========================================================
+   * LEGACY ALIASES — do not use in new code.
+   * Kept so un-migrated files resolve to the new values instead
+   * of failing to a missing custom property.
+   * ========================================================= */
+  --color-bg: var(--color-surface);
+  --color-border: var(--color-border-subtle);
+  --color-accent: var(--color-brand);
+  --color-accent-hover: var(--color-brand-strong);
+  --color-accent-text: var(--color-brand-text);
+  --color-success: var(--color-success-fg);
+  --color-error: var(--color-danger-fg);
+  --color-error-bg: var(--color-danger-bg);
+  --color-warning: var(--color-warning-fg);
+  --color-badge-blue: var(--color-text-secondary);
+  --color-badge-blue-bg: var(--color-surface-subtle);
+}

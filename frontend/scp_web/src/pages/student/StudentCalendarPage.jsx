@@ -64,10 +64,13 @@ export default function StudentCalendarPage() {
       }
 
       const res = await academicEventApi.getMyCalendar(params);
-      if (res.data?.success && res.data.data) {
-        setEvents(res.data.data.events || []);
-        setContextData(res.data.data.context || null);
-        setSummaryData(res.data.data.summary || null);
+      const payload = res?.data ?? res;
+      if (payload?.events) {
+        setEvents(payload.events || []);
+        setContextData(payload.context || null);
+        setSummaryData(payload.summary || null);
+      } else if (Array.isArray(payload)) {
+        setEvents(payload);
       }
     } catch (err) {
       setErrorMessage(

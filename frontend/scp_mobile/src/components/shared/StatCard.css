@@ -1,0 +1,108 @@
+/* ============================================================
+ * StatCard — KPI tile: quiet surface, coloured metric only
+ * variant colours the value text (no coloured borders)
+ * ============================================================ */
+
+.stat-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.stat-card--clickable {
+  cursor: pointer;
+}
+
+.stat-card--clickable:active {
+  background-color: var(--color-surface-subtle);
+}
+
+.stat-card--clickable:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+
+.stat-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-card__label {
+  font-size: 11.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+.stat-card__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-subtle);
+  border: none;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-card__value {
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--tracking-metric);
+  line-height: 1.15;
+}
+
+.stat-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.stat-card__trend {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.stat-card__subtext {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Variants: value colour only ------------------------------- */
+.stat-card--accent .stat-card__value {
+  color: var(--color-action);
+}
+
+.stat-card--success .stat-card__value {
+  color: var(--color-success-fg);
+}
+
+.stat-card--warning .stat-card__value {
+  color: var(--color-warning-fg);
+}
+
+.stat-card--danger .stat-card__value {
+  color: var(--color-danger-fg);
+}
+
+.stat-card--accent .stat-card__icon,
+.stat-card--success .stat-card__icon,
+.stat-card--warning .stat-card__icon,
+.stat-card--danger .stat-card__icon {
+  background-color: var(--color-surface-subtle);
+}

@@ -1,0 +1,44 @@
+/* LoadingOverlay — neutral canvas wash, blue spinner */
+.loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+  background-color: transparent;
+}
+
+.loading-overlay--fixed {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background-color: rgba(248, 249, 250, 0.86);
+  backdrop-filter: blur(2px);
+}
+
+.loading-overlay__spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--color-border-subtle);
+  border-top-color: var(--color-action);
+  border-radius: 50%;
+  animation: loading-spin 0.7s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-overlay__text {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.loading-overlay__subtext {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}

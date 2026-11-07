@@ -9,10 +9,12 @@ import {
   Layers,
   HelpCircle,
   RefreshCw,
+  Upload,
 } from 'lucide-react';
 import academicEventApi from '../../services/academicEventApi';
 import { classApi } from '../../services/masterDataApi';
 import AcademicEventModal from './components/AcademicEventModal';
+import AcademicEventImportModal from './components/AcademicEventImportModal';
 import SharedCalendarView from '../../components/calendar/SharedCalendarView';
 import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
@@ -45,6 +47,7 @@ export default function AcademicCalendarPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -68,10 +71,11 @@ export default function AcademicCalendarPage() {
   useEffect(() => {
     classApi.getClasses({ per_page: 100 })
       .then((res) => {
-        if (res.data && Array.isArray(res.data)) {
-          setClassesList(res.data);
-        } else if (res.data?.data && Array.isArray(res.data.data)) {
-          setClassesList(res.data.data);
+        const raw = res?.data ?? res;
+        if (Array.isArray(raw)) {
+          setClassesList(raw);
+        } else if (Array.isArray(raw?.data)) {
+          setClassesList(raw.data);
         }
       })
       .catch(() => {});
@@ -90,11 +94,12 @@ export default function AcademicCalendarPage() {
       if (filterClassId !== 'ALL') params.class_id = Number(filterClassId);
 
       const res = await academicEventApi.getMyCalendar(params);
-      if (res.data?.success && res.data.data) {
-        setEvents(res.data.data.events || []);
-        setSummaryData(res.data.data.summary || null);
-      } else if (Array.isArray(res.data?.data)) {
-        setEvents(res.data.data);
+      const payload = res?.data ?? res;
+      if (payload?.events) {
+        setEvents(payload.events || []);
+        setSummaryData(payload.summary || null);
+      } else if (Array.isArray(payload)) {
+        setEvents(payload);
       }
     } catch (err) {
       showToastError(err.response?.data?.message || err.message || 'Gagal memuat agenda kalender akademik.');
@@ -325,6 +330,10 @@ export default function AcademicCalendarPage() {
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             <span>Muat Ulang</span>
           </Button>
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5">
+            <Upload size={16} />
+            <span>Import Excel</span>
+          </Button>
           <Button variant="primary" onClick={() => handleOpenCreateModal()} className="flex items-center gap-1.5">
             <Plus size={16} />
             <span>Tambah Agenda</span>
@@ -460,6 +469,17 @@ export default function AcademicCalendarPage() {
           </div>
         )}
       </div>
+
+      {/* Modal Import Excel Kaldik */}
+      <AcademicEventImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        classList={classesList}
+        onImportSuccess={() => {
+          showToastSuccess('Data kalender akademik berhasil diimpor.');
+          loadEvents();
+        }}
+      />
 
       {/* Modal Tambah / Edit Agenda */}
       <AcademicEventModal

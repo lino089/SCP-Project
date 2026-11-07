@@ -1,0 +1,61 @@
+/* ============================================================
+ * Card — white surface, hairline border, radius 14px
+ * ============================================================ */
+
+.scp-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.scp-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.scp-card__header-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.scp-card__title {
+  margin: 0;
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-heading);
+}
+
+.scp-card__subtitle {
+  margin: 3px 0 0 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.scp-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.scp-card__body {
+  padding: 16px;
+}
+
+.scp-card__body--flush {
+  padding: 0;
+}
+
+.scp-card__footer {
+  padding: 12px 16px;
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-border-subtle);
+}

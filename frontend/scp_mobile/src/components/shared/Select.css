@@ -1,0 +1,99 @@
+/* ============================================================
+ * Select — matches Input (44px, radius 10, hairline strong)
+ * ============================================================ */
+
+.select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-family: var(--font-family);
+}
+
+.select-field__label {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-section);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.select-field__required {
+  color: var(--color-danger-fg);
+}
+
+.select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-control-height);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.select-wrapper:focus-within {
+  border-color: var(--color-action);
+  box-shadow: 0 0 0 3px var(--color-action-soft);
+}
+
+.select-wrapper--error {
+  border-color: var(--color-danger-fg);
+}
+
+.select-wrapper--disabled {
+  background-color: var(--color-surface-subtle);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.select-wrapper__icon {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.select-wrapper__control {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 34px 10px 12px;
+  border: none;
+  outline: none;
+  background: transparent;
+  appearance: none;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.select-wrapper__control--with-icon {
+  padding-left: 8px;
+}
+
+.select-wrapper__chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.select-field__error {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-danger-fg);
+  font-weight: var(--font-weight-medium);
+}
+
+.select-field__hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}

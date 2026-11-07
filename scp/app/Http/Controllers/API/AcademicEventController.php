@@ -8,6 +8,7 @@ use App\Models\Classes;
 use App\Models\Schedule;
 use App\Models\SystemConfiguration;
 use App\Services\AcademicCalendarExclusionService;
+use App\Services\AcademicEventImportService;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\JsonResponse;
@@ -776,6 +777,71 @@ class AcademicEventController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Agenda kalender akademik berhasil dihapus.',
+        ], 200);
+    }
+
+    /**
+     * Memproses berkas Excel Kalender Akademik dan mengembalikan pratinjau data (Khusus Waka).
+     * POST /api/academic-events/import-preview
+     */
+    public function importPreview(Request $request, AcademicEventImportService $importService): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx|max:5120',
+        ], [
+            'file.required' => 'Berkas Excel kalender akademik wajib diunggah.',
+            'file.mimes' => 'Format berkas harus berupa spreadsheet dengan ekstensi .xlsx.',
+            'file.max' => 'Ukuran berkas Excel tidak boleh melebihi 5 MB.',
+        ]);
+
+        $preview = $importService->generatePreview($request->file('file'), $request->user()->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Analisis berkas Excel kalender akademik berhasil.',
+            'data' => $preview,
+        ], 200);
+    }
+
+    /**
+     * Menyimpan hasil konfirmasi pratinjau agenda kalender akademik ke database secara atomik (Khusus Waka).
+     * POST /api/academic-events/import-commit
+     */
+    public function importCommit(Request $request, AcademicEventImportService $importService): JsonResponse
+    {
+        $request->validate([
+            'preview_token' => 'required|string',
+            'duplicate_mode' => 'nullable|string|in:skip,update',
+            'items' => 'required|array|min:1',
+            'items.*.title' => 'required|string|max:150',
+            'items.*.start_date' => 'required|date_format:Y-m-d',
+            'items.*.end_date' => 'required|date_format:Y-m-d|after_or_equal:items.*.start_date',
+            'items.*.type' => 'required|string|in:' . implode(',', AcademicEvent::TYPES),
+            'items.*.scope_type' => 'required|string|in:' . implode(',', AcademicEvent::SCOPES),
+            'items.*.scope_targets' => 'nullable|array',
+            'items.*.disables_teaching' => 'nullable|boolean',
+            'items.*.academic_year' => 'nullable|string|max:20',
+        ], [
+            'preview_token.required' => 'Token pratinjau wajib disertakan.',
+            'items.required' => 'Daftar agenda yang akan diimpor wajib dikirimkan.',
+            'items.*.title.required' => 'Judul agenda tidak boleh kosong.',
+            'items.*.start_date.required' => 'Tanggal mulai agenda wajib diisi.',
+            'items.*.end_date.required' => 'Tanggal selesai agenda wajib diisi.',
+            'items.*.end_date.after_or_equal' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
+        ]);
+
+        $duplicateMode = $request->input('duplicate_mode', 'skip');
+        $result = $importService->commit(
+            $request->input('preview_token'),
+            $request->input('items'),
+            $request->user()->id,
+            $duplicateMode
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Agenda kalender akademik berhasil diimpor.',
+            'data' => $result,
         ], 200);
     }
 

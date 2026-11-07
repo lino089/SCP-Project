@@ -1,0 +1,18 @@
+{
+  "name": "SCP Mobile — School Class Progress",
+  "short_name": "SCP Mobile",
+  "description": "Aplikasi Mobile Sistem Informasi Kemajuan Kelas & Akademik Terpadu",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

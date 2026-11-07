@@ -103,11 +103,12 @@ export default function TeacherDashboardPage() {
         }),
         journalApi.getMissingJournals().catch(() => ({ data: [] })),
         leaveApi.getTeacherLeaveRequests({ per_page: 20 }).catch(() => ({ data: [] })),
-        academicEventApi.checkExemption().catch(() => ({ data: { data: null } })),
+        academicEventApi.checkExemption().catch(() => null),
       ]);
 
-      if (exemptionRes?.data?.data) {
-        setTodayExemption(exemptionRes.data.data);
+      const exData = exemptionRes?.data ?? exemptionRes;
+      if (exData && (exData.disabling_event !== undefined || exData.is_teaching_exempted !== undefined)) {
+        setTodayExemption(exData);
       }
 
       const todayList = Array.isArray(todayRes) ? todayRes : Array.isArray(todayRes?.data) ? todayRes.data : [];

@@ -1,0 +1,110 @@
+/* ============================================================
+ * SegmentedTabs — segmented control (pill) is the default pattern.
+ * Container uses --color-surface-subtle / 3px padding; active = white pill + soft shadow.
+ * ============================================================ */
+
+.segmented-tabs {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  width: 100%;
+}
+
+.segmented-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- Pill / segmented control (default) ------------------------- */
+.segmented-tabs--pill {
+  gap: 2px;
+  padding: 3px;
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-input);
+}
+
+.segmented-tabs--pill .segmented-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.segmented-tabs--pill .segmented-tab--active {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-pill);
+}
+
+/* --- Underline variant (secondary usage) ------------------------ */
+.segmented-tabs--underline {
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background-color: transparent;
+}
+
+.segmented-tabs--underline .segmented-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.segmented-tabs--underline .segmented-tab--active {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  border-bottom-color: var(--color-text-primary);
+}
+
+.segmented-tabs--full .segmented-tab {
+  flex: 1;
+}
+
+.segmented-tab__icon {
+  flex-shrink: 0;
+}
+
+.segmented-tab__label {
+  display: inline-block;
+}
+
+.segmented-tab__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-badge);
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+}
+
+.segmented-tab--active .segmented-tab__badge {
+  background-color: var(--color-action-soft);
+  color: var(--color-action);
+}

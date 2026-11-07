@@ -1,0 +1,115 @@
+/* ============================================================
+ * Badge — soft status pills (radius 6px, 1px hairline)
+ * Status map:
+ *   success  --color-success-bg / --color-success-fg
+ *   warning  --color-warning-bg / --color-warning-fg
+ *   error    --color-danger-bg / --color-danger-fg
+ *   info     --color-info-bg / --color-info-fg
+ *   neutral  --color-neutral-bg / --color-text-secondary
+ *   accent   → brand yellow (identity only)
+ * ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-family);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-badge);
+  border-radius: var(--radius-badge);
+  line-height: 1.2;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.badge--sm {
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+.badge--md {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.badge--lg {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.badge--mono {
+  font-family: var(--font-family-mono);
+  letter-spacing: -0.01em;
+}
+
+.badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.badge__icon {
+  flex-shrink: 0;
+}
+
+/* --- Variants -------------------------------------------------- */
+.badge--neutral,
+.badge--status {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral-fg);
+  border-color: var(--color-neutral-border);
+}
+
+.badge--code {
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-subtle);
+}
+
+.badge--outline {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-strong);
+}
+
+.badge--success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border-color: var(--color-success-border);
+}
+
+.badge--warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  border-color: var(--color-warning-border);
+}
+
+.badge--error,
+.badge--danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border-color: var(--color-danger-border);
+}
+
+.badge--info {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-fg);
+  border-color: var(--color-info-border);
+}
+
+/* Brand accent — identity marks only (D-1) */
+.badge--accent {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-text);
+  border-color: rgba(245, 212, 0, 0.45);
+}
+
+/* Purple is not part of the palette (D-3) — resolve to neutral */
+.badge--purple {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-text-secondary);
+  border-color: var(--color-neutral-border);
+}

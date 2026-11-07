@@ -1,0 +1,50 @@
+/* ============================================================
+ * ConfirmSheet — confirmation content inside BottomSheetModal
+ * ============================================================ */
+
+.confirm-sheet__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 4px 4px 8px;
+}
+
+.confirm-sheet__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-info-bg);
+  color: var(--color-info-fg);
+}
+
+.confirm-sheet__icon--danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+
+.confirm-sheet__icon--warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.confirm-sheet__text {
+  width: 100%;
+}
+
+.confirm-sheet__message {
+  margin: 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.confirm-sheet__footer {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}

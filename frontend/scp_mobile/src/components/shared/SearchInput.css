@@ -1,0 +1,66 @@
+/* ============================================================
+ * SearchInput — flat field, no shadow, radius 10
+ * ============================================================ */
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-control-height);
+  width: 100%;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-input-wrapper:focus-within {
+  border-color: var(--color-action);
+  box-shadow: 0 0 0 3px var(--color-action-soft);
+}
+
+.search-input-icon {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.search-input-field {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 10px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.search-input-field::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Remove native WebKit search cancel button */
+.search-input-field::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search-input-clear-btn {
+  width: 36px;
+  height: 36px;
+  margin-right: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.search-input-clear-btn:active {
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}

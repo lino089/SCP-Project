@@ -1,0 +1,253 @@
+/* ============================================================
+ * MobileCalendarView — monthly grid, hairline borders, dot markers
+ * Agenda dot colours (D-3): holiday red · school_event amber ·
+ * class_event neutral · exam blue
+ * ============================================================ */
+
+.mobile-calendar {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mobile-calendar__title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.mobile-calendar__month-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-calendar__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mobile-calendar__nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.mobile-calendar__nav-btn:hover {
+  background-color: var(--color-surface-subtle);
+}
+
+.mobile-calendar__nav-btn:active {
+  background-color: var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.mobile-calendar__nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mobile-calendar__today-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background-color: var(--color-surface);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family-mono);
+  color: var(--color-text-primary);
+}
+
+.mobile-calendar__today-btn:active {
+  background-color: var(--color-surface-subtle);
+}
+
+.mobile-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.mobile-calendar__weekday {
+  text-align: center;
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding: 2px 0;
+}
+
+.mobile-calendar__weekday--weekend {
+  color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+.mobile-calendar__days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.mobile-calendar__day-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 5px 2px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background-color: transparent;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.mobile-calendar__day-cell:hover:not(.mobile-calendar__day-cell--outside) {
+  background-color: var(--color-surface-subtle);
+}
+
+.mobile-calendar__day-cell:active:not(.mobile-calendar__day-cell--outside) {
+  background-color: var(--color-border-light);
+}
+
+.mobile-calendar__day-cell--outside {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.mobile-calendar__day-cell--weekend .mobile-calendar__day-num {
+  color: var(--color-text-muted);
+}
+
+.mobile-calendar__day-num {
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+/* Today: hairline action border, no fill */
+.mobile-calendar__day-cell--today {
+  border-color: var(--color-action);
+}
+
+.mobile-calendar__day-cell--today .mobile-calendar__day-num {
+  color: var(--color-action);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Selected: solid slate fill */
+.mobile-calendar__day-cell--selected {
+  background-color: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+}
+
+.mobile-calendar__day-cell--selected .mobile-calendar__day-num {
+  color: var(--color-inverse-text);
+  font-weight: var(--font-weight-bold);
+}
+
+.mobile-calendar__teacher-tag {
+  font-size: 8px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
+  padding: 1px 3px;
+  border-radius: 3px;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-calendar__teacher-tag--free {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-fg);
+}
+
+.mobile-calendar__teacher-tag--partial {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.mobile-calendar__dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 6px;
+}
+
+.mobile-calendar__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-calendar__dot--holiday { background-color: var(--color-danger-fg); }
+.mobile-calendar__dot--school_event { background-color: var(--color-warning-fg); }
+.mobile-calendar__dot--class_event { background-color: var(--color-neutral-fg); }
+.mobile-calendar__dot--exam { background-color: var(--color-action); }
+
+.mobile-calendar__dot-more {
+  font-size: 8px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+
+.mobile-calendar__day-cell--selected .mobile-calendar__dot-more {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.mobile-calendar__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.mobile-calendar__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+}
+
+.mobile-calendar__legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
