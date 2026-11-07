@@ -16,7 +16,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
+          port: 22
           script: |
             set -e
             echo "🚀 Memulai proses update School Class Progress..."
@@ -27,12 +27,12 @@ jobs:
 
             # 2. Update Backend (Laravel)
             cd /var/www/SCP-Project/scp
-            composer install --no-dev --optimize-autoloader --no-interaction
+            composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
             php artisan migrate --force
             php artisan optimize:clear
             php artisan optimize
 
-            # Pastikan izin file storage & log tetap aman
+            # Pastikan izin file storage & cache tetap aman
             sudo chmod -R 775 storage bootstrap/cache
 
             # 3. Update & Build Frontend (React)
