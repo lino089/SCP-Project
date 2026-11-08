@@ -34,7 +34,7 @@ export const quizApi = {
    * Mengembalikan HTTP 202 Accepted untuk pemrosesan asinkron
    */
   async generatePrompt(id, data) {
-    return api.post(`/quizzes/${id}/generate-prompt`, data);
+    return api.post(`/quizzes/${id}/generate-prompt`, data, { timeout: 120000 });
   },
 
   /**
@@ -44,6 +44,7 @@ export const quizApi = {
   async extractDocument(id, formData) {
     return api.post(`/quizzes/${id}/extract-document`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
     });
   },
 

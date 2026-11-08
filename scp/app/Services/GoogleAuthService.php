@@ -145,7 +145,20 @@ class GoogleAuthService
     public function loginWithGoogle(array $googleData, string $deviceName): array
     {
         $googleId = (string) $googleData['sub'];
+        $googleEmail = $googleData['email'] ?? null;
         $user = User::where('google_id', $googleId)->first();
+
+        // Fallback auto-link: jika google_id belum terisi namun google_email telah didaftarkan pada profil
+        if (! $user && ! empty($googleEmail)) {
+            $userByGoogleEmail = User::where('google_email', $googleEmail)->first();
+            if ($userByGoogleEmail && empty($userByGoogleEmail->google_id)) {
+                $userByGoogleEmail->update([
+                    'google_id' => $googleId,
+                    'google_linked_at' => now(),
+                ]);
+                $user = $userByGoogleEmail;
+            }
+        }
 
         if (!$user) {
             return [

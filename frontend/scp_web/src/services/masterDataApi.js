@@ -12,10 +12,10 @@ export const masterDataSummaryApi = {
 };
 
 export const classApi = {
-  getClasses: (params) => {
+  getClasses: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/classes', { params: cleanParams });
+    return api.get('/classes', { params: cleanParams, ...config });
   },
   createClass: (data) => api.post('/classes', data),
   updateClass: (id, data) => api.put(`/classes/${id}`, data),
@@ -24,21 +24,21 @@ export const classApi = {
 };
 
 export const roomApi = {
-  getRooms: (params) => api.get('/rooms', { params }),
+  getRooms: (params, config = {}) => api.get('/rooms', { params, ...config }),
   createRoom: (data) => api.post('/rooms', data),
   updateRoom: (id, data) => api.put(`/rooms/${id}`, data),
   deleteRoom: (id) => api.delete(`/rooms/${id}`),
 };
 
 export const subjectApi = {
-  getSubjects: (params) => api.get('/subjects', { params }),
+  getSubjects: (params, config = {}) => api.get('/subjects', { params, ...config }),
   createSubject: (data) => api.post('/subjects', data),
   updateSubject: (id, data) => api.put(`/subjects/${id}`, data),
   deleteSubject: (id) => api.delete(`/subjects/${id}`),
 };
 
 export const teacherApi = {
-  getTeachers: (params) => api.get('/teachers', { params }),
+  getTeachers: (params, config = {}) => api.get('/teachers', { params, ...config }),
   createTeacher: (data) => api.post('/teachers', data),
   updateTeacher: (id, data) => api.put(`/teachers/${id}`, data),
   deleteTeacher: (id, data) => api.delete(`/teachers/${id}`, { data }),
@@ -61,10 +61,10 @@ export const teacherApi = {
 };
 
 export const studentApi = {
-  getStudents: (params) => {
+  getStudents: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/students', { params: cleanParams });
+    return api.get('/students', { params: cleanParams, ...config });
   },
   createStudent: (data) => api.post('/students', data),
   updateStudent: (id, data) => api.put(`/students/${id}`, data),

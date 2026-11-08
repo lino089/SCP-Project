@@ -270,9 +270,14 @@ class AcademicEventController extends Controller
                         return in_array($normGrade, $targets, true);
                     }
                     if ($e->scope_type === AcademicEvent::SCOPE_CLASS) {
-                        return Classes::whereIn('id', $e->scope_targets ?? [])
-                            ->get()
-                            ->some(fn($c) => $this->exclusionService->normalizeGrade($c->level) === $normGrade);
+                        $targets = $e->scope_targets ?? [];
+                        foreach ($targets as $targetId) {
+                            $cls = $classTargetMap->get((int) $targetId);
+                            if ($cls && $this->exclusionService->normalizeGrade($cls->level) === $normGrade) {
+                                return true;
+                            }
+                        }
+                        return false;
                     }
                     return false;
                 })->values();
@@ -311,8 +316,8 @@ class AcademicEventController extends Controller
                 ->values()
                 ->toArray();
 
-            $isGlobalKesiswaan = $user->assignments()->where('type', 'kesiswaan')->whereNull('class_id')->exists();
-            $isKesiswaan = $user->assignments()->where('type', 'kesiswaan')->exists();
+            $isGlobalKesiswaan = $assignments->contains(fn($a) => $a->type === 'kesiswaan' && $a->class_id === null);
+            $isKesiswaan = $assignments->contains('type', 'kesiswaan');
 
             $context['taught_classes'] = $taughtClasses->map(fn($c) => [
                 'id' => $c->id,

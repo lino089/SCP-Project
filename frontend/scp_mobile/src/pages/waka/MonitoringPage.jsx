@@ -21,6 +21,8 @@ import {
 } from '../../components/shared';
 import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 export default function MonitoringPage() {
   const { hasRole, isKesiswaan } = useAuth();
@@ -29,9 +31,7 @@ export default function MonitoringPage() {
   const [activeTab, setActiveTab] = useState('jurnal'); // 'jurnal' | 'presensi'
 
   // Date Filter
-  const [selectedDate, setSelectedDate] = useState(
-    () => new Date().toISOString().split('T')[0]
-  );
+  const [selectedDate, setSelectedDate] = useState(() => todayLocalISO());
   const [selectedClassId, setSelectedClassId] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -69,8 +69,7 @@ export default function MonitoringPage() {
   useEffect(() => {
     classApi.getClasses({ per_page: 100 })
       .then((res) => {
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setClassesList(list);
+        setClassesList(unwrapList(res));
       })
       .catch(() => {});
   }, []);
@@ -84,23 +83,17 @@ export default function MonitoringPage() {
         ]);
 
         if (jRes.status === 'fulfilled') {
-          const list = Array.isArray(jRes.value)
-            ? jRes.value
-            : Array.isArray(jRes.value?.data)
-            ? jRes.value.data
-            : [];
-          setJournals(list);
+          setJournals(unwrapList(jRes.value));
         }
 
         if (recapRes.status === 'fulfilled') {
-          setDailyRecap(recapRes.value?.data || recapRes.value || null);
+          setDailyRecap(unwrap(recapRes.value));
         }
       } else {
         const params = { date: selectedDate };
         if (selectedClassId !== 'ALL') params.class_id = selectedClassId;
         const aRes = await leaveApi.getAttendances(params);
-        const list = Array.isArray(aRes) ? aRes : Array.isArray(aRes?.data) ? aRes.data : [];
-        setAttendances(list);
+        setAttendances(unwrapList(aRes));
       }
       setLoadError(null);
     } catch (err) {

@@ -5,6 +5,7 @@ import Button from '../../../components/shared/Button';
 import Select from '../../../components/shared/Select';
 import Badge from '../../../components/shared/Badge';
 import { teacherAssignmentApi } from '../../../services/masterDataApi';
+import { unwrap, unwrapList } from '../../../utils/responseHelper';
 import './TeacherAssignment.css';
 
 /**
@@ -36,8 +37,8 @@ export default function ClassAssignmentEditModal({
         is_active: 0,
         per_page: 10,
       });
-      const items = res?.data?.data || res?.data || [];
-      setHistoryList(Array.isArray(items) ? items : []);
+      const items = unwrapList(res);
+      setHistoryList(items);
     } catch {
       setHistoryList([]);
     } finally {
@@ -154,7 +155,7 @@ export default function ClassAssignmentEditModal({
         replace_existing: true,
       });
 
-      const assignedItem = res?.data?.data || res?.data;
+      const assignedItem = unwrap(res);
       const addedTeacher = teacherList.find((t) => t.id === Number(selectedBkIdToAdd));
 
       if (addedTeacher) {
@@ -191,7 +192,8 @@ export default function ClassAssignmentEditModal({
       } else {
         // Fallback jika assignment_id belum ter-load di state
         const matrixRefresh = await teacherAssignmentApi.getAssignmentMatrix();
-        const foundClass = matrixRefresh?.data?.data?.find((c) => c.class_id === classItem.class_id);
+        const matrixList = unwrapList(matrixRefresh);
+        const foundClass = matrixList.find((c) => c.class_id === classItem.class_id);
         const targetBk = foundClass?.kesiswaan?.find((k) => k.id === bkItem.id);
         if (targetBk?.assignment_id) {
           await teacherAssignmentApi.revokeRole(bkItem.id, targetBk.assignment_id);

@@ -16,6 +16,8 @@ import { Button, Badge } from '../../components/shared';
 import CameraModal from '../../components/teacher/journal/CameraModal';
 import { SkeletonCard, EmptyState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
+import { unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO, getJakartaDayInfo } from '../../utils/dateUtils';
 
 export default function TeacherJournalPage() {
   const location = useLocation();
@@ -55,7 +57,7 @@ export default function TeacherJournalPage() {
   const [notesMap, setNotesMap] = useState({});
   const [approvedLeavesMap, setApprovedLeavesMap] = useState({});
 
-  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayIso = useMemo(() => todayLocalISO(), []);
 
   // Check substitute mode
   const isSubstitute = useMemo(() => {
@@ -67,16 +69,21 @@ export default function TeacherJournalPage() {
     return !isOwner && hasSubstituteAuth;
   }, [schedule, user, isKesiswaan, isWaliKelas]);
 
-  // Load schedule if not passed via state
+  // Load schedule if not passed via state (P-13: perbaiki fallback jadwal hari ini)
   useEffect(() => {
     if (schedule) return;
     let isMounted = true;
     async function loadDefaultSchedule() {
       try {
-        const res = await journalApi.getTeacherSchedules({ per_page: 1 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        const dayInfo = getJakartaDayInfo();
+        const cycle = Number(user?.academic_setting?.active_cycle || user?.active_cycle || 1);
+        const res = await journalApi.getTeacherSchedules({ day: dayInfo.dayOfWeek, cycle, per_page: 50 });
+        const list = unwrapList(res);
         if (isMounted && list.length > 0) {
-          setSchedule(list[0]);
+          const sorted = [...list].sort(
+            (a, b) => Number(a.period_number || 1) - Number(b.period_number || 1)
+          );
+          setSchedule(sorted[0]);
         }
       } catch {
         // ignore
@@ -88,7 +95,7 @@ export default function TeacherJournalPage() {
     return () => {
       isMounted = false;
     };
-  }, [schedule]);
+  }, [schedule, user?.academic_setting?.active_cycle, user?.active_cycle]);
 
   // Check active journal for this schedule & date
   useEffect(() => {
@@ -459,7 +466,7 @@ export default function TeacherJournalPage() {
                 type="button"
                 variant="secondary"
                 onClick={() => setIsCameraModalOpen(true)}
-                className="w-full py-4 border-2 border-dashed border-[var(--color-border-strong)] rounded-[14px] flex flex-col items-center justify-center gap-1.5 text-[var(--color-text-secondary)] hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)]"
+                className="btn--stacked w-full py-4 border-2 border-dashed border-[var(--color-border-strong)] rounded-[14px] flex flex-col items-center justify-center gap-1.5 text-[var(--color-text-secondary)] hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)]"
               >
                 <Camera size={24} className="text-[var(--color-brand-text)]" />
                 <span className="text-xs font-bold">Ambil Foto Bukti Mengajar</span>

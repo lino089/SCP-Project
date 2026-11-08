@@ -17,6 +17,8 @@ import {
 import { leaveApi } from '../../services/leaveApi';
 import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
+import { unwrap } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import {
   Button,
   Input,
@@ -208,7 +210,7 @@ export default function StudentPermissionPage() {
   const [category, setCategory] = useState('sakit'); // 'sakit' | 'lainnya'
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => todayLocalISO());
   const [departureTime, setDepartureTime] = useState('10:00');
   const [expectedReturnTime, setExpectedReturnTime] = useState('12:00');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -275,8 +277,9 @@ export default function StudentPermissionPage() {
           date: targetDate,
         });
         if (cancel) return;
-        if (res?.data?.data?.disabling_event) {
-          const dev = res.data.data.disabling_event;
+        const data = unwrap(res);
+        if (data?.disabling_event) {
+          const dev = data.disabling_event;
           setDateWarning(
             `Perhatian: Tanggal ${targetDate} bertepatan dengan "${dev.title}" yang meniadakan KBM.`
           );
@@ -313,7 +316,7 @@ export default function StudentPermissionPage() {
     setCategory('sakit');
     setStartDate('');
     setEndDate('');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(todayLocalISO());
     setDepartureTime('10:00');
     setExpectedReturnTime('12:00');
     setUploadedFile(null);
@@ -377,7 +380,7 @@ export default function StudentPermissionPage() {
 
       const res = await leaveApi.createLeaveRequest(formData);
       if (res?.data || res?.success) {
-        const newItem = res.data?.data || res.data;
+        const newItem = unwrap(res);
         setLeaveRequests((prev) => [newItem, ...prev]);
         setIsCreateModalOpen(false);
         resetForm();
@@ -399,7 +402,7 @@ export default function StudentPermissionPage() {
     setCategory(item.category);
     setStartDate(item.start_date || '');
     setEndDate(item.end_date || '');
-    setDate(item.start_date || new Date().toISOString().split('T')[0]);
+    setDate(item.start_date || todayLocalISO());
     setDepartureTime(item.departure_time ? item.departure_time.slice(0, 5) : '10:00');
     setExpectedReturnTime(
       item.expected_return_time ? item.expected_return_time.slice(0, 5) : '12:00'
@@ -441,7 +444,7 @@ export default function StudentPermissionPage() {
 
       const res = await leaveApi.updateLeaveRequest(editingItem.id, formData);
       if (res?.data || res?.success) {
-        const updated = res.data?.data || res.data;
+        const updated = unwrap(res);
         setLeaveRequests((prev) =>
           prev.map((r) => (r.id === editingItem.id ? { ...r, ...updated } : r))
         );

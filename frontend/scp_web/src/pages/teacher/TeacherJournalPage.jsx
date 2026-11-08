@@ -24,6 +24,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { compressImage } from '../../utils/imageCompressor';
 import { getStorageUrl } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO, getJakartaDayInfo } from '../../utils/dateUtils';
 import {
   Button,
   Badge,
@@ -70,21 +72,28 @@ export default function TeacherJournalPage() {
   const [studentNotes, setStudentNotes] = useState({});
   const [savedJournalData, setSavedJournalData] = useState(null);
 
-  // Ambil jadwal default bila pengguna langsung membuka /teacher/journal tanpa navigasi
+  // Ambil jadwal default hari ini bila pengguna langsung membuka /teacher/journal tanpa navigasi (P-13: perbaiki fallback)
   useEffect(() => {
     let isMounted = true;
     if (!schedule) {
       setIsLoadingInitial(true);
+      const dayInfo = getJakartaDayInfo();
+      const cycle = Number(user?.academic_setting?.active_cycle || user?.active_cycle || 1);
       journalApi
-        .getTeacherSchedules({ per_page: 1 })
+        .getTeacherSchedules({ day: dayInfo.dayOfWeek, cycle, per_page: 50 })
         .then((res) => {
           if (!isMounted) return;
-          if (res.success && res.data && res.data.length > 0) {
-            setSchedule(res.data[0]);
+          const list = unwrapList(res);
+          if (list.length > 0) {
+            // Urutkan berdasarkan period_number dan pilih jadwal hari ini yang paling awal
+            const sorted = [...list].sort(
+              (a, b) => Number(a.period_number || 1) - Number(b.period_number || 1)
+            );
+            setSchedule(sorted[0]);
           }
         })
         .catch((err) => {
-          console.warn('Gagal memuat jadwal default guru:', err);
+          console.warn('Gagal memuat jadwal hari ini guru:', err);
         })
         .finally(() => {
           if (isMounted) setIsLoadingInitial(false);
@@ -95,7 +104,7 @@ export default function TeacherJournalPage() {
     return () => {
       isMounted = false;
     };
-  }, [schedule]);
+  }, [schedule, user?.academic_setting?.active_cycle, user?.active_cycle]);
 
   // Penegakan Otorisasi Ketat:
   // Apakah user adalah pemilik jadwal ATAU guru Kesiswaan?
@@ -351,7 +360,7 @@ export default function TeacherJournalPage() {
       const res = await journalApi.openJournal({
         schedule_id: schedule.id,
         status: 'ongoing',
-        date: new Date().toISOString().split('T')[0],
+        date: todayLocalISO(),
       });
 
       if (res.success && res.data) {

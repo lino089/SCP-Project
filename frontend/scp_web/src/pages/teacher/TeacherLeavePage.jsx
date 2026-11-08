@@ -18,6 +18,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
 import { journalApi } from '../../services/journalApi';
 import { getStorageUrl, formatDate } from '../../utils/formatters';
+import { unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import { Badge, Button, Modal, Select, Table, SearchInput } from '../../components/shared';
 import { EmptyState, ErrorState } from '../../components/feedback';
 import './TeacherLeave.css';
@@ -42,7 +44,7 @@ export default function TeacherLeavePage() {
   const [successToast, setSuccessToast] = useState('');
 
   // Form Fields
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => todayLocalISO(), []);
   const [targetDate, setTargetDate] = useState(todayStr);
   const [reasonCategory, setReasonCategory] = useState('dinas_luar');
   const [reasonDetail, setReasonDetail] = useState('');
@@ -98,11 +100,7 @@ export default function TeacherLeavePage() {
         per_page: 50,
       });
 
-      const raw = res?.data
-        ? Array.isArray(res.data)
-          ? res.data
-          : res.data.data || []
-        : [];
+      const raw = unwrapList(res);
 
       setAvailableSchedules(raw);
       // Default: pilih semua jadwal di hari tersebut

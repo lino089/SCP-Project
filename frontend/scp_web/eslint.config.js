@@ -14,13 +14,24 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      globals: globals.browser,
+      globals: { ...globals.browser, ...globals.node },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[property.name='data'][object.property.name='data']",
+          message: "Akses .data.data dilarang (P-9). Gunakan unwrap() atau unwrapList() dari utils/responseHelper.",
+        },
+        {
+          selector: "MemberExpression[property.name='success'][object.property.name='data']",
+          message: "Akses .data.success dilarang (P-9). Axios interceptor mengembalikan envelope langsung; gunakan res.success atau unwrap().",
+        },
+      ],
     },
   },
 ])

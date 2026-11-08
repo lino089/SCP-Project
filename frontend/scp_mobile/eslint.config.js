@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'android/**', 'public/**', 'build/**']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -15,7 +15,7 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: { ...globals.browser, ...globals.node },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
@@ -26,6 +26,19 @@ export default defineConfig([
       'no-unused-vars': [
         'error',
         { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' },
+      ],
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[property.name='data'][object.property.name='data']",
+          message: "Akses .data.data dilarang (P-9). Gunakan unwrap() atau unwrapList() dari utils/responseHelper.",
+        },
+        {
+          selector: "MemberExpression[property.name='success'][object.property.name='data']",
+          message: "Akses .data.success dilarang (P-9). Axios interceptor mengembalikan envelope langsung; gunakan res.success atau unwrap().",
+        },
       ],
     },
   },

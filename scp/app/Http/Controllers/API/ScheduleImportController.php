@@ -58,22 +58,14 @@ class ScheduleImportController extends Controller
             'parser_version' => 'v1.0',
         ]);
 
-        try {
-            ParseSchedulePdfJob::dispatchSync($import->id);
-            $import->refresh();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('PDF Extraction Error: ' . $e->getMessage());
-            $import->update(['status' => 'failed']);
-            $import->refresh();
-        }
+        // Dispatch ekstraksi berkas jadwal PDF secara asinkron ke antrean queue
+        ParseSchedulePdfJob::dispatch($import->id);
 
         return response()->json([
             'success' => true,
-            'message' => $import->status === 'preview_ready'
-                ? 'File jadwal berhasil diekstraksi. Preview siap ditinjau.'
-                : 'File jadwal diunggah. Sedang memproses...',
+            'message' => 'File jadwal diunggah. Sedang memproses...',
             'data' => $import,
-        ], $import->status === 'preview_ready' ? 200 : 202);
+        ], 202);
     }
 
     /**

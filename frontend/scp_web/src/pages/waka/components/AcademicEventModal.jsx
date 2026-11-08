@@ -4,6 +4,7 @@ import Button from '../../../components/shared/Button';
 import Input from '../../../components/shared/Input';
 import { classApi } from '../../../services/masterDataApi';
 import { Calendar, Layers, AlertCircle, CheckSquare, Square } from 'lucide-react';
+import { todayLocalISO } from '../../../utils/dateUtils';
 
 const EVENT_TYPES = [
   { value: 'holiday', label: 'Hari Libur Nasional / Resmi', defaultDisable: true },
@@ -64,7 +65,7 @@ export default function AcademicEventModal({
       }
     } else {
       // Reset form default
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayLocalISO();
       setTitle('');
       setDescription('');
       setType('holiday');

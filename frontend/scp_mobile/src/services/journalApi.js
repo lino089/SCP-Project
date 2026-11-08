@@ -4,12 +4,12 @@ import api from './api';
  * Service API untuk Modul Guru & Kesiswaan (Jurnal KBM, Presensi, Sesi Kelas)
  */
 export const journalApi = {
-  getTeacherSchedules: (params = {}) => api.get('/schedules', { params }),
-  getMissingJournals: (params = {}) =>
-    api.get('/schedules', { params: { ...params, status: 'missing_journal' } }),
-  getJournals: (params = {}) => api.get('/journals', { params }),
-  getAll: (params = {}) => api.get('/journals', { params }),
-  getDailyRecap: (params = {}) => api.get('/journals/daily-recap', { params }),
+  getJournals: (params = {}, config = {}) => api.get('/journals', { params, ...config }),
+  getAll: (params = {}, config = {}) => api.get('/journals', { params, ...config }),
+  getTeacherSchedules: (params = {}, config = {}) => api.get('/schedules', { params, ...config }),
+  getMissingJournals: (params = {}, config = {}) =>
+    api.get('/schedules', { params: { ...params, status: 'missing_journal' }, ...config }),
+  getDailyRecap: (params = {}, config = {}) => api.get('/journals/daily-recap', { params, ...config }),
   getJournalDetail: (id) => api.get(`/journals/${id}`),
   getById: (id) => api.get(`/journals/${id}`),
   openJournal: (payload) => api.post('/journals', payload),
@@ -41,8 +41,6 @@ export const journalApi = {
   },
   getClassStudents: (classId) =>
     api.get('/students', { params: { class_id: classId, all: true, per_page: 100 } }),
-  getStudentsForSchedule: (scheduleId, params) =>
-    api.get(`/schedules/${scheduleId}/students`, { params }),
 };
 
 export default journalApi;

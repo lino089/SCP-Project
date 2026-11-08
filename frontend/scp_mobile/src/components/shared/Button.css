@@ -166,7 +166,15 @@
 }
 
 .btn__label {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Tombol dengan layout vertikal (ikon di atas label + caption).
+ * Wajib dipakai bila <Button> sengaja ditata flex-column. */
+.btn--stacked .btn__label {
+  display: block;
 }
 
 .btn__spinner {

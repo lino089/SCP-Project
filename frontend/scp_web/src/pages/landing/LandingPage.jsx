@@ -423,30 +423,53 @@ export default function LandingPage() {
       </section>
 
       {/* ===================================================================
-          SECTION 4: DYNAMIC BENTO GRID — 02 / KAPABILITAS INTI (12-KOLOM)
+          SECTION 4: DYNAMIC BENTO GRID — 02 / SOLUSI TERPADU SEKOLAH (12-KOLOM)
           =================================================================== */}
       <section id="fitur" className="py-24 bg-slate-50/70 border-t border-slate-200">
         <div className="landing-container text-left">
           <div className="mb-14">
-            <span className="section-tag">02 / Kapabilitas Inti</span>
+            <span className="section-tag">02 / Solusi Terpadu Sekolah</span>
             <h2 className="font-bold text-3xl md:text-5xl text-slate-900 leading-tight">
-              Dirancang untuk ketertiban dan akurasi harian sekolah kejuruan.
+              Satu Sistem yang Memudahkan Seluruh Warga Sekolah.
             </h2>
+            <p className="text-base text-slate-600 mt-3 max-w-3xl leading-relaxed">
+              Mulai dari Waka Kurikulum, Kesiswaan, Guru Pengampu, Wali Kelas, hingga Siswa dan Orang Tua di rumah—semua terhubung dalam alur kegiatan akademik yang rapi dan transparan.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-5">
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Waka Kurikulum
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Kesiswaan
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Guru Pengampu
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Wali Kelas
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Siswa
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-sm">
+                Orang Tua
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-            {/* Bento 1: Col 7 — Ekstraksi Otomatis 2 Berkas PDF FET */}
+            {/* Bento 1: Col 7 — Penyusunan Jadwal Cepat & Bebas Bentrok */}
             <div className="md:col-span-7 custom-card p-7 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-bold text-xl md:text-2xl text-slate-900">
-                      Ekstraksi Otomatis 2 Berkas PDF Jadwal FET
+                      Penyusunan Jadwal Cepat &amp; Bebas Bentrok
                     </h3>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200/60">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Python Subprocess Engine
+                        Untuk: Waka Kurikulum &amp; Guru
                       </span>
                     </div>
                   </div>
@@ -467,17 +490,17 @@ export default function LandingPage() {
                     <div className="space-y-2.5 w-full">
                       <div className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200 shadow-sm">
                         <FileText size={18} className="text-rose-500 shrink-0" />
-                        <span className="text-[11px] font-semibold text-slate-700 truncate">jadwal_kelas_sem2.pdf</span>
+                        <span className="text-[11px] font-semibold text-slate-700 truncate">Jadwal_Pelajaran_Semester_Genap.pdf</span>
                       </div>
                       <div className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200 shadow-sm opacity-75">
                         <FileText size={18} className="text-rose-500 shrink-0" />
-                        <span className="text-[11px] font-semibold text-slate-700 truncate">jadwal_ruang_lab.pdf</span>
+                        <span className="text-[11px] font-semibold text-slate-700 truncate">Jadwal_Penggunaan_Bengkel_Lab.pdf</span>
                       </div>
                     </div>
-                    <p className="text-[10.5px] text-slate-400 mt-3 font-medium">Drag &amp; drop atau klik untuk ganti</p>
+                    <p className="text-[10.5px] text-slate-400 mt-3 font-medium">Tinggal pilih berkas jadwal sekolah dari kurikulum</p>
                   </div>
 
-                  {/* Terminal Execution Pane */}
+                  {/* Friendly Process Window Pane */}
                   <div className="terminal-window">
                     <div className="terminal-dots">
                       <span className="terminal-dot bg-rose-500/80" />
@@ -485,16 +508,16 @@ export default function LandingPage() {
                       <span className="terminal-dot bg-emerald-500/80" />
                     </div>
                     <div className="space-y-2 text-[11px] leading-relaxed">
-                      <div className="text-amber-400">$ scp-engine --process inputs/</div>
-                      <div className="text-slate-400">[1] Parsing cell coordinate matrices (142 JP)...</div>
+                      <div className="text-amber-400">&#9654; Memulai penataan jadwal sekolah...</div>
+                      <div className="text-slate-300">&#10003; Membaca 142 jam pelajaran seluruh tingkatan kelas...</div>
                       {terminalStep >= 2 && (
-                        <div className="text-slate-400">[2] Running TeacherMatcherService (Levenshtein: 0.98)...</div>
+                        <div className="text-slate-300">&#10003; Menghubungkan 78 guru pengampu ke mata pelajaran...</div>
                       )}
                       {terminalStep >= 3 && (
-                        <div className="text-emerald-400 font-semibold">[3] 42 classes identified. 0 room conflicts.</div>
+                        <div className="text-emerald-400 font-semibold">&#10003; 0 jadwal bentrok! Jadwal resmi siap digunakan.</div>
                       )}
-                      <div className="text-slate-200 font-semibold">
-                        Execution complete <span className="terminal-cursor" />
+                      <div className="text-slate-200 font-semibold pt-1">
+                        Jadwal langsung aktif di jurnal guru <span className="terminal-cursor" />
                       </div>
                     </div>
                   </div>
@@ -502,16 +525,16 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Bento 2: Col 5 — Jurnal KBM & Presensi Atomik Real-Time */}
+            {/* Bento 2: Col 5 — Jurnal Mengajar Praktis & Terpantau Orang Tua */}
             <div className="md:col-span-5 custom-card p-7 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-bold text-xl md:text-2xl text-slate-900">
-                      Jurnal KBM &amp; Presensi Atomik
+                      Jurnal Mengajar Praktis &amp; Terpantau Orang Tua
                     </h3>
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      WebSocket Real-time Sync
+                      Untuk: Guru, Siswa &amp; Orang Tua
                     </span>
                   </div>
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" />
@@ -526,7 +549,7 @@ export default function LandingPage() {
                       </span>
                       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60">
                         <Camera size={12} />
-                        <span>SEDANG BERLANGSUNG</span>
+                        <span>SEDANG BELAJAR DI KELAS</span>
                       </div>
                     </div>
 
@@ -536,11 +559,11 @@ export default function LandingPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-xs font-bold text-slate-900 truncate">
-                          Pemrograman Web &amp; RESTful API
+                          Pemrograman Web &amp; Perangkat Bergerak
                         </h4>
                         <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-500">
                           <Timer size={13} className="text-slate-400" />
-                          <span className="font-bold text-slate-800">01:24:10 tersisa</span>
+                          <span className="font-bold text-slate-800">Sisa waktu: 01:24:10</span>
                         </div>
                       </div>
                     </div>
@@ -558,7 +581,7 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  {/* Progress Ring Sync Indicator */}
+                  {/* Progress Ring Indicator */}
                   <div className="flex items-center justify-center pt-2">
                     <div className="relative w-24 h-24 shrink-0">
                       <svg className="w-full h-full transform -rotate-90">
@@ -577,7 +600,7 @@ export default function LandingPage() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <span className="text-base font-extrabold text-slate-900">97%</span>
-                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Synced</span>
+                        <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider text-center px-1">Kehadiran Hari Ini</span>
                       </div>
                     </div>
                   </div>
@@ -585,16 +608,16 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Bento 3: Col 5 — Asesmen Kuis AI Gemini & Analitik Nilai */}
+            {/* Bento 3: Col 5 — Latihan Soal & Penilaian Berbantuan Cerdas */}
             <div className="md:col-span-5 custom-card p-7 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-bold text-xl md:text-2xl text-slate-900">
-                      Asesmen Esai AI &amp; Analitik KBM
+                      Latihan Soal &amp; Penilaian Berbantuan Cerdas
                     </h3>
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Google Gemini API Semantic Rubric
+                      Untuk: Guru, Siswa &amp; Wali Kelas
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
@@ -605,7 +628,7 @@ export default function LandingPage() {
                         activeTabAksara === 'latin' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'
                       }`}
                     >
-                      Nilai Rata-rata
+                      Nilai Siswa
                     </button>
                     <button
                       type="button"
@@ -614,7 +637,7 @@ export default function LandingPage() {
                         activeTabAksara === 'aksara' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'
                       }`}
                     >
-                      Rubrik AI
+                      Rubrik Jawaban
                     </button>
                   </div>
                 </div>
@@ -622,7 +645,7 @@ export default function LandingPage() {
                 <div className="flex-1 flex flex-col">
                   <div className="flex justify-between items-end mb-4">
                     <div>
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Puncak Keterisian (Daily)</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jam Belajar Paling Aktif</div>
                       <div className="text-xl font-bold text-slate-900">
                         08:30 <span className="text-xs text-slate-400 font-normal ml-1">WIB</span>
                       </div>
@@ -632,7 +655,7 @@ export default function LandingPage() {
                         <span className="w-2 h-2 rounded-full bg-slate-900" /> Kelas Teori
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" /> Lab Komputer
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" /> Bengkel / Lab
                       </div>
                     </div>
                   </div>
@@ -657,20 +680,20 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Bento 4: Col 7 — Kalender Akademik 5 Tipe Hari & Resolusi Tugas Inval */}
+            {/* Bento 4: Col 7 — Kelas Tetap Produktif & Surat Izin Teratur */}
             <div className="md:col-span-7 custom-card p-7 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-bold text-xl md:text-2xl text-slate-900">
-                      Kalender Akademik &amp; Tugas Titipan (Inval)
+                      Kelas Tetap Produktif &amp; Surat Izin Teratur
                     </h3>
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Zero-Conflict Engine &amp; 5 Tipe Hari
+                      Untuk: Kesiswaan, Wali Kelas &amp; Guru Inval
                     </span>
                   </div>
                   <Badge variant="warning" dot>
-                    Resolusi Otomatis
+                    Kelas Terisi &amp; Siap
                   </Badge>
                 </div>
 
@@ -678,7 +701,7 @@ export default function LandingPage() {
                   {/* Gantt Strip Jam Pelajaran */}
                   <div className="mb-3 text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
                     <Calendar size={13} />
-                    <span>JADWAL HARIAN: RABU (REGULER 10 JP)</span>
+                    <span>JADWAL HARIAN: RABU (10 JAM PELAJARAN)</span>
                   </div>
                   <div className="grid grid-cols-10 gap-1.5">
                     <div className="h-11 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-[10.5px] font-bold text-slate-700">J1</div>
@@ -705,12 +728,12 @@ export default function LandingPage() {
                       <AlertCircle size={18} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-slate-900">Resolusi Konflik Otomatis</div>
+                      <div className="text-xs font-bold text-slate-900">Pengalihan Guru Pengganti (Inval)</div>
                       <div className="text-[10.5px] text-slate-500 truncate">
-                        Guru Utama: Izin Dinas &rarr; Guru Inval: Drs. Budi Assign (Piket Terjadwal)
+                        Guru Utama: Izin Dinas &rarr; Guru Inval: Drs. Budi Assign (Materi &amp; Tugas Siap Dikerjakan)
                       </div>
                     </div>
-                    <Badge variant="success">Auto Resolved</Badge>
+                    <Badge variant="success">Tugas Terisi</Badge>
                   </div>
                 </div>
               </div>

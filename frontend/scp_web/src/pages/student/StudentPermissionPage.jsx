@@ -18,6 +18,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
 import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
+import { unwrap } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import {
   Button,
   Input,
@@ -73,7 +75,7 @@ export default function StudentPermissionPage() {
   const [category, setCategory] = useState('sakit'); // 'sakit' | 'lainnya'
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => todayLocalISO());
   const [departureTime, setDepartureTime] = useState('10:00');
   const [expectedReturnTime, setExpectedReturnTime] = useState('12:00');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -96,7 +98,7 @@ export default function StudentPermissionPage() {
           date: targetDate,
         });
         if (cancel) return;
-        const exData = res?.data ?? res;
+        const exData = unwrap(res);
         if (exData?.disabling_event) {
           const dev = exData.disabling_event;
           setDateWarning(
@@ -218,7 +220,7 @@ export default function StudentPermissionPage() {
     setCategory(item.category);
     setStartDate(item.start_date || '');
     setEndDate(item.end_date || '');
-    setDate(item.start_date || new Date().toISOString().split('T')[0]);
+    setDate(item.start_date || todayLocalISO());
     setDepartureTime(item.departure_time || '10:00');
     setExpectedReturnTime(item.expected_return_time || '12:00');
     setUploadedFile(null);
@@ -309,7 +311,7 @@ export default function StudentPermissionPage() {
     setCategory('sakit');
     setStartDate('');
     setEndDate('');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(todayLocalISO());
     setDepartureTime('10:00');
     setExpectedReturnTime('12:00');
     setUploadedFile(null);

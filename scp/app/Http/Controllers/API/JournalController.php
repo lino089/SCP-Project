@@ -30,6 +30,17 @@ class JournalController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'date' => 'sometimes|date',
+            'start_date' => 'sometimes|date',
+            'end_date' => 'sometimes|date|after_or_equal:start_date',
+            'class_id' => 'sometimes|integer',
+            'subject_id' => 'sometimes|integer',
+            'teacher_id' => 'sometimes|integer',
+            'status' => 'sometimes|string|in:draft,completed,cancelled',
+        ]);
+
         $user = $request->user();
 
         // Otorisasi: Siswa dan Orang Tua tidak memiliki akses rekap jurnal

@@ -267,16 +267,17 @@ export default function WakaDashboardPage() {
 
         <div className="flex items-center justify-between gap-3 pt-3 border-t border-[var(--color-border-subtle)]">
           <span className="section-label">Siklus KBM</span>
-          <SegmentedTabs
-            fullWidth
-            className="w-[172px] shrink-0"
-            tabs={[
-              { id: 1, label: 'Siklus 1' },
-              { id: 2, label: 'Siklus 2' },
-            ]}
-            activeTab={activeCycle}
-            onChange={(id) => handleTriggerCycleSwitch(Number(id))}
-          />
+          <div className="w-[172px] min-w-0">
+            <SegmentedTabs
+              fullWidth
+              tabs={[
+                { id: 1, label: 'Siklus 1' },
+                { id: 2, label: 'Siklus 2' },
+              ]}
+              activeTab={activeCycle}
+              onChange={(id) => handleTriggerCycleSwitch(Number(id))}
+            />
+          </div>
         </div>
       </section>
 

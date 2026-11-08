@@ -135,11 +135,45 @@ class User extends Authenticatable
     }
 
     /**
+     * Cache penugasan guru per instance User (P-17: memoize authorization helper)
+     *
+     * @var \Illuminate\Database\Eloquent\Collection|null
+     */
+    protected ?\Illuminate\Database\Eloquent\Collection $cachedAssignments = null;
+
+    /**
+     * Mengambil koleksi penugasan aktif dengan memoization per-instance
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getCachedAssignments(): \Illuminate\Database\Eloquent\Collection
+    {
+        if ($this->cachedAssignments !== null) {
+            return $this->cachedAssignments;
+        }
+
+        if ($this->relationLoaded('assignments')) {
+            return $this->cachedAssignments = $this->getRelation('assignments');
+        }
+
+        return $this->cachedAssignments = $this->assignments()->get();
+    }
+
+    /**
+     * Reset memoized assignments
+     */
+    public function clearCachedAssignments(): void
+    {
+        $this->cachedAssignments = null;
+        $this->unsetRelation('assignments');
+    }
+
+    /**
      * Memeriksa apakah guru memiliki penugasan tertentu
      */
     public function hasAssignment(string $type): bool
     {
-        return $this->role === 'teacher' && $this->assignments()->where('type', $type)->exists();
+        return $this->role === 'teacher' && $this->getCachedAssignments()->contains('type', $type);
     }
 
     /**
@@ -151,15 +185,15 @@ class User extends Authenticatable
             return false;
         }
 
-        $query = $this->assignments()->where('type', 'kesiswaan');
-        if ($classId !== null) {
-            $query->where(function ($q) use ($classId) {
-                $q->where('class_id', $classId)
-                  ->orWhereNull('class_id'); // Dukung penugasan global legacy
-            });
-        }
-
-        return $query->exists();
+        return $this->getCachedAssignments()->contains(function ($a) use ($classId) {
+            if ($a->type !== 'kesiswaan') {
+                return false;
+            }
+            if ($classId === null) {
+                return true;
+            }
+            return $a->class_id === null || (int) $a->class_id === (int) $classId;
+        });
     }
 
     /**
@@ -173,7 +207,7 @@ class User extends Authenticatable
             return [];
         }
 
-        return $this->assignments()
+        return $this->getCachedAssignments()
             ->where('type', 'kesiswaan')
             ->whereNotNull('class_id')
             ->pluck('class_id')
@@ -192,11 +226,9 @@ class User extends Authenticatable
             return null;
         }
 
-        $classId = $this->assignments()
-            ->where('type', 'wali_kelas')
-            ->value('class_id');
+        $assignment = $this->getCachedAssignments()->firstWhere('type', 'wali_kelas');
 
-        return $classId !== null ? (int) $classId : null;
+        return $assignment && $assignment->class_id !== null ? (int) $assignment->class_id : null;
     }
 
     /**
@@ -208,12 +240,15 @@ class User extends Authenticatable
             return false;
         }
 
-        $query = $this->assignments()->where('type', 'wali_kelas');
-        if ($classId !== null) {
-            $query->where('class_id', $classId);
-        }
-
-        return $query->exists();
+        return $this->getCachedAssignments()->contains(function ($a) use ($classId) {
+            if ($a->type !== 'wali_kelas') {
+                return false;
+            }
+            if ($classId === null) {
+                return true;
+            }
+            return (int) $a->class_id === (int) $classId;
+        });
     }
 
     /**
@@ -397,10 +432,11 @@ class User extends Authenticatable
             return [];
         }
 
-        return $this->assignments()
+        return $this->getCachedAssignments()
             ->where('type', 'wali_kelas')
             ->pluck('class_id')
             ->filter()
+            ->map(fn($id) => (int) $id)
             ->values()
             ->toArray();
     }

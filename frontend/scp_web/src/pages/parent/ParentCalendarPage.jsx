@@ -15,6 +15,8 @@ import UpcomingEventsList from '../../components/calendar/UpcomingEventsList';
 import AcademicEventDetailModal from '../../components/calendar/AcademicEventDetailModal';
 import Button from '../../components/shared/Button';
 import StatCard from '../../components/shared/StatCard';
+import { unwrap } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -37,7 +39,7 @@ export default function ParentCalendarPage() {
   // Modal Detail
   const [selectedEvent, setSelectedEvent] = useState(null);
 
-  const loadCalendar = useCallback(async () => {
+  const loadCalendar = useCallback(async (signal) => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -53,8 +55,8 @@ export default function ParentCalendarPage() {
         params.type = filterType;
       }
 
-      const res = await academicEventApi.getMyCalendar(params);
-      const payload = res?.data ?? res;
+      const res = await academicEventApi.getMyCalendar(params, { signal });
+      const payload = unwrap(res);
       if (payload?.events) {
         setEvents(payload.events || []);
         const children = payload.context?.children || [];
@@ -63,6 +65,7 @@ export default function ParentCalendarPage() {
         setEvents(payload);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       setErrorMessage(
         err.response?.data?.message || err.message || 'Gagal memuat agenda kalender sekolah.'
       );
@@ -72,7 +75,9 @@ export default function ParentCalendarPage() {
   }, [currentYear, currentMonth, selectedChildId, filterType]);
 
   useEffect(() => {
-    loadCalendar();
+    const controller = new AbortController();
+    loadCalendar(controller.signal);
+    return () => controller.abort();
   }, [loadCalendar]);
 
   const handlePrevMonth = () => {
@@ -107,8 +112,8 @@ export default function ParentCalendarPage() {
     const monday = new Date(cur.setDate(diff));
     const sunday = new Date(cur.setDate(diff + 6));
 
-    const monStr = monday.toISOString().split('T')[0];
-    const sunStr = sunday.toISOString().split('T')[0];
+    const monStr = todayLocalISO(monday);
+    const sunStr = todayLocalISO(sunday);
 
     return (events || []).filter((e) => {
       return (

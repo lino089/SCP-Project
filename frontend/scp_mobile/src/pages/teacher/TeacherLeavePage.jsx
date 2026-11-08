@@ -11,6 +11,7 @@ import journalApi from '../../services/journalApi';
 import { Badge, Button, Modal, Select, Input } from '../../components/shared';
 import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 const REASON_CATEGORIES = [
   { value: 'dinas_luar', label: 'Tugas Dinas Luar / MGMP' },
@@ -31,7 +32,7 @@ export default function TeacherLeavePage() {
   const [formError, setFormError] = useState('');
 
   // Form Fields
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => todayLocalISO(), []);
   const [targetDate, setTargetDate] = useState(todayStr);
   const [reasonCategory, setReasonCategory] = useState('dinas_luar');
   const [reasonDetail, setReasonDetail] = useState('');

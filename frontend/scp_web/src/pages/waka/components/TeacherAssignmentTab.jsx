@@ -14,6 +14,7 @@ import Table from '../../../components/shared/Table';
 import Badge from '../../../components/shared/Badge';
 import { SkeletonRow, EmptyState, ErrorState } from '../../../components/feedback';
 import { teacherAssignmentApi } from '../../../services/masterDataApi';
+import { unwrap, unwrapList } from '../../../utils/responseHelper';
 import ClassAssignmentEditModal from './ClassAssignmentEditModal';
 import TeacherAssignmentImportModal from './TeacherAssignmentImportModal';
 import './TeacherAssignment.css';
@@ -60,8 +61,9 @@ export default function TeacherAssignmentTab({
     setFetchError(null);
     try {
       const res = await teacherAssignmentApi.getAssignmentMatrix();
-      const data = res?.data?.data || res?.data || [];
-      const sum = res?.data?.summary || {
+      const data = unwrapList(res);
+      const resPayload = unwrap(res);
+      const sum = resPayload?.summary || res?.summary || {
         total_classes: data.length,
         classes_with_wali: data.filter((d) => d.wali_kelas).length,
         classes_with_kesiswaan: data.filter((d) => d.kesiswaan && d.kesiswaan.length > 0).length,

@@ -13,11 +13,11 @@ export const academicSettingApi = {
 };
 
 export const scheduleApi = {
-  getAll: (params) => api.get('/schedules', { params }),
-  getSchedules: (params) => api.get('/schedules', { params }),
+  getAll: (params, config = {}) => api.get('/schedules', { params, ...config }),
+  getSchedules: (params, config = {}) => api.get('/schedules', { params, ...config }),
   getById: (id) => api.get(`/schedules/${id}`),
-  getMissingJournals: (params) =>
-    api.get('/schedules', { params: { ...params, status: 'missing_journal' } }),
+  getMissingJournals: (params, config = {}) =>
+    api.get('/schedules', { params: { ...params, status: 'missing_journal' }, ...config }),
   create: (data) => api.post('/schedules', data),
   createSchedule: (data) => api.post('/schedules', data),
   update: (id, data) => api.put(`/schedules/${id}`, data),

@@ -20,7 +20,8 @@ import { quizApi } from '../../services/quizApi';
 import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button, BottomSheetModal, Card } from '../../components/shared';
 import { resolveSlotTime } from '../../utils/timetableHelper';
-import { formatDateIndo } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { getJakartaDayInfo } from '../../utils/dateUtils';
 
 export default function StudentHomePage() {
   const { user } = useAuth();
@@ -49,20 +50,18 @@ export default function StudentHomePage() {
     };
   }, [user]);
 
-  // Current Day & Date Resolution
+  // Current Day & Date Resolution berbasis Asia/Jakarta (P-11)
   const dateInfo = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 1 = Senin..7 = Minggu
-    const dayNames = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    const dayInfo = getJakartaDayInfo();
     return {
-      dayOfWeek,
-      dayName: dayNames[dayOfWeek] || 'Senin',
-      dateStr: now.toISOString().split('T')[0],
-      formattedDate: formatDateIndo(now),
+      dayOfWeek: dayInfo.dayOfWeek,
+      dayName: dayInfo.dayName,
+      dateStr: dayInfo.dateStr,
+      formattedDate: dayInfo.formattedDate,
     };
   }, []);
 
-  // Fetch Portal Data
+  // Fetch Portal Data (P-12: allSettled + per-section unwrap)
   const loadPortalData = useCallback(async () => {
     setLoadError(null);
     try {
@@ -74,52 +73,56 @@ export default function StudentHomePage() {
           })
         : Promise.resolve({ data: [] });
 
-      const [attRes, schedRes, quizRes, eventRes] = await Promise.all([
-        leaveApi.getAttendances({ per_page: 50 }).catch(() => ({ data: [] })),
-        schedPromise.catch(() => ({ data: [] })),
-        quizApi.getQuizzes({ per_page: 20 }).catch(() => ({ data: [] })),
-        academicEventApi
-          .checkExemption({ for_my_class: 1, date: dateInfo.dateStr })
-          .catch(() => ({ data: { data: {} } })),
+      const [attRes, schedRes, quizRes, eventRes] = await Promise.allSettled([
+        leaveApi.getAttendances({ per_page: 50 }),
+        schedPromise,
+        quizApi.getQuizzes({ per_page: 20 }),
+        academicEventApi.checkExemption({ for_my_class: 1, date: dateInfo.dateStr }),
       ]);
 
       // 1. Rekapitulasi Presensi
-      const attList = Array.isArray(attRes)
-        ? attRes
-        : Array.isArray(attRes?.data)
-          ? attRes.data
-          : [];
-      setAttendances(attList);
+      if (attRes.status === 'fulfilled') {
+        setAttendances(unwrapList(attRes.value));
+      } else {
+        setAttendances([]);
+      }
 
       // 2. Jadwal Hari Ini
-      const schedList = Array.isArray(schedRes)
-        ? schedRes
-        : Array.isArray(schedRes?.data)
-          ? schedRes.data
-          : [];
-      setTodaySchedules(schedList);
+      if (schedRes.status === 'fulfilled') {
+        setTodaySchedules(unwrapList(schedRes.value));
+      } else {
+        setTodaySchedules([]);
+      }
 
       // 3. Kuis Aktif (Status published)
-      const quizList = Array.isArray(quizRes)
-        ? quizRes
-        : Array.isArray(quizRes?.data)
-          ? quizRes.data
-          : [];
-      const filteredQuizzes = quizList.filter((q) => q.status === 'published');
-      setActiveQuizzes(filteredQuizzes);
+      if (quizRes.status === 'fulfilled') {
+        const quizList = unwrapList(quizRes.value);
+        const filteredQuizzes = quizList.filter((q) => q.status === 'published');
+        setActiveQuizzes(filteredQuizzes);
+      } else {
+        setActiveQuizzes([]);
+      }
 
       // 4. Agenda Khusus Kelas Hari Ini
-      const eventData = eventRes?.data?.data;
-      if (eventData?.disabling_event) {
-        setActiveEvent(eventData.disabling_event);
-      } else if (eventData?.active_events && eventData.active_events.length > 0) {
-        setActiveEvent(eventData.active_events[0]);
+      if (eventRes.status === 'fulfilled') {
+        const eventData = unwrap(eventRes.value);
+        if (eventData?.disabling_event) {
+          setActiveEvent(eventData.disabling_event);
+        } else if (eventData?.active_events && eventData.active_events.length > 0) {
+          setActiveEvent(eventData.active_events[0]);
+        } else {
+          setActiveEvent(null);
+        }
       } else {
         setActiveEvent(null);
       }
+
+      if (attRes.status === 'rejected' && schedRes.status === 'rejected' && quizRes.status === 'rejected') {
+        setLoadError('Gagal memuat portal beranda siswa.');
+      }
     } catch (err) {
-      console.warn('Gagal memuat data portal beranda siswa:', err);
-      setLoadError(err.message || 'Gagal memuat data beranda siswa dari server.');
+      console.warn('Gagal memuat portal beranda siswa:', err);
+      setLoadError(err.message || 'Gagal memuat portal beranda siswa.');
     } finally {
       setLoading(false);
     }

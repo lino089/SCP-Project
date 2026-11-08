@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\SystemConfiguration;
 use App\Models\User;
@@ -399,6 +400,22 @@ class LeaveRequestController extends Controller
                     'verified_by' => $user->id,
                     'verified_at' => Carbon::now('Asia/Jakarta'),
                 ]);
+
+                // P-15 (Opsi 1): Sinkronisasi otomatis retroaktif presensi saat izin disetujui
+                if ($newStatus === 'approved') {
+                    $attendanceStatus = ($leaveRequest->category === 'sakit') ? 'Sakit' : 'Izin';
+                    $startDate = $leaveRequest->start_date ? Carbon::parse($leaveRequest->start_date)->toDateString() : Carbon::today('Asia/Jakarta')->toDateString();
+                    $endDate = $leaveRequest->end_date ? Carbon::parse($leaveRequest->end_date)->toDateString() : $startDate;
+
+                    Attendance::where('student_id', $leaveRequest->student_id)
+                        ->whereDate('date', '>=', $startDate)
+                        ->whereDate('date', '<=', $endDate)
+                        ->update([
+                            'status' => $attendanceStatus,
+                            'notes' => 'Sinkronisasi perizinan #' . $leaveRequest->id . ' (' . ucfirst($leaveRequest->category) . ')',
+                            'updated_at' => Carbon::now('Asia/Jakarta'),
+                        ]);
+                }
 
                 return response()->json([
                     'success' => true,

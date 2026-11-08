@@ -15,10 +15,11 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { leaveApi } from '../../services/leaveApi';
-import { academicSettingApi } from '../../services/scheduleApi';
 import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button } from '../../components/shared';
 import { resolveSlotTime } from '../../utils/timetableHelper';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { getJakartaDayInfo, getJakartaTimeString } from '../../utils/dateUtils';
 import './TeacherDashboard.css';
 
 export default function TeacherDashboardPage() {
@@ -34,22 +35,15 @@ export default function TeacherDashboardPage() {
   const [teacherLeaves, setTeacherLeaves] = useState([]);
   const [todayExemption, setTodayExemption] = useState(null);
 
-  // Tanggal & Hari Berjalan (Indonesia)
+  // Tanggal & Hari Berjalan (Indonesia) berbasis Asia/Jakarta (P-11)
   const dateInfo = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 1 = Senin, ..., 7 = Minggu
-    const dayNames = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-    const monthNames = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-    ];
-    const todayIso = now.toISOString().split('T')[0];
+    const dayInfo = getJakartaDayInfo();
     return {
-      dayOfWeek,
-      dayName: dayNames[dayOfWeek] || 'Senin',
-      todayIso,
-      formattedDate: `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`,
-      currentTimeStr: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      dayOfWeek: dayInfo.dayOfWeek,
+      dayName: dayInfo.dayName,
+      todayIso: dayInfo.dateStr,
+      formattedDate: dayInfo.formattedDate,
+      currentTimeStr: getJakartaTimeString(),
     };
   }, []);
 
@@ -70,65 +64,76 @@ export default function TeacherDashboardPage() {
     };
   }, [user, isWaliKelas, isKesiswaan]);
 
-  // Muat Seluruh Data Dashboard Guru
+  // Muat Seluruh Data Dashboard Guru (P-12: allSettled, P-13: no 403, no duplicate)
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
 
     try {
-      // 1. Dapatkan setting akademik aktif
-      let cycle = Number(user?.active_cycle || 1);
-      try {
-        const setRes = await academicSettingApi.getSettings();
-        if (setRes?.data?.active_cycle) {
-          cycle = Number(setRes.data.active_cycle);
-          setActiveCycle(cycle);
-        }
-      } catch {
-        // Gunakan default profil user
-      }
+      // 1. Dapatkan setting akademik aktif langsung dari profil user (P-13: hilangkan 403 /academic-settings)
+      const cycle = Number(user?.academic_setting?.active_cycle || user?.active_cycle || 1);
+      setActiveCycle(cycle);
 
-      // 2. Fetch data paralel: Jadwal Hari Ini, Semua Jadwal Mingguan, Missing Journals, & Izin Guru
-      const [todayRes, weeklyRes, missingRes, leaveRes, exemptionRes] = await Promise.all([
-        journalApi.getTeacherSchedules({
-          day: dateInfo.dayOfWeek,
-          cycle,
-          all: 1,
-          per_page: 50,
-        }),
+      // 2. Fetch data paralel: Jadwal Mingguan Tunggal, Missing Journals, Izin Guru, & Status Peniadaan KBM
+      const [weeklyRes, missingRes, leaveRes, exemptionRes] = await Promise.allSettled([
         journalApi.getTeacherSchedules({
           cycle,
           all: 1,
           per_page: 200,
         }),
-        journalApi.getMissingJournals().catch(() => ({ data: [] })),
-        leaveApi.getTeacherLeaveRequests({ per_page: 20 }).catch(() => ({ data: [] })),
-        academicEventApi.checkExemption().catch(() => null),
+        journalApi.getMissingJournals(),
+        leaveApi.getTeacherLeaveRequests({ per_page: 20 }),
+        academicEventApi.checkExemption({ date: dateInfo.todayIso }),
       ]);
 
-      const exData = exemptionRes?.data ?? exemptionRes;
-      if (exData && (exData.disabling_event !== undefined || exData.is_teaching_exempted !== undefined)) {
-        setTodayExemption(exData);
+      // Agenda / Peniadaan KBM
+      if (exemptionRes.status === 'fulfilled') {
+        const exData = unwrap(exemptionRes.value);
+        if (exData && (exData.disabling_event !== undefined || exData.is_teaching_exempted !== undefined)) {
+          setTodayExemption(exData);
+        } else {
+          setTodayExemption(null);
+        }
       }
 
-      const todayList = Array.isArray(todayRes) ? todayRes : Array.isArray(todayRes?.data) ? todayRes.data : [];
-      setTodaySchedules(todayList);
+      // P-13: Turunkan jadwal hari ini dari jadwal mingguan (0 duplicate request)
+      if (weeklyRes.status === 'fulfilled') {
+        const weeklyList = unwrapList(weeklyRes.value);
+        setWeeklySchedules(weeklyList);
+        const todayList = weeklyList.filter((s) => Number(s.day_of_week) === Number(dateInfo.dayOfWeek));
+        setTodaySchedules(todayList);
+      } else {
+        setWeeklySchedules([]);
+        setTodaySchedules([]);
+      }
 
-      const weeklyList = Array.isArray(weeklyRes) ? weeklyRes : Array.isArray(weeklyRes?.data) ? weeklyRes.data : [];
-      setWeeklySchedules(weeklyList);
+      // Missing Journals
+      if (missingRes.status === 'fulfilled') {
+        const missingList = unwrapList(missingRes.value);
+        setMissingJournals(missingList);
+      } else {
+        setMissingJournals([]);
+      }
 
-      const missingList = Array.isArray(missingRes) ? missingRes : Array.isArray(missingRes?.data) ? missingRes.data : [];
-      setMissingJournals(missingList);
+      // Izin Guru
+      if (leaveRes.status === 'fulfilled') {
+        const leaveList = unwrapList(leaveRes.value);
+        setTeacherLeaves(leaveList);
+      } else {
+        setTeacherLeaves([]);
+      }
 
-      const leaveList = Array.isArray(leaveRes) ? leaveRes : Array.isArray(leaveRes?.data) ? leaveRes.data : [];
-      setTeacherLeaves(leaveList);
+      // Hanya tampilkan global error bila request jadwal mingguan gagal
+      if (weeklyRes.status === 'rejected') {
+        setLoadError('Gagal memuat jadwal pelajaran guru.');
+      }
     } catch (err) {
       console.warn('Gagal memuat data Dashboard Guru:', err);
       setLoadError(err.message || 'Gagal memuat jadwal dan data KBM harian.');
     } finally {
       setLoading(false);
     }
-  }, [user?.active_cycle, dateInfo.dayOfWeek]);
+  }, [user?.academic_setting?.active_cycle, user?.active_cycle, dateInfo.dayOfWeek, dateInfo.todayIso]);
 
   useEffect(() => {
     loadDashboardData();

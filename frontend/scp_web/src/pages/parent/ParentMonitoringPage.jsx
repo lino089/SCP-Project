@@ -6,6 +6,8 @@ import { quizApi } from '../../services/quizApi';
 import { scheduleApi } from '../../services/scheduleApi';
 import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import Tabs from '../../components/shared/Tabs';
 import Badge from '../../components/shared/Badge';
 import Table from '../../components/shared/Table';
@@ -43,56 +45,77 @@ export default function ParentMonitoringPage() {
     };
   }, [user]);
 
-  // Fetch Attendance, Leave records, Published Result Quizzes, & Class Schedules
+  // Fetch Attendance, Leave records, Published Result Quizzes, & Class Schedules (P-11: todayLocalISO, P-12: allSettled)
   const fetchMonitoringData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = todayLocalISO();
       const studentObj = user?.linked_student || user?.linkedStudent;
       const classId = studentObj?.class_id || null;
 
       const eventPromise = classId
-        ? academicEventApi.checkExemption({ class_id: classId, date: todayStr }).catch(() => ({ data: { data: {} } }))
-        : academicEventApi.checkExemption({ date: todayStr }).catch(() => ({ data: { data: {} } }));
+        ? academicEventApi.checkExemption({ class_id: classId, date: todayStr })
+        : academicEventApi.checkExemption({ date: todayStr });
 
-      const [attRes, leaveRes, quizRes, schedRes, eventRes] = await Promise.all([
+      const [attRes, leaveRes, quizRes, schedRes, eventRes] = await Promise.allSettled([
         leaveApi.getAttendances({ per_page: 50 }),
         leaveApi.getLeaveRequests({ per_page: 50 }),
         quizApi.getQuizzes({ status: 'published_result', per_page: 50 }),
-        scheduleApi.getSchedules({ all: 1 }).catch(() => ({ data: [] })),
+        scheduleApi.getSchedules({ all: 1 }),
         eventPromise,
       ]);
 
       // 1. Rekapitulasi Presensi
-      const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
-      setAttendances(attList);
+      if (attRes.status === 'fulfilled') {
+        setAttendances(unwrapList(attRes.value));
+      } else {
+        setAttendances([]);
+      }
 
       // 2. Riwayat Izin
-      const leaveList = Array.isArray(leaveRes) ? leaveRes : Array.isArray(leaveRes?.data) ? leaveRes.data : [];
-      setLeaveRequests(leaveList);
+      if (leaveRes.status === 'fulfilled') {
+        setLeaveRequests(unwrapList(leaveRes.value));
+      } else {
+        setLeaveRequests([]);
+      }
 
       // 3. Capaian Kuis (Hanya yang berstatus published_result)
-      const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
-      const publishedResults = quizList.filter((q) => q.status === 'published_result');
-      setQuizzes(publishedResults);
+      if (quizRes.status === 'fulfilled') {
+        const quizList = unwrapList(quizRes.value);
+        const publishedResults = quizList.filter((q) => q.status === 'published_result');
+        setQuizzes(publishedResults);
+      } else {
+        setQuizzes([]);
+      }
 
       // 4. Jadwal Belajar Kelas Anak
-      const schedList = Array.isArray(schedRes?.data) ? schedRes.data : Array.isArray(schedRes) ? schedRes : [];
-      setChildSchedules(schedList);
+      if (schedRes.status === 'fulfilled') {
+        setChildSchedules(unwrapList(schedRes.value));
+      } else {
+        setChildSchedules([]);
+      }
 
       // 5. Agenda Kalender Akademik Hari Ini
-      const eventData = eventRes?.data ?? eventRes;
-      if (eventData?.disabling_event) {
-        setChildEvent(eventData.disabling_event);
-      } else if (eventData?.active_events && eventData.active_events.length > 0) {
-        setChildEvent(eventData.active_events[0]);
+      if (eventRes.status === 'fulfilled') {
+        const eventData = unwrap(eventRes.value);
+        if (eventData?.disabling_event) {
+          setChildEvent(eventData.disabling_event);
+        } else if (eventData?.active_events && eventData.active_events.length > 0) {
+          setChildEvent(eventData.active_events[0]);
+        } else {
+          setChildEvent(null);
+        }
       } else {
         setChildEvent(null);
       }
+
+      if (attRes.status === 'rejected' && leaveRes.status === 'rejected' && schedRes.status === 'rejected') {
+        setLoadError('Gagal memuat data monitoring anak.');
+      }
     } catch (err) {
-      console.warn('Gagal memuat data monitoring anak:', err);
-      setLoadError(err.message || 'Gagal memuat data monitoring anak dari server.');
+      console.warn('Gagal memuat monitoring anak:', err);
+      setLoadError(err.message || 'Gagal memuat data monitoring anak.');
     } finally {
       setLoading(false);
     }

@@ -11,8 +11,8 @@ export const leaveApi = {
    * Mengambil daftar perizinan siswa (auto-scoped multi-role di backend)
    * GET /api/leave-requests
    */
-  async getLeaveRequests(params = {}) {
-    return api.get('/leave-requests', { params });
+  async getLeaveRequests(params = {}, config = {}) {
+    return api.get('/leave-requests', { params, ...config });
   },
 
   /**
@@ -55,8 +55,8 @@ export const leaveApi = {
   /**
    * Mengambil rekapitulasi presensi institusi multi-role (GET /api/attendances)
    */
-  async getAttendances(params = {}) {
-    return api.get('/attendances', { params });
+  async getAttendances(params = {}, config = {}) {
+    return api.get('/attendances', { params, ...config });
   },
 
   /**

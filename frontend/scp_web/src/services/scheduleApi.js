@@ -16,9 +16,9 @@ export const academicSettingApi = {
 };
 
 export const scheduleApi = {
-  getSchedules: (params) => api.get('/schedules', { params }),
-  getMissingJournals: (params) =>
-    api.get('/schedules', { params: { ...params, status: 'missing_journal' } }),
+  getSchedules: (params, config = {}) => api.get('/schedules', { params, ...config }),
+  getMissingJournals: (params, config = {}) =>
+    api.get('/schedules', { params: { ...params, status: 'missing_journal' }, ...config }),
   createSchedule: (data) => api.post('/schedules', data), // { cycle_type, day_of_week, period_number, duration_periods, class_id, teacher_id, room_id, subject_id, password }
   updateSchedule: (id, data) => api.put(`/schedules/${id}`, data),
   deleteSchedule: (id, data) => api.delete(`/schedules/${id}`, { data }), // { password }

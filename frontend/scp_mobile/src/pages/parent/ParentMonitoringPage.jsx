@@ -15,6 +15,8 @@ import { quizApi } from '../../services/quizApi';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import academicEventApi from '../../services/academicEventApi';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import { MobileScheduleTimeline } from '../../components/schedule';
 import {
   Badge,
@@ -47,8 +49,8 @@ export default function ParentMonitoringPage() {
   }, []);
   const [selectedCycle, setSelectedCycle] = useState(() => Number(user?.active_cycle || 1));
   const [selectedDay, setSelectedDay] = useState(currentDayOfWeek);
-  const [periodTemplates, setPeriodTemplates] = useState([]);
-  const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [periodTemplates, setPeriodTemplates] = useState(() => user?.academic_setting?.period_templates || []);
+  const [mondayIsUpacara] = useState(() => Boolean(user?.academic_setting?.monday_is_upacara ?? true));
 
   // Child Profile Information
   const child = useMemo(() => {
@@ -67,56 +69,76 @@ export default function ParentMonitoringPage() {
     };
   }, [user]);
 
-  // Fetch Data Monitoring
+  // Fetch Data Monitoring (P-11: todayLocalISO, P-12: allSettled + unwrap, P-13: no 403)
   const fetchMonitoringData = useCallback(async () => {
     setLoadError(null);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = todayLocalISO();
 
-      const [attRes, leaveRes, quizRes, schedRes, eventRes, tplRes, setRes] = await Promise.all([
-        leaveApi.getAttendances({ per_page: 50 }).catch(() => ({ data: [] })),
-        leaveApi.getLeaveRequests({ per_page: 50 }).catch(() => ({ data: [] })),
-        quizApi.getQuizzes({ status: 'published_result', per_page: 50 }).catch(() => ({ data: [] })),
+      const [attRes, leaveRes, quizRes, schedRes, eventRes, tplRes] = await Promise.allSettled([
+        leaveApi.getAttendances({ per_page: 50 }),
+        leaveApi.getLeaveRequests({ per_page: 50 }),
+        quizApi.getQuizzes({ status: 'published_result', per_page: 50 }),
         child.classId
-          ? scheduleApi.getSchedules({ class_id: child.classId, cycle: selectedCycle, per_page: 100 }).catch(() => ({ data: [] }))
+          ? scheduleApi.getSchedules({ class_id: child.classId, cycle: selectedCycle, per_page: 100 })
           : Promise.resolve({ data: [] }),
         child.classId
-          ? academicEventApi.checkExemption({ class_id: child.classId, date: todayStr }).catch(() => ({ data: { data: {} } }))
-          : Promise.resolve({ data: { data: {} } }),
-        academicSettingApi.getPeriodTemplates().catch(() => ({ data: [] })),
-        academicSettingApi.getSettings().catch(() => ({ data: {} })),
+          ? academicEventApi.checkExemption({ class_id: child.classId, date: todayStr })
+          : Promise.resolve({ data: {} }),
+        academicSettingApi.getPeriodTemplates(),
       ]);
 
       // Presensi
-      const attList = Array.isArray(attRes) ? attRes : Array.isArray(attRes?.data) ? attRes.data : [];
-      setAttendances(attList);
+      if (attRes.status === 'fulfilled') {
+        setAttendances(unwrapList(attRes.value));
+      } else {
+        setAttendances([]);
+      }
 
       // Surat Izin
-      const leaveList = Array.isArray(leaveRes) ? leaveRes : Array.isArray(leaveRes?.data) ? leaveRes.data : [];
-      setLeaveRequests(leaveList);
+      if (leaveRes.status === 'fulfilled') {
+        setLeaveRequests(unwrapList(leaveRes.value));
+      } else {
+        setLeaveRequests([]);
+      }
 
       // Kuis yang sudah dipublikasikan nilainya
-      const quizList = Array.isArray(quizRes) ? quizRes : Array.isArray(quizRes?.data) ? quizRes.data : [];
-      setQuizzes(quizList.filter((q) => q.status === 'published_result'));
+      if (quizRes.status === 'fulfilled') {
+        const quizList = unwrapList(quizRes.value);
+        setQuizzes(quizList.filter((q) => q.status === 'published_result'));
+      } else {
+        setQuizzes([]);
+      }
 
       // Jadwal Belajar
-      const schedList = Array.isArray(schedRes) ? schedRes : Array.isArray(schedRes?.data) ? schedRes.data : [];
-      setChildSchedules(schedList);
+      if (schedRes.status === 'fulfilled') {
+        setChildSchedules(unwrapList(schedRes.value));
+      } else {
+        setChildSchedules([]);
+      }
 
       // Agenda Hari Ini
-      const eventData = eventRes?.data?.data;
-      if (eventData?.disabling_event) {
-        setChildEvent(eventData.disabling_event);
+      if (eventRes.status === 'fulfilled') {
+        const eventData = unwrap(eventRes.value);
+        if (eventData?.disabling_event) {
+          setChildEvent(eventData.disabling_event);
+        } else {
+          setChildEvent(null);
+        }
       } else {
         setChildEvent(null);
       }
 
       // Templates
-      if (tplRes?.data && Array.isArray(tplRes.data)) {
-        setPeriodTemplates(tplRes.data);
+      if (tplRes.status === 'fulfilled') {
+        const tplList = unwrapList(tplRes.value);
+        if (tplList.length > 0) {
+          setPeriodTemplates(tplList);
+        }
       }
-      if (typeof setRes?.data?.monday_is_upacara === 'boolean') {
-        setMondayIsUpacara(setRes.data.monday_is_upacara);
+
+      if (attRes.status === 'rejected' && leaveRes.status === 'rejected' && schedRes.status === 'rejected') {
+        setLoadError('Gagal memuat data monitoring anak.');
       }
     } catch (err) {
       console.warn('Gagal memuat data monitoring anak:', err);

@@ -11,6 +11,7 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use App\Http\Middleware\RoleMiddleware;
+use App\Http\Middleware\LogSlowRequestsMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'assignment' => AssignmentMiddleware::class
+        ]);
+        $middleware->api(append: [
+            LogSlowRequestsMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

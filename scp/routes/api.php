@@ -21,6 +21,53 @@ use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\TeacherController;
 use App\Http\Controllers\API\TeacherLeaveRequestController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+
+Route::get('/health', function () {
+    $status = [
+        'status' => 'healthy',
+        'timestamp' => now()->toIso8601String(),
+        'services' => [],
+    ];
+    $httpCode = 200;
+
+    // 1. Database Connectivity Check
+    try {
+        DB::connection()->getPdo();
+        $status['services']['database'] = ['status' => 'ok', 'driver' => config('database.default')];
+    } catch (\Throwable $e) {
+        $status['status'] = 'unhealthy';
+        $status['services']['database'] = ['status' => 'error', 'message' => $e->getMessage()];
+        $httpCode = 503;
+    }
+
+    // 2. Cache Store Check
+    try {
+        $cacheKey = 'health_ping_' . uniqid();
+        Cache::put($cacheKey, 1, 10);
+        $val = Cache::get($cacheKey);
+        Cache::forget($cacheKey);
+        $status['services']['cache'] = ['status' => $val === 1 ? 'ok' : 'degraded', 'store' => config('cache.default')];
+    } catch (\Throwable $e) {
+        $status['status'] = 'unhealthy';
+        $status['services']['cache'] = ['status' => 'error', 'message' => $e->getMessage()];
+        $httpCode = 503;
+    }
+
+    // 3. Queue Pending Jobs Check
+    try {
+        $pendingJobs = DB::table('jobs')->count();
+        $status['services']['queue'] = ['status' => 'ok', 'pending_jobs' => $pendingJobs];
+    } catch (\Throwable $e) {
+        $status['services']['queue'] = ['status' => 'unknown', 'message' => $e->getMessage()];
+    }
+
+    return response()->json([
+        'success' => $httpCode === 200,
+        'data' => $status,
+    ], $httpCode);
+});
 
 Route::get('/ping', function () {
     return response()->json([
@@ -32,7 +79,7 @@ Route::get('/ping', function () {
     ]);
 });
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/auth/google', [AuthController::class, 'loginWithGoogle']);
 
 // Pemulihan Kata Sandi Mandiri (Forgot Password via Email OTP)
@@ -68,12 +115,15 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/attendances', [AttendanceController::class, 'index']);
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
 
-    // Rekap Kehadiran Siswa (Wali Kelas & Kesiswaan / Waka)
-    Route::middleware('role:vice_principal,teacher')->prefix('attendance-recap')->group(function () {
-        Route::get('/classes', [AttendanceRecapController::class, 'classes']);
-        Route::get('/summary', [AttendanceRecapController::class, 'summary']);
-        Route::get('/student/{studentId}', [AttendanceRecapController::class, 'studentHistory']);
-        Route::get('/export', [AttendanceRecapController::class, 'export']);
+    // Rekap Kehadiran Siswa & Pengelolaan Kuis (Wali Kelas, Guru, & Waka)
+    Route::middleware('role:vice_principal,teacher')->group(function () {
+        Route::prefix('attendance-recap')->group(function () {
+            Route::get('/classes', [AttendanceRecapController::class, 'classes']);
+            Route::get('/summary', [AttendanceRecapController::class, 'summary']);
+            Route::get('/student/{studentId}', [AttendanceRecapController::class, 'studentHistory']);
+            Route::get('/export', [AttendanceRecapController::class, 'export']);
+        });
+        Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
     });
 
     // Kalender Akademik & Agenda Khusus KBM (Read-only untuk seluruh user terautentikasi)
@@ -85,7 +135,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // 9.6 Perizinan Siswa (Leave Requests)
     Route::get('/leave-requests', [LeaveRequestController::class, 'index']);
     Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
-    Route::patch('/leave-requests/{id}', [LeaveRequestController::class, 'update']);
+    Route::match(['put', 'patch'], '/leave-requests/{id}', [LeaveRequestController::class, 'update']);
 
     // 9.6b Perizinan Guru (Teacher Leave Requests - Tahap 3)
     Route::middleware('role:vice_principal,teacher')->group(function () {
@@ -119,7 +169,6 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/academic-events', [AcademicEventController::class, 'store']);
         Route::put('/academic-events/{id}', [AcademicEventController::class, 'update']);
         Route::delete('/academic-events/{id}', [AcademicEventController::class, 'destroy']);
-        Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
 
         // 9.3 Master Data Classes
         Route::post('/classes', [SchoolClassController::class, 'store']);
@@ -197,7 +246,6 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // 9.8 Sistem Kuis Berbantuan AI (Guru)
         Route::post('/quizzes', [QuizController::class, 'store']);
         Route::patch('/quizzes/{id}', [QuizController::class, 'update']);
-        Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
         Route::patch('/quizzes/{id}/publish', [QuizController::class, 'publish']);
         Route::post('/quizzes/{id}/generate-prompt', [QuizController::class, 'generatePrompt']);
         Route::post('/quizzes/{id}/extract-document', [QuizController::class, 'extractDocument']);

@@ -20,6 +20,8 @@ import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import StatCard from '../../components/shared/StatCard';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import './AcademicCalendarPage.css';
 
 const MONTH_NAMES = [
@@ -71,17 +73,13 @@ export default function AcademicCalendarPage() {
   useEffect(() => {
     classApi.getClasses({ per_page: 100 })
       .then((res) => {
-        const raw = res?.data ?? res;
-        if (Array.isArray(raw)) {
-          setClassesList(raw);
-        } else if (Array.isArray(raw?.data)) {
-          setClassesList(raw.data);
-        }
+        setClassesList(unwrapList(res));
       })
       .catch(() => {});
   }, []);
 
-  const loadEvents = useCallback(async () => {
+  // P-14: loadEvents dengan AbortSignal guard
+  const loadEvents = useCallback(async (signal) => {
     setIsLoading(true);
     try {
       const params = {
@@ -93,8 +91,8 @@ export default function AcademicCalendarPage() {
       if (filterGrade !== 'ALL') params.grade = filterGrade;
       if (filterClassId !== 'ALL') params.class_id = Number(filterClassId);
 
-      const res = await academicEventApi.getMyCalendar(params);
-      const payload = res?.data ?? res;
+      const res = await academicEventApi.getMyCalendar(params, { signal });
+      const payload = unwrap(res);
       if (payload?.events) {
         setEvents(payload.events || []);
         setSummaryData(payload.summary || null);
@@ -102,6 +100,7 @@ export default function AcademicCalendarPage() {
         setEvents(payload);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       showToastError(err.response?.data?.message || err.message || 'Gagal memuat agenda kalender akademik.');
     } finally {
       setIsLoading(false);
@@ -109,7 +108,9 @@ export default function AcademicCalendarPage() {
   }, [currentYear, currentMonth, filterType, filterGrade, filterClassId]);
 
   useEffect(() => {
-    loadEvents();
+    const controller = new AbortController();
+    loadEvents(controller.signal);
+    return () => controller.abort();
   }, [loadEvents]);
 
   // Navigasi Bulan

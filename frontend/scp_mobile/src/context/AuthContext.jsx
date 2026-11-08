@@ -60,13 +60,20 @@ export function AuthProvider({ children }) {
           setUser(userData);
           localStorage.setItem('scp_user', JSON.stringify(userData));
         }
-      } catch {
-        // Token invalid or expired
-        if (isMounted) {
-          localStorage.removeItem('scp_token');
-          localStorage.removeItem('scp_user');
-          setToken(null);
-          setUser(null);
+      } catch (err) {
+        // P-5: Token invalid or expired (401 murni dari backend)
+        const is401 = err?.status === 401 || err?.raw?.response?.status === 401;
+        if (is401) {
+          if (isMounted) {
+            localStorage.removeItem('scp_token');
+            localStorage.removeItem('scp_user');
+            setToken(null);
+            setUser(null);
+          }
+        } else {
+          // Gangguan jaringan seluler/Wi-Fi: JANGAN logout!
+          // Pertahankan token dan profil dari cache localStorage agar sesi mobile tidak hilang tiba-tiba
+          console.warn('[SCP Mobile Auth] Gagal verifikasi sesi karena jaringan. Sesi lokal tetap dipertahankan.');
         }
       } finally {
         if (isMounted) {
@@ -93,20 +100,19 @@ export function AuthProvider({ children }) {
       try {
         const meRes = await authApi.getMe();
         const userData = meRes?.data || meRes?.user || meRes;
-        if (userData) {
+        if (userData && userData.role) {
           userData.must_change_password = mustChangePwd || Boolean(userData.must_change_password);
           setUser(userData);
           localStorage.setItem('scp_user', JSON.stringify(userData));
           return { user: userData, mustChangePassword: userData.must_change_password };
         }
-      } catch {
-        const fallbackUser = {
-          nis_nip: credentials.username || credentials.nis_nip,
-          must_change_password: mustChangePwd,
-        };
-        setUser(fallbackUser);
-        localStorage.setItem('scp_user', JSON.stringify(fallbackUser));
-        return { user: fallbackUser, mustChangePassword: mustChangePwd };
+        throw new Error('Data profil pengguna tidak memuat informasi role yang sah.');
+      } catch (meErr) {
+        localStorage.removeItem('scp_token');
+        localStorage.removeItem('scp_user');
+        setToken(null);
+        setUser(null);
+        throw (meErr?.message ? meErr : new Error('Gagal memuat profil pengguna setelah login.'));
       }
     }
 
@@ -125,19 +131,19 @@ export function AuthProvider({ children }) {
       try {
         const meRes = await authApi.getMe();
         const userData = meRes?.data || meRes?.user || meRes;
-        if (userData) {
+        if (userData && userData.role) {
           userData.must_change_password = mustChangePwd || Boolean(userData.must_change_password);
           setUser(userData);
           localStorage.setItem('scp_user', JSON.stringify(userData));
           return { user: userData, mustChangePassword: userData.must_change_password };
         }
-      } catch {
-        const fallbackUser = res?.data?.user || {
-          must_change_password: mustChangePwd,
-        };
-        setUser(fallbackUser);
-        localStorage.setItem('scp_user', JSON.stringify(fallbackUser));
-        return { user: fallbackUser, mustChangePassword: mustChangePwd };
+        throw new Error('Data profil pengguna tidak memuat informasi role yang sah.');
+      } catch (meErr) {
+        localStorage.removeItem('scp_token');
+        localStorage.removeItem('scp_user');
+        setToken(null);
+        setUser(null);
+        throw (meErr?.message ? meErr : new Error('Gagal memuat profil Google SSO setelah login.'));
       }
     }
 

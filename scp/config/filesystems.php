@@ -15,6 +15,8 @@ return [
 
     'default' => env('FILESYSTEM_DISK', 'local'),
 
+    'supabase_storage_private' => (bool) env('SUPABASE_STORAGE_PRIVATE', false),
+
     /*
     |--------------------------------------------------------------------------
     | Filesystem Disks
@@ -61,6 +63,7 @@ return [
             ],
             'throw' => false,
             'report' => false,
+            'supabase_storage_private' => (bool) env('SUPABASE_STORAGE_PRIVATE', false),
         ],
 
     ],

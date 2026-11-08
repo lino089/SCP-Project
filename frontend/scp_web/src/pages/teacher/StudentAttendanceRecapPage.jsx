@@ -23,6 +23,7 @@ import Badge from '../../components/shared/Badge';
 import Button from '../../components/shared/Button';
 import Tabs from '../../components/shared/Tabs';
 import StudentAttendanceDetailModal from './components/StudentAttendanceDetailModal';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 // Helper Format Tanggal Indonesia
 function formatDateIndo(dateStr) {
@@ -117,7 +118,7 @@ export default function StudentAttendanceRecapPage() {
     if (periodPreset === 'month') {
       const start = new Date(y, m, 1);
       const end = new Date(y, m + 1, 0);
-      const format = (d) => d.toISOString().slice(0, 10);
+      const format = (d) => todayLocalISO(d);
       return { start_date: format(start), end_date: format(end), label: 'Bulan Berjalan' };
     }
 
@@ -126,7 +127,7 @@ export default function StudentAttendanceRecapPage() {
       const isGanjil = m >= 6; // Juli onwards
       const start = isGanjil ? new Date(y, 6, 1) : new Date(y, 0, 1);
       const end = isGanjil ? new Date(y, 11, 31) : new Date(y, 5, 30);
-      const format = (d) => d.toISOString().slice(0, 10);
+      const format = (d) => todayLocalISO(d);
       return {
         start_date: format(start),
         end_date: format(end),
@@ -206,7 +207,7 @@ export default function StudentAttendanceRecapPage() {
       const link = document.createElement('a');
       link.href = url;
 
-      let fileName = `Rekap_Kehadiran_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      let fileName = `Rekap_Kehadiran_${todayLocalISO()}.xlsx`;
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();

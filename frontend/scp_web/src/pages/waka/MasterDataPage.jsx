@@ -42,6 +42,7 @@ import TeacherAssignmentModal from './components/TeacherAssignmentModal';
 import TeacherAssignmentTab from './components/TeacherAssignmentTab';
 import DeleteConflictDialog from './components/DeleteConflictDialog';
 import DeleteConfirmationModal from './components/DeleteConfirmationModal';
+import { unwrap } from '../../utils/responseHelper';
 import './MasterData.css';
 
 export default function MasterDataPage() {
@@ -1186,7 +1187,7 @@ export default function MasterDataPage() {
         if (activeTab === 'guru') {
           try {
             const res = await teacherApi.updateTeacher(id, payloadWithPassword);
-            const updatedTeacherData = res.data?.data || res.data;
+            const updatedTeacherData = unwrap(res);
             const chosenSubject = payload.subject_id
               ? subjectList.find((s) => s.id === payload.subject_id)
               : null;

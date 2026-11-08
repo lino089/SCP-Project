@@ -1,0 +1,13 @@
+# Root .gitignore for SchoolClassProject
+
+# Environment files across all subprojects (security guard)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local process artifacts & runtime locks
+deploy/*.pid
+deploy/*.log
+deploy/backups/*.sql
+deploy/heavy_job_proof.txt
+.hermes/

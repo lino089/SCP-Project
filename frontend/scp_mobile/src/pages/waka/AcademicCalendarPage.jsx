@@ -18,6 +18,8 @@ import {
 import MobileCalendarView from '../../components/calendar/MobileCalendarView';
 import { SkeletonCard, ErrorState } from '../../components/feedback';
 import { formatDateIndo } from '../../utils/formatters';
+import { unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 const EVENT_TYPES = [
   { value: 'holiday', label: 'Hari Libur Resmi', defaultDisable: true, badge: 'danger' },
@@ -32,10 +34,15 @@ const MONTH_NAMES = [
 ];
 
 export default function AcademicCalendarPage() {
-  const today = useMemo(() => new Date(), []);
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth() + 1);
-  const [selectedDate, setSelectedDate] = useState(() => today.toISOString().split('T')[0]);
+  const todayIso = useMemo(() => todayLocalISO(), []);
+  const todayParts = useMemo(() => {
+    const [y, m] = todayIso.split('-').map(Number);
+    return { year: y || new Date().getFullYear(), month: m || (new Date().getMonth() + 1) };
+  }, [todayIso]);
+
+  const [currentYear, setCurrentYear] = useState(todayParts.year);
+  const [currentMonth, setCurrentMonth] = useState(todayParts.month);
+  const [selectedDate, setSelectedDate] = useState(() => todayIso);
 
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,16 +81,17 @@ export default function AcademicCalendarPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (signal) => {
     try {
       const res = await academicEventApi.getAll({
         year: currentYear,
         month: currentMonth,
-      });
-      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      }, { signal });
+      const list = unwrapList(res);
       setEvents(list);
       setLoadError(null);
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       setLoadError(err.message || 'Gagal memuat agenda kalender akademik.');
     } finally {
       setIsLoading(false);
@@ -91,29 +99,12 @@ export default function AcademicCalendarPage() {
   }, [currentYear, currentMonth]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function init() {
-      try {
-        const res = await academicEventApi.getAll({
-          year: currentYear,
-          month: currentMonth,
-        });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        if (isMounted) {
-          setEvents(list);
-          setLoadError(null);
-        }
-      } catch (err) {
-        if (isMounted) setLoadError(err.message || 'Gagal memuat agenda kalender akademik.');
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    init();
+    const controller = new AbortController();
+    fetchEvents(controller.signal);
     return () => {
-      isMounted = false;
+      controller.abort();
     };
-  }, [currentYear, currentMonth]);
+  }, [fetchEvents]);
 
   const handleRefresh = () => {
     setIsLoading(true);
@@ -146,8 +137,8 @@ export default function AcademicCalendarPage() {
     setFormTitle('');
     setFormDesc('');
     setFormType('holiday');
-    setFormStartDate(selectedDate || today.toISOString().split('T')[0]);
-    setFormEndDate(selectedDate || today.toISOString().split('T')[0]);
+    setFormStartDate(selectedDate || todayLocalISO());
+    setFormEndDate(selectedDate || todayLocalISO());
     setFormScopeType('all');
     setFormGrades(['10']);
     setFormClassIds([]);
@@ -233,11 +224,10 @@ export default function AcademicCalendarPage() {
     setIsPasswordSheetOpen(true);
   };
 
-  const handlePasswordConfirmDelete = async (password) => {
+  const handlePasswordConfirmDelete = async (_password) => {
     setPasswordLoading(true);
     setPasswordError('');
     try {
-      await academicEventApi.confirmPassword(password);
       await academicEventApi.delete(pendingDeleteId);
       setIsPasswordSheetOpen(false);
       showToast('Agenda berhasil dihapus.');

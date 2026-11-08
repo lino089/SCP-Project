@@ -4,10 +4,10 @@ import api from './api';
  * Service API untuk Manajemen Kalender Akademik & Agenda Khusus KBM
  */
 export const academicEventApi = {
-  getEvents: (params) => api.get('/academic-events', { params }),
-  getMyCalendar: (params) => api.get('/academic-events/my-calendar', { params }),
+  getEvents: (params, config = {}) => api.get('/academic-events', { params, ...config }),
+  getMyCalendar: (params, config = {}) => api.get('/academic-events/my-calendar', { params, ...config }),
   getEventById: (id) => api.get(`/academic-events/${id}`),
-  checkExemption: (params) => api.get('/academic-events/check-exemption', { params }),
+  checkExemption: (params, config = {}) => api.get('/academic-events/check-exemption', { params, ...config }),
   createEvent: (data) => api.post('/academic-events', data),
   updateEvent: (id, data) => api.put(`/academic-events/${id}`, data),
   deleteEvent: (id) => api.delete(`/academic-events/${id}`),

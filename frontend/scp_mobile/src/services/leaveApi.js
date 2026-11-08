@@ -5,7 +5,7 @@ import api from './api';
  */
 export const leaveApi = {
   // --- Perizinan Siswa ---
-  getLeaveRequests: (params = {}) => api.get('/leave-requests', { params }),
+  getLeaveRequests: (params = {}, config = {}) => api.get('/leave-requests', { params, ...config }),
   getLeaveRequestDetail: (id) => api.get(`/leave-requests/${id}`),
   createLeaveRequest: (formData) =>
     api.post('/leave-requests', formData, {
@@ -19,7 +19,7 @@ export const leaveApi = {
   deleteLeaveRequest: (id) => api.delete(`/leave-requests/${id}`),
 
   // Rekapitulasi Presensi Institusi
-  getAttendances: (params = {}) => api.get('/attendances', { params }),
+  getAttendances: (params = {}, config = {}) => api.get('/attendances', { params, ...config }),
 
   // --- Perizinan Mengajar Guru ---
   submitTeacherLeaveRequest: (dataOrFormData) => {
@@ -45,7 +45,7 @@ export const leaveApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  getTeacherLeaveRequests: (params = {}) => api.get('/teacher-leave-requests', { params }),
+  getTeacherLeaveRequests: (params = {}, config = {}) => api.get('/teacher-leave-requests', { params, ...config }),
   getTeacherLeaveDetail: (id) => api.get(`/teacher-leave-requests/${id}`),
   approveTeacherLeaveRequest: (id) => api.patch(`/teacher-leave-requests/${id}/approve`),
   rejectTeacherLeaveRequest: (id) => api.patch(`/teacher-leave-requests/${id}/reject`),

@@ -23,6 +23,8 @@ import {
   NUMBER_TO_DAY,
   detectScheduleConflicts,
 } from '../../utils/timetableHelper';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import {
   Badge,
   Button,
@@ -116,30 +118,25 @@ export default function TeacherSchedulePage() {
     }
   }, []);
 
-  // Izin mengajar aktif hari ini dari backend
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Izin mengajar aktif hari ini dari backend (P-11: todayLocalISO)
+  const todayStr = useMemo(() => todayLocalISO(), []);
   const todayActiveLeave = useMemo(() => {
     return teacherLeaves.find(
       (l) => l.date === todayStr && (l.status === 'pending' || l.status === 'approved')
     );
   }, [teacherLeaves, todayStr]);
 
-  // Ambil data jadwal mengajar guru dari database riil
-  const fetchData = useCallback(async () => {
+  // Ambil data jadwal mengajar guru dari database riil (P-12: allSettled, P-14: signal guard)
+  const fetchData = useCallback(async (signal) => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const [schedRes, missingRes] = await Promise.all([
-        journalApi.getTeacherSchedules({ cycle: selectedCycle, all: 1, per_page: 100 }),
-        journalApi.getMissingJournals().catch(() => ({ success: false, data: [] })),
+      const [schedRes, missingRes] = await Promise.allSettled([
+        journalApi.getTeacherSchedules({ cycle: selectedCycle, all: 1, per_page: 100 }, { signal }),
+        journalApi.getMissingJournals({}, { signal }),
       ]);
 
-      const rawSchedules =
-        schedRes?.data
-          ? Array.isArray(schedRes.data)
-            ? schedRes.data
-            : schedRes.data.data || []
-          : [];
+      const rawSchedules = schedRes.status === 'fulfilled' ? unwrapList(schedRes.value) : [];
 
       // Mapping data jadwal dengan normalisasi nama kelas yang 100% aman
       const mapped = rawSchedules.map((s) => ({
@@ -177,10 +174,13 @@ export default function TeacherSchedulePage() {
 
       setSchedules(mapped);
 
-      if (missingRes?.success && Array.isArray(missingRes.data)) {
-        setMissingJournals(missingRes.data);
+      if (missingRes.status === 'fulfilled') {
+        setMissingJournals(unwrapList(missingRes.value));
+      } else {
+        setMissingJournals([]);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.warn('Gagal memuat jadwal guru:', err);
       setFetchError(err.message || 'Gagal memuat jadwal mengajar dari server.');
       setSchedules([]);
@@ -190,7 +190,7 @@ export default function TeacherSchedulePage() {
   }, [selectedCycle, user?.name]);
 
   // Pemuatan data jadwal kelas binaan jika tab kelas binaan aktif
-  const fetchHomeroomData = useCallback(async () => {
+  const fetchHomeroomData = useCallback(async (signal) => {
     if (scheduleContext !== 'homeroom' || !homeroomClassId) return;
     setIsLoading(true);
     setFetchError(null);
@@ -200,14 +200,9 @@ export default function TeacherSchedulePage() {
         cycle: selectedCycle,
         all: 1,
         per_page: 100,
-      });
+      }, { signal });
 
-      const raw =
-        res?.data
-          ? Array.isArray(res.data)
-            ? res.data
-            : res.data.data || []
-          : [];
+      const raw = unwrapList(res);
 
       const mapped = raw.map((s) => ({
         ...s,
@@ -257,12 +252,13 @@ export default function TeacherSchedulePage() {
   }, [fetchSettings]);
 
   useEffect(() => {
+    const controller = new AbortController();
     let isMounted = true;
     const loadAll = async () => {
       if (scheduleContext === 'homeroom') {
-        await fetchHomeroomData();
+        await fetchHomeroomData(controller.signal);
       } else {
-        await fetchData();
+        await fetchData(controller.signal);
       }
       if (isMounted) {
         await fetchTeacherLeaves();
@@ -272,6 +268,7 @@ export default function TeacherSchedulePage() {
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, [scheduleContext, fetchData, fetchHomeroomData, fetchTeacherLeaves]);
 

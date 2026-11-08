@@ -15,6 +15,8 @@ import academicEventApi from '../../services/academicEventApi';
 import { MobileScheduleTimeline } from '../../components/schedule';
 import { Badge, Button, BottomSheetModal } from '../../components/shared';
 import { resolveSlotTime } from '../../utils/timetableHelper';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 
 export default function StudentSchedulePage() {
   const { user } = useAuth();
@@ -78,29 +80,25 @@ export default function StudentSchedulePage() {
           cycle: selectedCycle,
           per_page: 100,
         });
-        const list = Array.isArray(schedRes)
-          ? schedRes
-          : Array.isArray(schedRes?.data)
-            ? schedRes.data
-            : [];
-        setSchedules(list);
+        setSchedules(unwrapList(schedRes));
       } else {
         setSchedules([]);
       }
 
-      // Cek agenda khusus KBM
-      const todayStr = new Date().toISOString().split('T')[0];
-      const eventRes = await academicEventApi
-        .checkExemption({
+      // Cek agenda khusus KBM (P-11: todayLocalISO, P-9: unwrap)
+      const todayStr = todayLocalISO();
+      try {
+        const eventRes = await academicEventApi.checkExemption({
           for_my_class: 1,
           date: todayStr,
-        })
-        .catch(() => ({ data: { data: {} } }));
-
-      const eventData = eventRes?.data?.data;
-      if (eventData?.disabling_event) {
-        setTodayEvent(eventData.disabling_event);
-      } else {
+        });
+        const eventData = unwrap(eventRes);
+        if (eventData?.disabling_event) {
+          setTodayEvent(eventData.disabling_event);
+        } else {
+          setTodayEvent(null);
+        }
+      } catch {
         setTodayEvent(null);
       }
     } catch (err) {

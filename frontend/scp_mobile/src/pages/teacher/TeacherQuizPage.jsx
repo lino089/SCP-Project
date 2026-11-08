@@ -185,9 +185,9 @@ export default function TeacherQuizPage() {
         question_types: 'combination',
       });
 
-      showToast('Soal kuis AI berhasil di-generate.');
+      showToast('Permintaan pembuatan soal AI diterima. Sedang memproses...');
       setIsGeneratorModalOpen(false);
-      handleOpenReviewQuestions(selectedQuiz);
+      handleOpenReviewQuestions(selectedQuiz, true);
     } catch (err) {
       setGenError(
         err.response?.data?.message || err.message || 'Gagal generate soal via Gemini AI.'
@@ -213,9 +213,9 @@ export default function TeacherQuizPage() {
       formData.append('document', uploadedDoc);
 
       await quizApi.extractDocument(selectedQuiz.id, formData);
-      showToast('Ekstraksi soal dari dokumen selesai.');
+      showToast('Permintaan ekstraksi berkas AI diterima. Sedang memproses...');
       setIsGeneratorModalOpen(false);
-      handleOpenReviewQuestions(selectedQuiz);
+      handleOpenReviewQuestions(selectedQuiz, true);
     } catch (err) {
       setGenError(
         err.response?.data?.message || err.message || 'Gagal mengekstrak soal dari dokumen.'
@@ -225,14 +225,22 @@ export default function TeacherQuizPage() {
     }
   };
 
-  // Open Questions Review
-  const handleOpenReviewQuestions = async (quiz) => {
+  // Open Questions Review (dengan dukungan polling jika baru diproses asinkron di queue)
+  const handleOpenReviewQuestions = async (quiz, shouldPoll = false) => {
     setSelectedQuiz(quiz);
     setIsReviewModalOpen(true);
     setIsLoadingQuestions(true);
     try {
-      const res = await quizApi.getQuizQuestions(quiz.id);
-      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      let list = [];
+      const maxAttempts = shouldPoll ? 15 : 1;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const res = await quizApi.getQuizQuestions(quiz.id);
+        list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        if (list.length > 0 || !shouldPoll) break;
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
       setQuizQuestions(list);
     } catch {
       showToast('Gagal memuat butir soal kuis.', 'error');

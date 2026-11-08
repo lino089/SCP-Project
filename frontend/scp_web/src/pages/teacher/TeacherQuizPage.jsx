@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { quizApi } from '../../services/quizApi';
 import masterDataApi from '../../services/masterDataApi';
+import { todayLocalISO } from '../../utils/dateUtils';
 import {
   Button,
   Input,
@@ -198,7 +199,7 @@ export default function TeacherQuizPage() {
       class_id: defaultClassId,
       class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
       selected_class_ids: defaultClassId ? [defaultClassId] : [],
-      due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      due_date: todayLocalISO(new Date(Date.now() + 7 * 86400000)),
       max_attempts: '2',
     });
     setIsCreateModalOpen(true);

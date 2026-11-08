@@ -11,17 +11,18 @@ export const journalApi = {
    * Mengambil jadwal mengajar guru yang login (auto-scoped di backend)
    * GET /api/schedules
    */
-  async getTeacherSchedules(params = {}) {
-    return api.get('/schedules', { params });
+  async getTeacherSchedules(params = {}, config = {}) {
+    return api.get('/schedules', { params, ...config });
   },
 
   /**
    * Mengambil peringatan jadwal KBM yang selesai > 30 menit lalu namun belum memiliki jurnal selesai
    * GET /api/schedules?status=missing_journal
    */
-  async getMissingJournals(params = {}) {
+  async getMissingJournals(params = {}, config = {}) {
     return api.get('/schedules', {
       params: { ...params, status: 'missing_journal' },
+      ...config,
     });
   },
 
@@ -29,16 +30,16 @@ export const journalApi = {
    * Mengambil daftar jurnal (history / active)
    * GET /api/journals
    */
-  async getJournals(params = {}) {
-    return api.get('/journals', { params });
+  async getJournals(params = {}, config = {}) {
+    return api.get('/journals', { params, ...config });
   },
 
   /**
    * Mengambil rekapitulasi harian KBM & kepatuhan pengisian jurnal
    * GET /api/journals/daily-recap
    */
-  async getDailyRecap(params = {}) {
-    return api.get('/journals/daily-recap', { params });
+  async getDailyRecap(params = {}, config = {}) {
+    return api.get('/journals/daily-recap', { params, ...config });
   },
 
   /**

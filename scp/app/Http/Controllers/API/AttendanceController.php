@@ -37,6 +37,17 @@ class AttendanceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'date' => 'sometimes|date',
+            'start_date' => 'sometimes|date',
+            'end_date' => 'sometimes|date|after_or_equal:start_date',
+            'class_id' => 'sometimes|integer',
+            'student_id' => 'sometimes|integer',
+            'journal_id' => 'sometimes|integer',
+            'status' => 'sometimes|string|in:Hadir,Sakit,Izin,Alpa,Dispensasi',
+        ]);
+
         $user = $request->user();
 
         $query = Attendance::query()

@@ -26,6 +26,7 @@ import {
 import ScheduleBreakRow from '../../components/schedule/ScheduleBreakRow';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
+import { unwrapList } from '../../utils/responseHelper';
 import {
   DAYS_LIST,
   DAY_TO_NUMBER,
@@ -152,30 +153,10 @@ export default function ScheduleManagementPage() {
         teacherApi.getTeachers({ per_page: 100 }),
       ]);
 
-      const classes =
-        cRes.status === 'fulfilled' && cRes.value.data
-          ? Array.isArray(cRes.value.data)
-            ? cRes.value.data
-            : cRes.value.data.data || []
-          : [];
-      const rooms =
-        rRes.status === 'fulfilled' && rRes.value.data
-          ? Array.isArray(rRes.value.data)
-            ? rRes.value.data
-            : rRes.value.data.data || []
-          : [];
-      const subjects =
-        sRes.status === 'fulfilled' && sRes.value.data
-          ? Array.isArray(sRes.value.data)
-            ? sRes.value.data
-            : sRes.value.data.data || []
-          : [];
-      const teachers =
-        tRes.status === 'fulfilled' && tRes.value.data
-          ? Array.isArray(tRes.value.data)
-            ? tRes.value.data
-            : tRes.value.data.data || []
-          : [];
+      const classes = cRes.status === 'fulfilled' ? unwrapList(cRes.value) : [];
+      const rooms = rRes.status === 'fulfilled' ? unwrapList(rRes.value) : [];
+      const subjects = sRes.status === 'fulfilled' ? unwrapList(sRes.value) : [];
+      const teachers = tRes.status === 'fulfilled' ? unwrapList(tRes.value) : [];
 
       setClassList(classes);
       setRoomList(rooms);
@@ -188,19 +169,15 @@ export default function ScheduleManagementPage() {
     }
   }, []);
 
-  // Fetch schedules for active cycle (decoupled from master data)
-  const fetchSchedules = useCallback(async (cycleToFetch) => {
+  // Fetch schedules for active cycle (P-14: AbortSignal guard)
+  const fetchSchedules = useCallback(async (cycleToFetch, signal) => {
     const targetCycle = cycleToFetch !== undefined ? cycleToFetch : selectedCycle;
     setIsPageLoading(true);
     setFetchError(null);
 
     try {
-      const schedRes = await scheduleApi.getSchedules({ cycle: targetCycle, all: 1 });
-      const raw = schedRes?.data
-        ? Array.isArray(schedRes.data)
-          ? schedRes.data
-          : schedRes.data.data || []
-        : [];
+      const schedRes = await scheduleApi.getSchedules({ cycle: targetCycle, all: 1 }, { signal });
+      const raw = unwrapList(schedRes);
       const mapped = raw.map((s) => ({
         id: s.id,
         cycle: Number(s.cycle_type || s.cycle || 1),
@@ -230,6 +207,7 @@ export default function ScheduleManagementPage() {
       }));
       setScheduleList(mapped);
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       setFetchError(
         err.message || 'Gagal memuat data jadwal pelajaran dari backend. Silakan coba beberapa saat lagi.'
       );
@@ -250,10 +228,11 @@ export default function ScheduleManagementPage() {
     fetchMasterData();
   }, [fetchMasterData]);
 
-  // Trigger schedule fetch when cycle changes
+  // Trigger schedule fetch when cycle changes (P-14: cancel in-flight request on fast switch)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchSchedules(selectedCycle);
+    const controller = new AbortController();
+    fetchSchedules(selectedCycle, controller.signal);
+    return () => controller.abort();
   }, [fetchSchedules, selectedCycle]);
 
   // Conflict detection across all schedules in current cycle

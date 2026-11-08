@@ -3,7 +3,6 @@ import { ShieldCheck } from 'lucide-react';
 import BottomSheetModal from './BottomSheetModal';
 import Input from './Input';
 import Button from './Button';
-import { authConfirmApi } from '../../services/masterDataApi';
 import './PasswordSheet.css';
 
 /**
@@ -22,7 +21,7 @@ export default function PasswordSheet({
   loading: externalLoading = false,
   isLoading, // alias used by page call sites (D-9)
   errorMessage = '', // server-side error surfaced by the caller (D-9)
-  verifyWithBackend = false,
+  _verifyWithBackend = false,
 }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,9 +48,6 @@ export default function PasswordSheet({
     setInternalLoading(true);
 
     try {
-      if (verifyWithBackend) {
-        await authConfirmApi.confirmPassword(password);
-      }
       await onConfirm?.(password);
       setPassword('');
     } catch (err) {

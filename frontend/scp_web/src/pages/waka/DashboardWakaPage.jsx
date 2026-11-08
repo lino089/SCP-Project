@@ -5,13 +5,9 @@ import {
   Clock,
   User,
   AlertCircle,
-  Users,
-  GraduationCap,
-  Layers,
-  Calendar,
-  CalendarRange,
   Edit2,
   RotateCw,
+  ChevronDown,
 } from 'lucide-react';
 import {
   Button,
@@ -22,10 +18,13 @@ import {
   Input,
   Select,
   StatCard,
+  ProgressBar,
 } from '../../components/shared';
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
 import { masterDataSummaryApi } from '../../services/masterDataApi';
 import academicEventApi from '../../services/academicEventApi';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import './DashboardWaka.css';
 
 export default function DashboardWakaPage() {
@@ -56,9 +55,13 @@ export default function DashboardWakaPage() {
   // Agenda Kalender Akademik Hari Ini
   const [todayEvents, setTodayEvents] = useState([]);
 
+  // Riwayat putaran (audit log) — dilipat secara default
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   // Loading & Feedback states
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [sectionErrors, setSectionErrors] = useState({});
   const [feedbackMessage, setFeedbackMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -89,64 +92,81 @@ export default function DashboardWakaPage() {
     setTimeout(() => setErrorMessage(null), 5000);
   };
 
-  // Load initial data dari database riil
+  // Load initial data dari database riil (P-11: todayLocalISO, P-12: allSettled + per-section error)
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const [settingsRes, sumRes, historyRes, missingRes, eventRes] = await Promise.all([
+      const todayStr = todayLocalISO();
+      const [settingsRes, sumRes, historyRes, missingRes, eventRes] = await Promise.allSettled([
         academicSettingApi.getSettings(),
         masterDataSummaryApi.getSummary(),
         academicSettingApi.getCycleHistory(),
-        scheduleApi.getMissingJournals().catch(() => ({ data: [] })),
-        academicEventApi.checkExemption({ date: todayStr }).catch(() => null),
+        scheduleApi.getMissingJournals(),
+        academicEventApi.checkExemption({ date: todayStr }),
       ]);
 
+      const errors = {};
+
       // Agenda Kalender Akademik Hari Ini
-      const exData = eventRes?.data ?? eventRes;
-      const activeEvts = exData?.active_events || [];
-      setTodayEvents(activeEvts);
+      if (eventRes.status === 'fulfilled') {
+        const exData = unwrap(eventRes.value);
+        const activeEvts = exData?.active_events || [];
+        setTodayEvents(activeEvts);
+      } else {
+        setTodayEvents([]);
+      }
 
       // 1. Settings
-      if (settingsRes?.data) {
-        setActiveCycle(Number(settingsRes.data.active_cycle || 1));
-        setMondayIsUpacara(Boolean(settingsRes.data.monday_is_upacara));
-        if (settingsRes.data.academic_year) {
-          setAcademicYear(settingsRes.data.academic_year);
+      if (settingsRes.status === 'fulfilled') {
+        const sData = unwrap(settingsRes.value);
+        if (sData) {
+          setActiveCycle(Number(sData.active_cycle || 1));
+          setMondayIsUpacara(Boolean(sData.monday_is_upacara));
+          if (sData.academic_year) setAcademicYear(sData.academic_year);
+          if (sData.semester) setSemester(sData.semester);
         }
-        if (settingsRes.data.semester) {
-          setSemester(settingsRes.data.semester);
-        }
+      } else {
+        errors.settings = 'Gagal memuat pengaturan akademik.';
       }
 
       // 2. Master Data Summary
-      if (sumRes?.data) {
-        setSummaryData(sumRes.data);
+      if (sumRes.status === 'fulfilled') {
+        const sumData = unwrap(sumRes.value);
+        if (sumData) setSummaryData(sumData);
+      } else {
+        errors.summary = 'Gagal memuat statistik master data.';
       }
 
       // 3. Cycle History
-      const histList = historyRes?.data
-        ? Array.isArray(historyRes.data)
-          ? historyRes.data
-          : historyRes.data.data || []
-        : [];
-      setHistoryList(histList);
+      if (historyRes.status === 'fulfilled') {
+        const histList = unwrapList(historyRes.value);
+        setHistoryList(histList);
+      } else {
+        errors.history = 'Gagal memuat riwayat siklus.';
+      }
 
       // 4. Missing Journals
-      const raw = missingRes?.data
-        ? Array.isArray(missingRes.data)
-          ? missingRes.data
-          : missingRes.data.data || []
-        : [];
-      const formatted = raw.map((item) => ({
-        id: item.id,
-        className: item.school_class?.name || item.className || 'Kelas',
-        teacherName: item.teacher?.name || item.teacherName || 'Guru',
-        subjectName: item.subject?.name || item.subjectName || 'Mata Pelajaran',
-        period: `Jam Ke-${item.period_number || item.slot || 1}`,
-      }));
-      setMissingJournals(formatted);
+      if (missingRes.status === 'fulfilled') {
+        const raw = unwrapList(missingRes.value);
+        const formatted = raw.map((item) => ({
+          id: item.id,
+          className: item.school_class?.name || item.className || 'Kelas',
+          teacherName: item.teacher?.name || item.teacherName || 'Guru',
+          subjectName: item.subject?.name || item.subjectName || 'Mata Pelajaran',
+          period: `Jam Ke-${item.period_number || item.slot || 1}`,
+        }));
+        setMissingJournals(formatted);
+      } else {
+        setMissingJournals([]);
+      }
+
+      setSectionErrors(errors);
+
+      // Hanya error global jika semua endpoint utama gagal
+      if (settingsRes.status === 'rejected' && sumRes.status === 'rejected') {
+        setLoadError('Gagal memuat seluruh data dashboard waka.');
+      }
     } catch (err) {
       console.warn('Gagal memuat data dashboard waka:', err);
       setLoadError(err.message || 'Gagal memuat data pengaturan dan ringkasan akademik.');
@@ -231,11 +251,7 @@ export default function DashboardWakaPage() {
         // Refresh cycle history from database
         try {
           const histRes = await academicSettingApi.getCycleHistory();
-          const list = histRes?.data
-            ? Array.isArray(histRes.data)
-              ? histRes.data
-              : histRes.data.data || []
-            : [];
+          const list = unwrapList(histRes);
           setHistoryList(list);
         } catch {
           // ignore
@@ -320,6 +336,15 @@ export default function DashboardWakaPage() {
     },
   ];
 
+  // Rasio kepatuhan pengisian jurnal hari ini (slot terjadwal vs sesi belum berjurnal)
+  const totalSessions = Number(summaryData.schedules) || 0;
+  const journalCompliance =
+    totalSessions > 0
+      ? ((totalSessions - Math.min(missingJournals.length, totalSessions)) / totalSessions) * 100
+      : missingJournals.length === 0
+      ? 100
+      : 0;
+
   return (
     <div className="dashboard-container">
       {/* Feedback Toast */}
@@ -347,13 +372,6 @@ export default function DashboardWakaPage() {
         </div>
         <div className="dashboard-header-actions w-full sm:w-auto flex justify-start sm:justify-end gap-2">
           <Button
-            variant="secondary"
-            onClick={handleOpenYearModal}
-          >
-            <CalendarRange size={15} />
-            <span>Atur Tahun Ajaran</span>
-          </Button>
-          <Button
             variant="primary"
             onClick={() => navigate('/kurikulum/jadwal/import')}
           >
@@ -376,93 +394,32 @@ export default function DashboardWakaPage() {
         </div>
       )}
 
-      {/* Banner Agenda Khusus / Kalender Akademik Hari Ini */}
-      {todayEvents.length > 0 && (
-        <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem' }}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-bold text-amber-900">Agenda Kalender Akademik Hari Ini</h3>
-                  <Badge variant="warning">{todayEvents.length} Agenda Aktif</Badge>
-                </div>
-                <div className="mt-1 flex flex-col gap-1">
-                  {todayEvents.map((evt) => (
-                    <div key={evt.id} className="text-xs text-amber-800 flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-amber-950">&bull; {evt.title}</span>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-mono">
-                        {evt.scope_type === 'all' ? 'Seluruh Sekolah' : evt.scope_type === 'grade' ? `Tingkat ${evt.scope_targets?.join(', ')}` : 'Rombel Tertentu'}
-                      </span>
-                      {evt.disables_teaching ? (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold">
-                          KBM Reguler Ditiadakan
-                        </span>
-                      ) : (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
-                          KBM Tetap Berjalan
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => navigate('/web/academic-calendar')}
-              className="shrink-0 text-amber-900 border-amber-300 hover:bg-amber-100"
-            >
-              Kelola Kalender
+      {/* ── Status Strip: keadaan akademik hari ini ────────────────────────── */}
+      <div className="dw-status-strip">
+        {/* Tahun Ajaran Aktif */}
+        <div className="dw-cell">
+          <div className="dw-cell-head">
+            <span className="dw-cell-label">Tahun Ajaran</span>
+            <Badge variant="default">{semester}</Badge>
+          </div>
+          <div className="dw-cell-value font-mono">{academicYear}</div>
+          <div className="dw-cell-foot">
+            <Button size="sm" variant="secondary" icon={Edit2} onClick={handleOpenYearModal}>
+              Ubah
             </Button>
           </div>
         </div>
-      )}
 
-      {/* Ringkasan Master Data Riil (4 Kartu Metrik) */}
-      <div className="dashboard-metrics-grid">
-        <StatCard
-          title="Total Guru"
-          value={summaryData.teachers ?? 0}
-          icon={Users}
-          description="Guru aktif terdaftar di sistem"
-          color="blue"
-        />
-        <StatCard
-          title="Total Siswa"
-          value={summaryData.students ?? 0}
-          icon={GraduationCap}
-          description="Peserta didik aktif seluruh rombel"
-          color="emerald"
-        />
-        <StatCard
-          title="Rombel Kelas"
-          value={summaryData.classes ?? 0}
-          icon={Layers}
-          description="Kelas terdaftar (Tingkat X, XI, XII)"
-          color="amber"
-        />
-        <StatCard
-          title="Alokasi Jadwal KBM"
-          value={summaryData.schedules ?? 0}
-          icon={Calendar}
-          description="Slot jadwal pelajaran aktif di database"
-          color="purple"
-        />
-      </div>
-
-      {/* Kontrol Konfigurasi Akademik (4 Kartu) */}
-      <div className="dashboard-cards-grid--4">
-        {/* Card 1: Putaran Jadwal Aktif */}
-        <div className="dashboard-flat-card accent-border-top--neutral">
-          <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Putaran Jadwal Aktif</span>
-            <Badge variant="default" dot>Putaran {activeCycle}</Badge>
+        {/* Putaran Jadwal Aktif */}
+        <div className="dw-cell">
+          <div className="dw-cell-head">
+            <span className="dw-cell-label">Putaran Jadwal</span>
+            <Badge variant="default" dot>
+              Putaran {activeCycle}
+            </Badge>
           </div>
-          <div className="dashboard-card-main-val font-mono">Putaran {activeCycle}</div>
-          <p className="dashboard-card-desc">Siklus jadwal rotasi mingguan yang sedang berjalan.</p>
-          <div className="dashboard-card-footer-controls">
+          <div className="dw-cell-value">Siklus rotasi KBM mingguan</div>
+          <div className="dw-cell-foot">
             <div className="inline-flex items-center bg-gray-100 p-1 rounded-md gap-1 w-fit">
               <button
                 type="button"
@@ -490,152 +447,222 @@ export default function DashboardWakaPage() {
           </div>
         </div>
 
-        {/* Card 2: Status Upacara Hari Senin */}
-        <div className={`dashboard-flat-card ${mondayIsUpacara ? 'accent-border-top--success' : 'accent-border-top--neutral'}`}>
-          <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Upacara Hari Senin</span>
+        {/* Status Upacara Hari Senin */}
+        <div className={`dw-cell ${mondayIsUpacara ? 'dw-cell--success' : 'dw-cell--neutral'}`}>
+          <div className="dw-cell-head">
+            <span className="dw-cell-label">Upacara Senin</span>
             <Badge variant={mondayIsUpacara ? 'success' : 'neutral'} dot>
               {mondayIsUpacara ? 'Aktif' : 'Nonaktif'}
             </Badge>
           </div>
-          <div className="dashboard-card-main-val">
-            {mondayIsUpacara ? 'Upacara Aktif' : 'KBM Normal'}
+          <div className="dw-cell-value">
+            {mondayIsUpacara ? 'Jam ke-1 · mulai 08:00' : 'KBM normal · mulai 07:15'}
           </div>
-          <p className="dashboard-card-desc">
-            {mondayIsUpacara
-              ? 'Jam ke-1 dialokasikan untuk upacara bendera (mulai 08:00).'
-              : 'Tidak ada upacara, KBM jam ke-1 dimulai normal (07:15).'}
-          </p>
-          <div className="dashboard-card-footer-controls">
-            <Button variant="secondary" size="sm" onClick={handleRequestUpacaraToggle}>
-              Ubah ke {mondayIsUpacara ? 'Nonaktif' : 'Aktif'}
+          <div className="dw-cell-foot">
+            <Button size="sm" variant="secondary" onClick={handleRequestUpacaraToggle}>
+              {mondayIsUpacara ? 'Nonaktifkan' : 'Aktifkan'}
             </Button>
           </div>
         </div>
 
-        {/* Card 3: Tahun Ajaran & Semester Aktif */}
-        <div className="dashboard-flat-card accent-border-top--neutral">
-          <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Tahun Ajaran Aktif</span>
-            <Badge variant="default">{semester}</Badge>
-          </div>
-          <div className="dashboard-card-main-val font-mono">{academicYear}</div>
-          <p className="dashboard-card-desc">
-            Periode kalender akademik aktif yang tampil di portal seluruh pengguna.
-          </p>
-          <div className="dashboard-card-footer-controls">
-            <Button variant="secondary" size="sm" onClick={handleOpenYearModal}>
-              <Edit2 size={13} />
-              <span>Ubah Tahun Ajaran</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Card 4: Rekap Kepatuhan Jurnal */}
-        <div className={`dashboard-flat-card ${missingJournals.length > 0 ? 'accent-border-top--warning' : 'accent-border-top--success'}`}>
-          <div className="dashboard-card-top">
-            <span className="dashboard-card-label">Jurnal Hari Ini</span>
-            <Badge variant={missingJournals.length > 0 ? 'warning' : 'success'} dot>
-              {missingJournals.length > 0 ? `${missingJournals.length} Terlambat` : 'Lengkap'}
+        {/* Agenda Kalender Akademik Hari Ini */}
+        <div className={`dw-cell ${todayEvents.length > 0 ? 'dw-cell--warning' : 'dw-cell--neutral'}`}>
+          <div className="dw-cell-head">
+            <span className="dw-cell-label">Agenda Hari Ini</span>
+            <Badge variant={todayEvents.length > 0 ? 'warning' : 'neutral'} dot>
+              {todayEvents.length > 0 ? `${todayEvents.length} Agenda` : 'Kosong'}
             </Badge>
           </div>
-          <div className="dashboard-card-main-val flex items-baseline">
-            <span className="text-[24px] font-semibold text-gray-900 tracking-tight font-mono">
-              {missingJournals.length}
-            </span>
-            <span className="text-[13px] font-normal text-gray-600 ml-1">sesi belum diisi</span>
+          <div className="dw-cell-value">
+            {todayEvents.length > 0 ? todayEvents[0].title : 'Tidak ada agenda khusus'}
           </div>
-          <p className="dashboard-card-desc">
-            Monitoring keterlambatan pengisian jurnal KBM (&gt; 30 menit).
-          </p>
-          <div className="dashboard-card-footer-controls">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate('/kurikulum/jadwal')}
-            >
-              Lihat Matriks Jadwal
+          <div className="dw-cell-meta">
+            {todayEvents.length > 0 && (
+              <>
+                <span className="dw-scope-tag">
+                  {todayEvents[0].scope_type === 'all'
+                    ? 'Seluruh Sekolah'
+                    : todayEvents[0].scope_type === 'grade'
+                    ? `Tingkat ${todayEvents[0].scope_targets?.join(', ')}`
+                    : 'Rombel Tertentu'}
+                </span>
+                {todayEvents[0].disables_teaching ? (
+                  <span className="dw-kbm-tag dw-kbm-tag--off">KBM Ditiadakan</span>
+                ) : (
+                  <span className="dw-kbm-tag dw-kbm-tag--on">KBM Berjalan</span>
+                )}
+                {todayEvents.length > 1 && (
+                  <span className="dw-cell-note">+{todayEvents.length - 1} lainnya</span>
+                )}
+              </>
+            )}
+          </div>
+          <div className="dw-cell-foot">
+            <Button size="sm" variant="secondary" onClick={() => navigate('/web/academic-calendar')}>
+              Kelola Kalender
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Section: Missing Journal Alert */}
-      <div className="dashboard-section">
-        <div className="dashboard-section-header">
-          <div>
-            <h2 className="dashboard-section-title">Peringatan Keterlambatan Jurnal</h2>
-            <p className="dashboard-section-desc">
-              Daftar sesi KBM yang belum menyelesaikan jurnal mengajar hari ini (&gt; 30 menit).
-            </p>
-          </div>
-          <span className="text-xs text-gray-500 font-medium">
-            {missingJournals.length} sesi memerlukan perhatian
-          </span>
-        </div>
-
-        <div className="dashboard-row-cards-list">
-          {missingJournals.length === 0 ? (
-            <div className="dashboard-empty-row flex items-center gap-2">
-              <span className="status-dot status-dot--success" />
-              <span>Seluruh guru pengampu telah mengisi jurnal KBM hari ini dengan lengkap.</span>
+      {/* ── Split Prioritas: aksi hari ini (kiri) + rail metrik (kanan) ─────── */}
+      <div className="dw-split">
+        {/* HERO: Perlu Perhatian Hari Ini */}
+        <section className="dw-hero">
+          <div className="dw-hero-head">
+            <div>
+              <span className="dw-eyebrow">Prioritas Harian</span>
+              <h2 className="dashboard-section-title">Perlu Perhatian Hari Ini</h2>
+              <p className="dashboard-section-desc">
+                Sesi KBM yang belum menyelesaikan jurnal mengajar hari ini (&gt; 30 menit).
+              </p>
             </div>
-          ) : (
-            missingJournals.map((journal) => (
-              <div
-                key={journal.id}
-                className="dashboard-row-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4"
-              >
-                <div className="dashboard-row-card-left flex flex-wrap items-center gap-2">
-                  <Badge variant="neutral">Kelas {journal.className}</Badge>
-                  <span className="text-[13px] font-semibold text-gray-900">
-                    {journal.teacherName}
-                  </span>
-                  <span className="text-[13px] font-normal text-gray-500">
-                    &bull; {journal.subjectName}
-                  </span>
-                  <span className="text-[11px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                    {journal.period}
-                  </span>
-                </div>
-                <div className="dashboard-row-card-right flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                  <Badge variant="error">Belum Diisi</Badge>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      showFeedback(`Pengingat KBM berhasil dikirimkan ke ${journal.teacherName}.`)
-                    }
-                  >
-                    Kirim Pengingat
-                  </Button>
-                </div>
+            <Badge variant={missingJournals.length > 0 ? 'warning' : 'success'} dot>
+              {missingJournals.length > 0 ? `${missingJournals.length} Sesi` : 'Semua Lengkap'}
+            </Badge>
+          </div>
+
+          <div className="dashboard-row-cards-list">
+            {missingJournals.length === 0 ? (
+              <div className="dashboard-empty-row dw-empty-state">
+                <span className="dw-empty-state-icon">
+                  <CheckCircle2 size={18} />
+                </span>
+                <span className="dw-empty-state-title">Semua jurnal hari ini sudah terisi</span>
+                <span className="dw-empty-state-desc">
+                  Tidak ada sesi KBM yang melewati batas 30 menit tanpa jurnal mengajar.
+                </span>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              missingJournals.map((journal) => (
+                <div
+                  key={journal.id}
+                  className="dashboard-row-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4"
+                >
+                  <div className="dashboard-row-card-left flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">Kelas {journal.className}</Badge>
+                    <span className="text-[13px] font-semibold text-gray-900">
+                      {journal.teacherName}
+                    </span>
+                    <span className="text-[13px] font-normal text-gray-500">
+                      &bull; {journal.subjectName}
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                      {journal.period}
+                    </span>
+                  </div>
+                  <div className="dashboard-row-card-right flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                    <Badge variant="error">Belum Diisi</Badge>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        showFeedback(`Pengingat KBM berhasil dikirimkan ke ${journal.teacherName}.`)
+                      }
+                    >
+                      Kirim Pengingat
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* RAIL: kepatuhan jurnal + metrik referensi */}
+        <aside className="dw-rail">
+          <StatCard
+            title="Jurnal Hari Ini"
+            value={missingJournals.length}
+            unit="sesi belum diisi"
+            description="Monitoring keterlambatan pengisian jurnal KBM (> 30 menit)."
+            badge={missingJournals.length > 0 ? `${missingJournals.length} Terlambat` : 'Lengkap'}
+            badgeVariant={missingJournals.length > 0 ? 'warning' : 'success'}
+            accentBorder
+            variant={missingJournals.length > 0 ? 'warning' : 'success'}
+            footer={
+              <div className="dw-rail-stack">
+                <ProgressBar
+                  value={journalCompliance}
+                  label={
+                    totalSessions > 0
+                      ? `Sesi berjurnal · ${totalSessions - missingJournals.length}/${totalSessions}`
+                      : 'Sesi berjurnal'
+                  }
+                  showValue={false}
+                  color={missingJournals.length > 0 ? 'error' : 'success'}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  onClick={() => navigate('/kurikulum/jadwal')}
+                >
+                  Lihat Matriks Jadwal
+                </Button>
+              </div>
+            }
+          />
+
+          <div className="dashboard-flat-card accent-border-top--info dw-master-card">
+            <div className="dashboard-card-top">
+              <span className="dashboard-card-label">Master Data Sekolah</span>
+              <Badge variant="default">Referensi</Badge>
+            </div>
+            <div className="dw-metric-pairs">
+              <div className="dw-metric-pair">
+                <span className="dw-metric-pair-label">Guru</span>
+                <span className="dw-metric-pair-value">{summaryData.teachers ?? 0}</span>
+              </div>
+              <div className="dw-metric-pair">
+                <span className="dw-metric-pair-label">Siswa</span>
+                <span className="dw-metric-pair-value">{summaryData.students ?? 0}</span>
+              </div>
+              <div className="dw-metric-pair">
+                <span className="dw-metric-pair-label">Rombel</span>
+                <span className="dw-metric-pair-value">{summaryData.classes ?? 0}</span>
+              </div>
+              <div className="dw-metric-pair">
+                <span className="dw-metric-pair-label">Slot KBM</span>
+                <span className="dw-metric-pair-value">{summaryData.schedules ?? 0}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
 
-      {/* Section: Cycle History Table */}
-      <div className="dashboard-section">
-        <div className="dashboard-section-header">
-          <div>
-            <h2 className="dashboard-section-title">Riwayat Perubahan Putaran Jadwal</h2>
-            <p className="dashboard-section-desc">
-              Log audit pergantian siklus putaran jadwal aktif sekolah.
-            </p>
-          </div>
-          <span className="text-xs text-gray-500 font-medium">
-            Total {historyList.length} catatan
+      {/* ── Audit bar: riwayat perubahan putaran (dilipat) ──────────────────── */}
+      <div className="dw-audit">
+        <button
+          type="button"
+          className="dw-audit-bar"
+          aria-expanded={isHistoryOpen}
+          onClick={() => setIsHistoryOpen((prev) => !prev)}
+        >
+          <span className="dw-audit-left">
+            <Clock size={14} className="dw-audit-icon" />
+            <span className="dw-audit-titles">
+              <span className="dw-audit-title">Riwayat Perubahan Putaran Jadwal</span>
+              <span className="dw-audit-meta">
+                {historyList.length} catatan &middot; log audit pergantian siklus putaran aktif
+              </span>
+            </span>
           </span>
-        </div>
-
-        <Table
-          columns={historyColumns}
-          data={historyList}
-          isLoading={isLoading}
-          emptyMessage="Belum ada riwayat perubahan putaran jadwal."
-        />
+          <ChevronDown
+            size={16}
+            className={`dw-audit-chevron ${isHistoryOpen ? 'dw-audit-chevron--open' : ''}`}
+          />
+        </button>
+        {isHistoryOpen && (
+          <div className="dw-audit-body">
+            <Table
+              columns={historyColumns}
+              data={historyList}
+              isLoading={isLoading}
+              emptyMessage="Belum ada riwayat perubahan putaran jadwal."
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal Form: Atur Tahun Ajaran Aktif */}

@@ -18,11 +18,11 @@ export const quizApi = {
 
   // Generator Soal AI
   generatePrompt: (id, data) =>
-    api.post(`/quizzes/${id}/generate-prompt`, data, { timeout: 60000 }),
+    api.post(`/quizzes/${id}/generate-prompt`, data, { timeout: 120000 }),
   extractDocument: (id, formData) =>
     api.post(`/quizzes/${id}/extract-document`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000,
+      timeout: 120000,
     }),
 
   // Kelola Butir Soal

@@ -13,12 +13,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import journalApi from '../../services/journalApi';
-import { academicSettingApi } from '../../services/scheduleApi';
 import academicEventApi from '../../services/academicEventApi';
 import { Badge, Button } from '../../components/shared';
 import { resolveSlotTime } from '../../utils/timetableHelper';
 import { SkeletonCard, ErrorState } from '../../components/feedback';
-import { formatDateIndo } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { getJakartaDayInfo } from '../../utils/dateUtils';
 
 export default function TeacherDashboardPage() {
   const { user, isWaliKelas, isKesiswaan } = useAuth();
@@ -27,25 +27,22 @@ export default function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [activeCycle, setActiveCycle] = useState(() => Number(user?.active_cycle || 1));
-  const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
-  const [periodTemplates, setPeriodTemplates] = useState([]);
+  const [mondayIsUpacara] = useState(() => Boolean(user?.academic_setting?.monday_is_upacara ?? true));
+  const [periodTemplates] = useState(() => user?.academic_setting?.period_templates || []);
 
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [weeklySchedules, setWeeklySchedules] = useState([]);
   const [missingJournals, setMissingJournals] = useState([]);
   const [todayExemption, setTodayExemption] = useState(null);
 
-  // Tanggal & Hari Berjalan (Indonesia)
+  // Tanggal & Hari Berjalan (Indonesia) berbasis Asia/Jakarta (P-11)
   const dateInfo = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay();
-    const dayNames = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-    const todayIso = now.toISOString().split('T')[0];
+    const dayInfo = getJakartaDayInfo();
     return {
-      dayOfWeek,
-      dayName: dayNames[dayOfWeek] || 'Senin',
-      todayIso,
-      formattedDate: formatDateIndo(todayIso),
+      dayOfWeek: dayInfo.dayOfWeek,
+      dayName: dayInfo.dayName,
+      todayIso: dayInfo.dateStr,
+      formattedDate: dayInfo.formattedDate,
     };
   }, []);
 
@@ -68,20 +65,9 @@ export default function TeacherDashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      let cycle = Number(user?.active_cycle || 1);
-      try {
-        const setRes = await academicSettingApi.getSettings();
-        if (setRes?.data) {
-          cycle = Number(setRes.data.active_cycle || 1);
-          setActiveCycle(cycle);
-          setMondayIsUpacara(Boolean(setRes.data.monday_is_upacara));
-          if (Array.isArray(setRes.data.period_templates)) {
-            setPeriodTemplates(setRes.data.period_templates);
-          }
-        }
-      } catch {
-        // Fallback default
-      }
+      // 1. Ambil active cycle dari user profile (P-13: hilangkan 403 /academic-settings)
+      const cycle = Number(user?.academic_setting?.active_cycle || user?.active_cycle || 1);
+      setActiveCycle(cycle);
 
       const [allSchedRes, missingRes, eventRes] = await Promise.allSettled([
         journalApi.getTeacherSchedules({ cycle_type: cycle }),
@@ -90,21 +76,24 @@ export default function TeacherDashboardPage() {
       ]);
 
       if (allSchedRes.status === 'fulfilled') {
-        const raw = allSchedRes.value;
-        const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+        const list = unwrapList(allSchedRes.value);
         setWeeklySchedules(list);
         const todayList = list.filter((s) => Number(s.day_of_week) === dateInfo.dayOfWeek);
         setTodaySchedules(todayList);
       }
 
       if (missingRes.status === 'fulfilled') {
-        const raw = missingRes.value;
-        const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+        const list = unwrapList(missingRes.value);
         setMissingJournals(list);
       }
 
-      if (eventRes.status === 'fulfilled' && eventRes.value?.data?.disables_kbm) {
-        setTodayExemption(eventRes.value.data);
+      if (eventRes.status === 'fulfilled') {
+        const exData = unwrap(eventRes.value);
+        if (exData && (exData.disabling_event !== undefined || exData.is_teaching_exempted !== undefined)) {
+          setTodayExemption(exData);
+        } else {
+          setTodayExemption(null);
+        }
       }
       setLoadError(null);
     } catch (err) {
@@ -115,58 +104,8 @@ export default function TeacherDashboardPage() {
   }, [user, dateInfo]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function init() {
-      try {
-        let cycle = Number(user?.active_cycle || 1);
-        try {
-          const setRes = await academicSettingApi.getSettings();
-          if (setRes?.data && isMounted) {
-            cycle = Number(setRes.data.active_cycle || 1);
-            setActiveCycle(cycle);
-            setMondayIsUpacara(Boolean(setRes.data.monday_is_upacara));
-            if (Array.isArray(setRes.data.period_templates)) {
-              setPeriodTemplates(setRes.data.period_templates);
-            }
-          }
-        } catch {
-          // ignore
-        }
-
-        const [allSchedRes, missingRes, eventRes] = await Promise.allSettled([
-          journalApi.getTeacherSchedules({ cycle_type: cycle }),
-          journalApi.getMissingJournals(),
-          academicEventApi.checkExemption({ date: dateInfo.todayIso }),
-        ]);
-
-        if (isMounted && allSchedRes.status === 'fulfilled') {
-          const raw = allSchedRes.value;
-          const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-          setWeeklySchedules(list);
-          const todayList = list.filter((s) => Number(s.day_of_week) === dateInfo.dayOfWeek);
-          setTodaySchedules(todayList);
-        }
-
-        if (isMounted && missingRes.status === 'fulfilled') {
-          const raw = missingRes.value;
-          const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-          setMissingJournals(list);
-        }
-
-        if (isMounted && eventRes.status === 'fulfilled' && eventRes.value?.data?.disables_kbm) {
-          setTodayExemption(eventRes.value.data);
-        }
-      } catch (err) {
-        if (isMounted) setLoadError(err.message || 'Gagal memuat jadwal mengajar.');
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    init();
-    return () => {
-      isMounted = false;
-    };
-  }, [user, dateInfo]);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const handleRefresh = () => {
     setLoading(true);

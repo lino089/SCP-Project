@@ -37,7 +37,9 @@ class Journal extends Model
         $disk = config('filesystems.default', 'public');
         try {
             if ($disk === 's3') {
-                $isPrivate = config('filesystems.disks.s3.visibility') === 'private' || env('SUPABASE_STORAGE_PRIVATE', false);
+                $isPrivate = config('filesystems.disks.s3.visibility') === 'private'
+                    || (bool) config('filesystems.supabase_storage_private', false)
+                    || (bool) config('filesystems.disks.s3.supabase_storage_private', false);
                 if ($isPrivate) {
                     return Storage::disk('s3')->temporaryUrl($this->photo_path, now()->addMinutes(120));
                 }

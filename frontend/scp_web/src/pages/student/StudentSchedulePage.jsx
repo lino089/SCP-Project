@@ -17,6 +17,8 @@ import {
   NUMBER_TO_DAY,
   resolveSlotTime,
 } from '../../utils/timetableHelper';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import {
   Badge,
   Button,
@@ -105,9 +107,9 @@ export default function StudentSchedulePage() {
       }
     }
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = todayLocalISO();
       const eventRes = await academicEventApi.checkExemption({ for_my_class: 1, date: todayStr });
-      const evtData = eventRes?.data ?? eventRes;
+      const evtData = unwrap(eventRes);
       if (evtData?.disabling_event) {
         setTodayEvent(evtData.disabling_event);
       } else if (evtData?.active_events && evtData.active_events.length > 0) {
@@ -120,8 +122,8 @@ export default function StudentSchedulePage() {
     }
   }, [user]);
 
-  // 2. Ambil Data Jadwal Kelas Siswa dari Backend
-  const fetchSchedules = useCallback(async () => {
+  // 2. Ambil Data Jadwal Kelas Siswa dari Backend (P-14: signal guard)
+  const fetchSchedules = useCallback(async (signal) => {
     setIsLoading(true);
     setFetchError(null);
 
@@ -135,12 +137,8 @@ export default function StudentSchedulePage() {
         params.class_id = student.classId;
       }
 
-      const res = await scheduleApi.getSchedules(params);
-      const raw = res?.data
-        ? Array.isArray(res.data)
-          ? res.data
-          : res.data.data || []
-        : [];
+      const res = await scheduleApi.getSchedules(params, { signal });
+      const raw = unwrapList(res);
 
       const mapped = raw.map((s) => ({
         ...s,
@@ -181,6 +179,7 @@ export default function StudentSchedulePage() {
 
       setSchedules(mapped);
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.warn('Gagal memuat jadwal siswa:', err);
       setFetchError(
         err.message || 'Gagal memuat jadwal pelajaran dari server. Silakan coba kembali.'
@@ -192,13 +191,13 @@ export default function StudentSchedulePage() {
   }, [selectedCycle, student.classId, student.className, student.level]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSettings();
   }, [fetchSettings]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchSchedules();
+    const controller = new AbortController();
+    fetchSchedules(controller.signal);
+    return () => controller.abort();
   }, [fetchSchedules]);
 
   // Statistik Ringkasan Jadwal Kelas

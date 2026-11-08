@@ -37,6 +37,7 @@ import {
   subjectApi,
 } from '../../services/masterDataApi';
 import { checkPdfImportPrerequisites } from '../../utils/prerequisiteHelper';
+import { unwrapList, unwrapPagination } from '../../utils/responseHelper';
 import { NUMBER_TO_DAY } from '../../utils/timetableHelper';
 import './UploadImport.css';
 import './ReviewImport.css';
@@ -146,6 +147,7 @@ export default function ScheduleImportPage() {
   const [roomList, setRoomList] = useState([]);
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
+  const [masterDataTruncationWarnings, setMasterDataTruncationWarnings] = useState([]);
 
   // Resolution modal state
   const [editingRow, setEditingRow] = useState(null);
@@ -196,27 +198,14 @@ export default function ScheduleImportPage() {
           teacherApi.getTeachers({ per_page: 100 }),
         ]);
 
-        const students =
-          studentRes.status === 'fulfilled' && studentRes.value?.data
-            ? Array.isArray(studentRes.value.data)
-              ? studentRes.value.data
-              : studentRes.value.data.data || []
-            : [];
-        const totalStudents =
-          studentRes.status === 'fulfilled'
-            ? (studentRes.value?.meta?.total ?? students.length)
-            : 0;
+        const studentData = studentRes.status === 'fulfilled' ? unwrapPagination(studentRes.value) : { items: [], meta: null };
+        const teacherData = teacherRes.status === 'fulfilled' ? unwrapPagination(teacherRes.value) : { items: [], meta: null };
 
-        const teachers =
-          teacherRes.status === 'fulfilled' && teacherRes.value?.data
-            ? Array.isArray(teacherRes.value.data)
-              ? teacherRes.value.data
-              : teacherRes.value.data.data || []
-            : [];
-        const totalTeachers =
-          teacherRes.status === 'fulfilled'
-            ? (teacherRes.value?.meta?.total ?? teachers.length)
-            : 0;
+        const students = studentData.items;
+        const totalStudents = studentData.meta?.total ?? students.length;
+
+        const teachers = teacherData.items;
+        const totalTeachers = teacherData.meta?.total ?? teachers.length;
 
         const result = checkPdfImportPrerequisites({
           students,
@@ -244,31 +233,51 @@ export default function ScheduleImportPage() {
     };
   }, []);
 
-  // Load master datasets for resolution dropdowns
+  // Load master datasets for resolution dropdowns (P-10: per_page: 100 + truncation indicator)
   useEffect(() => {
     let isMounted = true;
 
     async function loadMasterData() {
       try {
         const [cRes, rRes, sRes, tRes] = await Promise.allSettled([
-          classApi.getClasses(),
-          roomApi.getRooms(),
-          subjectApi.getSubjects(),
-          teacherApi.getTeachers(),
+          classApi.getClasses({ all: 1, per_page: 100 }),
+          roomApi.getRooms({ per_page: 100 }),
+          subjectApi.getSubjects({ per_page: 100 }),
+          teacherApi.getTeachers({ per_page: 100 }),
         ]);
         if (isMounted) {
-          if (cRes.status === 'fulfilled' && cRes.value.data) {
-            setClassList(Array.isArray(cRes.value.data) ? cRes.value.data : cRes.value.data.data || []);
+          const warnings = [];
+
+          if (cRes.status === 'fulfilled') {
+            const { items, meta } = unwrapPagination(cRes.value);
+            setClassList(items);
+            if (meta && meta.total > items.length) {
+              warnings.push(`Kelas (${items.length}/${meta.total})`);
+            }
           }
-          if (rRes.status === 'fulfilled' && rRes.value.data) {
-            setRoomList(Array.isArray(rRes.value.data) ? rRes.value.data : rRes.value.data.data || []);
+          if (rRes.status === 'fulfilled') {
+            const { items, meta } = unwrapPagination(rRes.value);
+            setRoomList(items);
+            if (meta && meta.total > items.length) {
+              warnings.push(`Ruangan (${items.length}/${meta.total})`);
+            }
           }
-          if (sRes.status === 'fulfilled' && sRes.value.data) {
-            setSubjectList(Array.isArray(sRes.value.data) ? sRes.value.data : sRes.value.data.data || []);
+          if (sRes.status === 'fulfilled') {
+            const { items, meta } = unwrapPagination(sRes.value);
+            setSubjectList(items);
+            if (meta && meta.total > items.length) {
+              warnings.push(`Mata Pelajaran (${items.length}/${meta.total})`);
+            }
           }
-          if (tRes.status === 'fulfilled' && tRes.value.data) {
-            setTeacherList(Array.isArray(tRes.value.data) ? tRes.value.data : tRes.value.data.data || []);
+          if (tRes.status === 'fulfilled') {
+            const { items, meta } = unwrapPagination(tRes.value);
+            setTeacherList(items);
+            if (meta && meta.total > items.length) {
+              warnings.push(`Guru (${items.length}/${meta.total})`);
+            }
           }
+
+          setMasterDataTruncationWarnings(warnings);
         }
       } catch {
         // Fallback
@@ -325,10 +334,11 @@ export default function ScheduleImportPage() {
     };
   }, [activeBatchId]);
 
-  // Polling clear helper
+  // Polling clear helper (P-7: aman untuk setTimeout maupun setInterval)
   const clearPolling = () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
+      clearTimeout(pollingRef.current);
       pollingRef.current = null;
     }
   };
@@ -379,11 +389,17 @@ export default function ScheduleImportPage() {
       setProcessStatus('parsing');
       setStatusMessage('Berkas diterima. Memproses ekstraksi koordinat FET...');
 
-      // Polling every 1.5s
-      pollingRef.current = setInterval(async () => {
+      // P-7: Polling adaptif bertahap (2s -> 3.5s -> 5s) dengan cek visibilityState & jitter
+      const runAdaptivePoll = async () => {
+        // Tunda polling bila tab diminimalkan / tidak aktif agar tidak membebani server
+        if (typeof document !== 'undefined' && document.hidden) {
+          pollingRef.current = setTimeout(runAdaptivePoll, 3000);
+          return;
+        }
+
         pollingCountRef.current += 1;
 
-        if (pollingCountRef.current > 80) {
+        if (pollingCountRef.current > 40) {
           clearPolling();
           setProcessStatus('error');
           setErrorMessage(
@@ -401,6 +417,7 @@ export default function ScheduleImportPage() {
             setProgressValue(100);
             setProcessStatus('preview_ready');
             setStatusMessage('Ekstraksi selesai! Data siap ditinjau dan divalidasi.');
+            return;
           } else if (currentStatus === 'failed') {
             clearPolling();
             setProcessStatus('error');
@@ -408,14 +425,24 @@ export default function ScheduleImportPage() {
               checkRes?.message ||
                 'Proses ekstraksi berkas PDF gagal. Pastikan format tabel sesuai dengan ekspor FET.'
             );
+            return;
           } else {
             setProgressValue((prev) => Math.min(prev + 5, 92));
             setStatusMessage('Mencocokkan entri kelas, guru, dan alokasi fisik ruangan...');
           }
         } catch {
-          // Ignore transient polling failure
+          // Abaikan kegagalan sementara saat polling transport
         }
-      }, 1500);
+
+        // Hitung interval adaptif berdasarkan iterasi + jitter (±200ms)
+        const count = pollingCountRef.current;
+        let nextInterval = count <= 5 ? 2000 : count <= 12 ? 3500 : 5000;
+        nextInterval += Math.floor(Math.random() * 400) - 200;
+
+        pollingRef.current = setTimeout(runAdaptivePoll, nextInterval);
+      };
+
+      pollingRef.current = setTimeout(runAdaptivePoll, 1500);
     } catch (apiErr) {
       clearPolling();
       setProcessStatus('error');
@@ -1158,6 +1185,19 @@ export default function ScheduleImportPage() {
               <p className="text-gray-500 m-0">
                 Pilih entitas Master Data yang benar di bawah ini untuk mencocokkan baris jadwal ini:
               </p>
+
+              {masterDataTruncationWarnings.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-xs text-amber-800">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Indikator Batas Data Dropdown:</span>
+                    <p className="mt-0.5">
+                      Data master berikut memiliki lebih dari 100 entri dan dipotong pada pilihan dropdown:{' '}
+                      <strong>{masterDataTruncationWarnings.join(', ')}</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <Select
                 label="Petakan ke Rombel Kelas"

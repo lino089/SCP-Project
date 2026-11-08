@@ -11,8 +11,8 @@ export const masterDataSummaryApi = {
 };
 
 export const roomApi = {
-  getAll: (params) => api.get('/rooms', { params }),
-  getRooms: (params) => api.get('/rooms', { params }),
+  getAll: (params, config = {}) => api.get('/rooms', { params, ...config }),
+  getRooms: (params, config = {}) => api.get('/rooms', { params, ...config }),
   getById: (id) => api.get(`/rooms/${id}`),
   create: (data) => api.post('/rooms', data),
   createRoom: (data) => api.post('/rooms', data),
@@ -23,15 +23,15 @@ export const roomApi = {
 };
 
 export const classApi = {
-  getAll: (params) => {
+  getAll: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/classes', { params: cleanParams });
+    return api.get('/classes', { params: cleanParams, ...config });
   },
-  getClasses: (params) => {
+  getClasses: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/classes', { params: cleanParams });
+    return api.get('/classes', { params: cleanParams, ...config });
   },
   getById: (id) => api.get(`/classes/${id}`),
   create: (data) => api.post('/classes', data),
@@ -44,8 +44,8 @@ export const classApi = {
 };
 
 export const subjectApi = {
-  getAll: (params) => api.get('/subjects', { params }),
-  getSubjects: (params) => api.get('/subjects', { params }),
+  getAll: (params, config = {}) => api.get('/subjects', { params, ...config }),
+  getSubjects: (params, config = {}) => api.get('/subjects', { params, ...config }),
   getById: (id) => api.get(`/subjects/${id}`),
   create: (data) => api.post('/subjects', data),
   createSubject: (data) => api.post('/subjects', data),
@@ -56,8 +56,8 @@ export const subjectApi = {
 };
 
 export const teacherApi = {
-  getAll: (params) => api.get('/teachers', { params }),
-  getTeachers: (params) => api.get('/teachers', { params }),
+  getAll: (params, config = {}) => api.get('/teachers', { params, ...config }),
+  getTeachers: (params, config = {}) => api.get('/teachers', { params, ...config }),
   getById: (id) => api.get(`/teachers/${id}`),
   create: (data) => api.post('/teachers', data),
   createTeacher: (data) => api.post('/teachers', data),
@@ -71,15 +71,15 @@ export const teacherApi = {
 };
 
 export const studentApi = {
-  getAll: (params) => {
+  getAll: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/students', { params: cleanParams });
+    return api.get('/students', { params: cleanParams, ...config });
   },
-  getStudents: (params) => {
+  getStudents: (params, config = {}) => {
     const cleanParams = params ? { ...params } : {};
     if (cleanParams.all === true) cleanParams.all = 1;
-    return api.get('/students', { params: cleanParams });
+    return api.get('/students', { params: cleanParams, ...config });
   },
   getById: (id) => api.get(`/students/${id}`),
   create: (data) => api.post('/students', data),
@@ -91,29 +91,8 @@ export const studentApi = {
   holdBack: (id, data) => api.post(`/students/${id}/hold-back`, data),
 };
 
-export const parentApi = {
-  getAll: (params) => api.get('/parents', { params }),
-  getById: (id) => api.get(`/parents/${id}`),
-  create: (data) => api.post('/parents', data),
-  update: (id, data) => api.put(`/parents/${id}`, data),
-  delete: (id) => api.delete(`/parents/${id}`),
-};
-
-export const teacherAssignmentApi = {
-  getAll: (params) => api.get('/teacher-assignments', { params }),
-  getById: (id) => api.get(`/teacher-assignments/${id}`),
-  create: (data) => api.post('/teacher-assignments', data),
-  update: (id, data) => api.put(`/teacher-assignments/${id}`, data),
-  delete: (id) => api.delete(`/teacher-assignments/${id}`),
-  getAssignmentMatrix: () => api.get('/teachers/assignments/matrix'),
-};
-
 export const gradePromotionApi = {
   execute: (data) => api.post('/class-promotions', data),
-};
-
-export const authConfirmApi = {
-  confirmPassword: (password) => api.post('/confirm-password', { password }),
 };
 
 export default {
@@ -123,7 +102,5 @@ export default {
   subjects: subjectApi,
   teachers: teacherApi,
   students: studentApi,
-  parents: parentApi,
-  teacherAssignments: teacherAssignmentApi,
   gradePromotions: gradePromotionApi,
 };

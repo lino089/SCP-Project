@@ -5,12 +5,12 @@ import api from './api';
  */
 export const academicEventApi = {
   // Read operations
-  getAll: (params) => api.get('/academic-events', { params }),
-  getEvents: (params) => api.get('/academic-events', { params }),
-  getMyCalendar: (params) => api.get('/academic-events/my-calendar', { params }),
+  getAll: (params, config = {}) => api.get('/academic-events', { params, ...config }),
+  getEvents: (params, config = {}) => api.get('/academic-events', { params, ...config }),
+  getMyCalendar: (params, config = {}) => api.get('/academic-events/my-calendar', { params, ...config }),
   getById: (id) => api.get(`/academic-events/${id}`),
   getEventById: (id) => api.get(`/academic-events/${id}`),
-  checkExemption: (params) => api.get('/academic-events/check-exemption', { params }),
+  checkExemption: (params, config = {}) => api.get('/academic-events/check-exemption', { params, ...config }),
 
   // Write operations (Waka / Step-Up Auth)
   create: (data) => api.post('/academic-events', data),
@@ -19,7 +19,6 @@ export const academicEventApi = {
   updateEvent: (id, data) => api.put(`/academic-events/${id}`, data),
   delete: (id) => api.delete(`/academic-events/${id}`),
   deleteEvent: (id) => api.delete(`/academic-events/${id}`),
-  confirmPassword: (password) => api.post('/confirm-password', { password }),
 };
 
 export default academicEventApi;

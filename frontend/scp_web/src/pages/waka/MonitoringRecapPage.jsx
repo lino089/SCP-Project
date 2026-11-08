@@ -29,6 +29,8 @@ import {
 } from '../../components/shared';
 import { EmptyState } from '../../components/feedback';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
+import { unwrap, unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO } from '../../utils/dateUtils';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './MonitoringRecap.css';
 
@@ -46,7 +48,7 @@ export default function MonitoringRecapPage() {
   const [loadError, setLoadError] = useState(null);
 
   // Filter Presensi
-  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState(() => todayLocalISO());
   const [filterClass, setFilterClass] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,27 +77,46 @@ export default function MonitoringRecapPage() {
     return hasRole('waka') || isKesiswaan() || isWaliKelas();
   }, [hasRole, isKesiswaan, isWaliKelas]);
 
-  // Load Data saat Mount dari API riil
-  const loadInitialData = useCallback(async () => {
+  // Load Data saat Mount dari API riil (P-12: allSettled + P-14: signal guard)
+  const loadInitialData = useCallback(async (signal) => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [attRes, jourRes, clsRes] = await Promise.all([
-        leaveApi.getAttendances({ per_page: 100 }),
-        journalApi.getJournals({ per_page: 100 }),
-        classApi.getClasses({ per_page: 50 }).catch(() => ({ data: [] })),
+      const [attRes, jourRes, clsRes] = await Promise.allSettled([
+        leaveApi.getAttendances({ per_page: 100 }, { signal }),
+        journalApi.getJournals({ per_page: 100 }, { signal }),
+        classApi.getClasses({ per_page: 50 }, { signal }),
       ]);
 
-      if (attRes.success && Array.isArray(attRes.data)) {
-        setAttendances(attRes.data);
+      let hasData = false;
+      const failed = [];
+
+      if (attRes.status === 'fulfilled') {
+        const attList = unwrapList(attRes.value);
+        setAttendances(attList);
+        hasData = true;
+      } else {
+        failed.push('presensi');
       }
-      if (jourRes.success && Array.isArray(jourRes.data)) {
-        setJournals(jourRes.data);
+
+      if (jourRes.status === 'fulfilled') {
+        const jourList = unwrapList(jourRes.value);
+        setJournals(jourList);
+        hasData = true;
+      } else {
+        failed.push('jurnal');
       }
-      if (clsRes.data && Array.isArray(clsRes.data)) {
-        setClassesList(clsRes.data);
+
+      if (clsRes.status === 'fulfilled') {
+        const clsList = unwrapList(clsRes.value);
+        setClassesList(clsList);
+      }
+
+      if (!hasData && failed.length === 2) {
+        setLoadError('Gagal memuat rekap presensi dan jurnal dari server.');
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.warn('Gagal memuat data monitoring rekap:', err);
       setLoadError(err.message || 'Gagal memuat rekap presensi dan jurnal dari server.');
     } finally {
@@ -104,31 +125,39 @@ export default function MonitoringRecapPage() {
   }, []);
 
   useEffect(() => {
-    loadInitialData();
+    const controller = new AbortController();
+    loadInitialData(controller.signal);
+    return () => controller.abort();
   }, [loadInitialData]);
 
-  // Muat data rekap harian KBM jika tanggal jurnal dipilih
-  const fetchDailyRecap = useCallback(async (dateStr) => {
+  // Muat data rekap harian KBM jika tanggal jurnal dipilih (P-9: W-3 fix + P-14: signal guard)
+  const fetchDailyRecap = useCallback(async (dateStr, signal) => {
     if (!dateStr) {
       setDailyRecapData(null);
       return;
     }
     try {
-      const res = await journalApi.getDailyRecap({ date: dateStr });
-      if (res?.data?.success && res.data.data) {
-        setDailyRecapData(res.data.data);
+      const res = await journalApi.getDailyRecap({ date: dateStr }, { signal });
+      const recap = unwrap(res);
+      if (recap) {
+        setDailyRecapData(recap);
+      } else {
+        setDailyRecapData(null);
       }
-    } catch {
+    } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       setDailyRecapData(null);
     }
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (journalFilterDate) {
-      fetchDailyRecap(journalFilterDate);
+      fetchDailyRecap(journalFilterDate, controller.signal);
     } else {
       setDailyRecapData(null);
     }
+    return () => controller.abort();
   }, [journalFilterDate, fetchDailyRecap]);
 
   // Filter Presensi Aktif
@@ -724,12 +753,12 @@ export default function MonitoringRecapPage() {
                 Filter &amp; Parameter Rekapitulasi Presensi
               </span>
               <div className="flex items-center gap-2">
-                {(filterDate !== new Date().toISOString().split('T')[0] || filterClass !== 'ALL' || filterStatus !== 'ALL' || searchQuery) && (
+                {(filterDate !== todayLocalISO() || filterClass !== 'ALL' || filterStatus !== 'ALL' || searchQuery) && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setFilterDate(new Date().toISOString().split('T')[0]);
+                      setFilterDate(todayLocalISO());
                       setFilterClass('ALL');
                       setFilterStatus('ALL');
                       setSearchQuery('');
@@ -750,7 +779,7 @@ export default function MonitoringRecapPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setFilterDate(new Date().toISOString().split('T')[0])}
+                      onClick={() => setFilterDate(todayLocalISO())}
                       className="text-[11px] text-blue-600 hover:underline cursor-pointer font-medium"
                     >
                       Hari Ini
@@ -900,7 +929,7 @@ export default function MonitoringRecapPage() {
                     onAction={() => {
                       if (searchQuery) setSearchQuery('');
                       else if (filterDate) setFilterDate('');
-                      else setFilterDate(new Date().toISOString().split('T')[0]);
+                      else setFilterDate(todayLocalISO());
                     }}
                     compact
                   />
@@ -999,7 +1028,7 @@ export default function MonitoringRecapPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setJournalFilterDate(new Date().toISOString().split('T')[0])}
+                      onClick={() => setJournalFilterDate(todayLocalISO())}
                       className="text-[11px] text-blue-600 hover:underline cursor-pointer font-medium"
                     >
                       Hari Ini
