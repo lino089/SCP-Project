@@ -332,9 +332,26 @@
   min-width: 0;
 }
 
-.dw-cell--success { box-shadow: inset 3px 0 0 #10B981; }
-.dw-cell--warning { box-shadow: inset 3px 0 0 #F59E0B; }
-.dw-cell--neutral { box-shadow: inset 3px 0 0 #94A3B8; }
+/* Status ditandai titik kecil di depan label (bukan bar/garis aksen) */
+.dw-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dw-label-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #94A3B8;
+}
+
+.dw-label-dot--success { background-color: #10B981; }
+.dw-label-dot--warning { background-color: #F59E0B; }
+.dw-label-dot--info { background-color: #3B82F6; }
+.dw-label-dot--neutral { background-color: #94A3B8; }
 
 .dw-cell-head {
   display: flex;

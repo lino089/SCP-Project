@@ -399,7 +399,10 @@ export default function DashboardWakaPage() {
         {/* Tahun Ajaran Aktif */}
         <div className="dw-cell">
           <div className="dw-cell-head">
-            <span className="dw-cell-label">Tahun Ajaran</span>
+            <span className="dw-label">
+              <span className="dw-label-dot dw-label-dot--neutral" />
+              <span className="dw-cell-label">Tahun Ajaran</span>
+            </span>
             <Badge variant="default">{semester}</Badge>
           </div>
           <div className="dw-cell-value font-mono">{academicYear}</div>
@@ -413,7 +416,10 @@ export default function DashboardWakaPage() {
         {/* Putaran Jadwal Aktif */}
         <div className="dw-cell">
           <div className="dw-cell-head">
-            <span className="dw-cell-label">Putaran Jadwal</span>
+            <span className="dw-label">
+              <span className="dw-label-dot dw-label-dot--neutral" />
+              <span className="dw-cell-label">Putaran Jadwal</span>
+            </span>
             <Badge variant="default" dot>
               Putaran {activeCycle}
             </Badge>
@@ -448,9 +454,12 @@ export default function DashboardWakaPage() {
         </div>
 
         {/* Status Upacara Hari Senin */}
-        <div className={`dw-cell ${mondayIsUpacara ? 'dw-cell--success' : 'dw-cell--neutral'}`}>
+        <div className="dw-cell">
           <div className="dw-cell-head">
-            <span className="dw-cell-label">Upacara Senin</span>
+            <span className="dw-label">
+              <span className={`dw-label-dot ${mondayIsUpacara ? 'dw-label-dot--success' : 'dw-label-dot--neutral'}`} />
+              <span className="dw-cell-label">Upacara Senin</span>
+            </span>
             <Badge variant={mondayIsUpacara ? 'success' : 'neutral'} dot>
               {mondayIsUpacara ? 'Aktif' : 'Nonaktif'}
             </Badge>
@@ -466,9 +475,12 @@ export default function DashboardWakaPage() {
         </div>
 
         {/* Agenda Kalender Akademik Hari Ini */}
-        <div className={`dw-cell ${todayEvents.length > 0 ? 'dw-cell--warning' : 'dw-cell--neutral'}`}>
+        <div className="dw-cell">
           <div className="dw-cell-head">
-            <span className="dw-cell-label">Agenda Hari Ini</span>
+            <span className="dw-label">
+              <span className={`dw-label-dot ${todayEvents.length > 0 ? 'dw-label-dot--warning' : 'dw-label-dot--neutral'}`} />
+              <span className="dw-cell-label">Agenda Hari Ini</span>
+            </span>
             <Badge variant={todayEvents.length > 0 ? 'warning' : 'neutral'} dot>
               {todayEvents.length > 0 ? `${todayEvents.length} Agenda` : 'Kosong'}
             </Badge>
@@ -572,14 +584,21 @@ export default function DashboardWakaPage() {
         {/* RAIL: kepatuhan jurnal + metrik referensi */}
         <aside className="dw-rail">
           <StatCard
-            title="Jurnal Hari Ini"
+            title={
+              <span className="dw-label">
+                <span
+                  className={`dw-label-dot ${
+                    missingJournals.length > 0 ? 'dw-label-dot--warning' : 'dw-label-dot--success'
+                  }`}
+                />
+                <span>Jurnal Hari Ini</span>
+              </span>
+            }
             value={missingJournals.length}
             unit="sesi belum diisi"
             description="Monitoring keterlambatan pengisian jurnal KBM (> 30 menit)."
             badge={missingJournals.length > 0 ? `${missingJournals.length} Terlambat` : 'Lengkap'}
             badgeVariant={missingJournals.length > 0 ? 'warning' : 'success'}
-            accentBorder
-            variant={missingJournals.length > 0 ? 'warning' : 'success'}
             footer={
               <div className="dw-rail-stack">
                 <ProgressBar
@@ -604,9 +623,12 @@ export default function DashboardWakaPage() {
             }
           />
 
-          <div className="dashboard-flat-card accent-border-top--info dw-master-card">
+          <div className="dashboard-flat-card dw-master-card">
             <div className="dashboard-card-top">
-              <span className="dashboard-card-label">Master Data Sekolah</span>
+              <span className="dw-label">
+                <span className="dw-label-dot dw-label-dot--info" />
+                <span className="dashboard-card-label">Master Data Sekolah</span>
+              </span>
               <Badge variant="default">Referensi</Badge>
             </div>
             <div className="dw-metric-pairs">
