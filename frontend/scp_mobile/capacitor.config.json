@@ -1,5 +1,16 @@
 {
   "appId": "id.my.schoolclassprogress.app",
   "appName": "SCP Mobile",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "SocialLogin": {
+      "google": {
+        "webClientId": "517786684277-4fh8cd7pg4rpk3r3daned77ksj5pgpu1.apps.googleusercontent.com"
+      }
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "resetWhenUpdate": false
+    }
+  }
 }

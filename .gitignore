@@ -13,3 +13,8 @@ deploy/heavy_job_proof.txt
 .hermes/
 .venv/
 **/.venv/
+
+# Internal planning & design documents (do not push to repo)
+RENCANA_PENYEMPURNAAN_RESOLUSI_RUANG_DAN_KONFLIK_IMPORT.md
+RENCANA_*.md
+

@@ -389,6 +389,19 @@
   gap: 10px;
 }
 
+.lp-pane--shot {
+  gap: 0;
+}
+
+/* Tangkapan layar asli dashboard (bukan ilustrasi) */
+.lp-shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 9px;
+  background-color: #FFFFFF;
+}
+
 .lp-pane__head {
   display: flex;
   align-items: center;

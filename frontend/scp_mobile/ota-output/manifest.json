@@ -1,0 +1,9 @@
+{
+  "version": "1.0.1",
+  "minNativeVersion": "1.0.0",
+  "url": "https://schoolclassprogress.my.id/ota/bundles/bundle-1.0.1.zip",
+  "checksum": "bac4dd79f1a041814d35e240d1616f9b8616e2f0d553b65763a33eb0fb67504e",
+  "releaseNotes": "Pembaruan pertama OTA Live Update",
+  "critical": false,
+  "releasedAt": "2026-11-09T13:41:23.635Z"
+}

@@ -2,7 +2,7 @@ import './Button.css';
 
 /**
  * Shared Button Component — Exness Fintech Style (Mobile Touch Optimized)
- * Variants: primary (yellow), secondary (dark), outline, ghost, danger
+ * Variants: primary (blue action), brand (yellow CTA), secondary, outline, ghost, danger
  * Sizes: sm (36px), md (42px), lg (48px)
  */
 export default function Button({

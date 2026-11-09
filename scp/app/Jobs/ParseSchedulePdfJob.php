@@ -256,42 +256,20 @@ class ParseSchedulePdfJob implements ShouldQueue
                 $issueDetail = null;
                 $recommendations = null;
 
-                if ($hasMissingEntity || $roomSourceConflict) {
+                if ($hasMissingEntity) {
                     $matchStatus = 'unmatched';
 
-                    if ($roomSourceConflict) {
-                        $roomKelasObj = $this->findRoom($allRooms, $row['ruang_kelas'] ?? null);
-                        $roomJadwalObj = $this->findRoom($allRooms, $row['ruang_jadwal'] ?? null);
-                        $diag = $conflictService->diagnoseRoomSourceConflict(
-                            $roomKelasObj,
-                            $roomJadwalObj,
-                            $day,
-                            $startPeriod,
-                            $duration,
-                            $existingSchedules,
-                            $batchSlots
-                        );
-                        $altRooms = $conflictService->findAlternativeRooms(
-                            $day,
-                            $startPeriod,
-                            $duration,
-                            $allRooms,
-                            $existingSchedules,
-                            $batchSlots,
-                            $matchedRoom ?? $roomJadwalObj ?? $roomKelasObj
-                        );
+                    if (!$matchedTeacher) {
                         $issueDetail = [
-                            'type' => 'room_source_conflict',
-                            'title' => 'Ketidaksinkronan Alokasi Ruang',
-                            'description' => "Terdapat perbedaan alokasi ruang antara PDF Jadwal Kelas ('" . ($row['ruang_kelas'] ?? '-') . "') dan PDF Matriks Ruangan ('" . ($row['ruang_jadwal'] ?? '-') . "'). " . $diag['recommendation_text'],
-                            'data' => $diag,
+                            'type' => 'missing_teacher',
+                            'title' => 'Guru Belum Terdaftar / Tidak Cocok',
+                            'description' => "Nama atau inisial guru '" . ($rawTeacher ?: 'Kosong') . "' tidak cocok dengan master data guru aktif di sistem.",
                         ];
                         $recommendations = [
-                            'room_source_options' => $diag,
-                            'alternative_rooms' => $altRooms,
-                            'action_hint' => 'Pilih salah satu ruangan yang valid (PDF Ruangan atau PDF Kelas) atau gunakan ruangan alternatif.',
+                            'teacher_candidates' => $row['teacher_candidates'] ?? [],
+                            'action_hint' => 'Pilih salah satu kandidat guru yang sesuai, atau daftarkan guru baru di Master Data.',
                         ];
-                    } elseif (!$matchedTeacher) {
+                    } elseif (!$matchedClass) {
                         $issueDetail = [
                             'type' => 'missing_teacher',
                             'title' => 'Guru Belum Terdaftar / Tidak Cocok',
@@ -394,22 +372,42 @@ class ParseSchedulePdfJob implements ShouldQueue
 
                         $recommendations = [];
                         if (($conflictInfo['type'] ?? '') === 'room_collision') {
-                            // Check if class has Home Room to provide document comparison option
-                            $homeRoom = $matchedClass ? ($classHomeRooms[$matchedClass->id] ?? null) : null;
-                            if ($homeRoom && (int) $homeRoom->id !== (int) $matchedRoom->id) {
+                            // Prioritas Tier 1: Cek apakah PDF Jadwal Kelas memiliki ruangan alternatif (misal LAB 8 untuk XII BR 1)
+                            $roomKelasObj = !empty($row['ruang_kelas']) ? $this->findRoom($allRooms, $row['ruang_kelas']) : null;
+                            $roomJadwalObj = $matchedRoom ?? (!empty($row['ruang_jadwal']) ? $this->findRoom($allRooms, $row['ruang_jadwal']) : null);
+
+                            if ($roomKelasObj && $roomJadwalObj && (int) $roomKelasObj->id !== (int) $roomJadwalObj->id) {
                                 $diag = $conflictService->diagnoseRoomSourceConflict(
-                                    $homeRoom,
-                                    $matchedRoom,
+                                    $roomKelasObj,
+                                    $roomJadwalObj,
                                     $day,
                                     $startPeriod,
                                     $duration,
                                     $existingSchedules,
                                     $batchSlots,
-                                    'Ruang Pangkalan Rombel',
+                                    'PDF Jadwal Kelas',
                                     'PDF Matriks Ruang'
                                 );
                                 $recommendations['room_source_options'] = $diag;
                                 $issueDetail['data'] = $diag;
+                            } else {
+                                // Jika tidak ada alokasi ruang kelas spesifik, cek Ruang Pangkalan Rombel (Home Room)
+                                $homeRoom = $matchedClass ? ($classHomeRooms[$matchedClass->id] ?? null) : null;
+                                if ($homeRoom && (int) $homeRoom->id !== (int) $matchedRoom->id) {
+                                    $diag = $conflictService->diagnoseRoomSourceConflict(
+                                        $homeRoom,
+                                        $matchedRoom,
+                                        $day,
+                                        $startPeriod,
+                                        $duration,
+                                        $existingSchedules,
+                                        $batchSlots,
+                                        'Ruang Pangkalan Rombel',
+                                        'PDF Matriks Ruang'
+                                    );
+                                    $recommendations['room_source_options'] = $diag;
+                                    $issueDetail['data'] = $diag;
+                                }
                             }
 
                             $altRooms = $conflictService->findAlternativeRooms(

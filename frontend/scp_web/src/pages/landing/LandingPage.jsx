@@ -7,7 +7,6 @@ import {
   Building2,
   Calendar,
   CalendarRange,
-  Camera,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -136,111 +135,45 @@ const FAQ = [
 --------------------------------------------------------------------------- */
 function GuruPreview() {
   return (
-    <div className="lp-pane">
-      <div className="lp-pane__head">
-        <span className="lp-pane__title">Rabu · Jadwal mengajar</span>
-        <span className="lp-chip lp-chip--success">Jam ke-3 · 08:55</span>
-      </div>
-
-      <div className="lp-pane__card">
-        <div className="lp-pane__row">
-          <span className="lp-chip">XI TKJ 2</span>
-          <span className="lp-pane__strong">Matematika</span>
-          <span className="lp-pane__muted">Ruang R-12</span>
-        </div>
-
-        <div className="lp-attend">
-          <span className="lp-attend__item lp-attend__item--ok">Hadir 34</span>
-          <span className="lp-attend__item lp-attend__item--warn">Izin 1</span>
-          <span className="lp-attend__item">Alfa 0</span>
-        </div>
-
-        <div className="lp-pane__row lp-pane__row--gap">
-          <span className="lp-photo">
-            <Camera size={15} />
-            Foto KBM
-          </span>
-          <span className="lp-pane__muted lp-pane__muted--wrap">
-            Materi: barisan &amp; deret — latihan 3
-          </span>
-        </div>
-
-        <div className="lp-pane__foot">
-          <span className="lp-chip lp-chip--success">
-            <Check size={11} /> Jurnal terkirim
-          </span>
-          <span className="lp-btn lp-btn--dark lp-btn--sm">Selesaikan jurnal</span>
-        </div>
-      </div>
+    <div className="lp-pane lp-pane--shot">
+      <img
+        className="lp-shot"
+        src="/landing/dash-guru.webp"
+        alt="Dashboard guru SCP: jadwal mengajar hari ini, kartu statistik, dan status jurnal KBM."
+        width="1160"
+        height="584"
+        decoding="async"
+      />
     </div>
   );
 }
 
 function SiswaPreview() {
   return (
-    <div className="lp-pane">
-      <div className="lp-pane__head">
-        <span className="lp-pane__title">Rabu · 4 jam pelajaran</span>
-        <span className="lp-chip lp-chip--info">Hadir</span>
-      </div>
-
-      <div className="lp-pane__card lp-pane__card--tight">
-        <div className="lp-lesson">
-          <span className="lp-lesson__time">07:15</span>
-          <span className="lp-lesson__name">Pemrograman Web</span>
-          <span className="lp-pane__muted">Lab RPL 2</span>
-        </div>
-        <div className="lp-lesson">
-          <span className="lp-lesson__time">08:55</span>
-          <span className="lp-lesson__name">Matematika</span>
-          <span className="lp-pane__muted">R-12</span>
-        </div>
-        <div className="lp-lesson">
-          <span className="lp-lesson__time">10:40</span>
-          <span className="lp-lesson__name">Bahasa Indonesia</span>
-          <span className="lp-pane__muted">R-08</span>
-        </div>
-      </div>
-
-      <div className="lp-pane__foot lp-pane__foot--spread">
-        <span className="lp-chip lp-chip--success">Hadir 42</span>
-        <span className="lp-chip lp-chip--warning">Izin 2</span>
-        <span className="lp-chip">Alfa 0</span>
-      </div>
+    <div className="lp-pane lp-pane--shot">
+      <img
+        className="lp-shot"
+        src="/landing/dash-siswa.webp"
+        alt="Dashboard siswa SCP: daftar jadwal pelajaran hari ini beserta guru dan ruang kelas."
+        width="1160"
+        height="584"
+        decoding="async"
+      />
     </div>
   );
 }
 
 function OrtuPreview() {
   return (
-    <div className="lp-pane">
-      <div className="lp-pane__head">
-        <span className="lp-pane__title">Nadia P. · XI TKJ 2</span>
-        <span className="lp-chip lp-chip--success">Hadir hari ini</span>
-      </div>
-
-      <div className="lp-pane__card lp-pane__card--tight">
-        <div className="lp-lesson">
-          <span className="lp-lesson__time">07:15</span>
-          <span className="lp-lesson__name">Upacara</span>
-          <span className="lp-pane__muted">Hadir</span>
-        </div>
-        <div className="lp-lesson">
-          <span className="lp-lesson__time">08:55</span>
-          <span className="lp-lesson__name">Matematika</span>
-          <span className="lp-pane__muted">Hadir</span>
-        </div>
-        <div className="lp-lesson lp-lesson--warn">
-          <span className="lp-lesson__time">10:40</span>
-          <span className="lp-lesson__name">Bahasa Indonesia</span>
-          <span className="lp-pane__muted">Izin · surat disetujui</span>
-        </div>
-      </div>
-
-      <div className="lp-pane__foot lp-pane__foot--spread">
-        <span className="lp-pane__muted">Rekap bulan ini</span>
-        <span className="lp-pane__strong">Hadir 96%</span>
-      </div>
+    <div className="lp-pane lp-pane--shot">
+      <img
+        className="lp-shot"
+        src="/landing/dash-ortu.webp"
+        alt="Dashboard orang tua SCP: rekap kehadiran anak per hari dan tab riwayat izin serta nilai kuis."
+        width="1092"
+        height="562"
+        decoding="async"
+      />
     </div>
   );
 }
@@ -833,23 +766,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ================= S10 — CTA PENUTUP ================= */}
-        <section className="lp-section lp-section--cta">
-          <div className="lp-container">
-            <div className="lp-cta">
-              <div>
-                <h2 className="lp-cta__title">Siap masuk ke SCP?</h2>
-                <p className="lp-cta__desc">
-                  Gunakan NIS/NIP dan kata sandi dari sekolah. Belum punya akun? Hubungi admin
-                  sekolah untuk dibuatkan.
-                </p>
-              </div>
-              <Button variant="primary" size="lg" onClick={handlePrimaryAction}>
-                {isAuthenticated ? 'Buka Dashboard' : 'Masuk ke SCP'}
-              </Button>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* ================= S11 — FOOTER ================= */}

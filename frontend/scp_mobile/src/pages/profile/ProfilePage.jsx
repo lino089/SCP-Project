@@ -20,6 +20,7 @@ import {
   ConfirmSheet,
 } from '../../components/shared';
 import { authApi } from '../../services/api';
+import updaterService from '../../services/updaterService';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -71,6 +72,73 @@ export default function ProfilePage() {
   // Logout Confirmation State
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+
+  // OTA Versioning & Update State
+  const [versionInfo, setVersionInfo] = useState({ nativeVersion: '1.0.0', bundleVersion: '1.0.0' });
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatusMsg, setUpdateStatusMsg] = useState('');
+  const [updateErrorMsg, setUpdateErrorMsg] = useState('');
+  const [availableUpdate, setAvailableUpdate] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [isUpdateReadyToReload, setIsUpdateReadyToReload] = useState(false);
+
+  useEffect(() => {
+    updaterService.getCurrentVersionInfo().then(setVersionInfo);
+  }, []);
+
+  const handleManualCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatusMsg('');
+    setUpdateErrorMsg('');
+    setAvailableUpdate(null);
+    setIsUpdateReadyToReload(false);
+    try {
+      const res = await updaterService.checkForUpdate();
+      if (res.hasUpdate && res.updateInfo) {
+        setAvailableUpdate(res);
+        setUpdateStatusMsg(`Tersedia pembaruan versi ${res.latestVersion}!`);
+      } else {
+        setUpdateStatusMsg(res.message || 'Aplikasi Anda sudah menggunakan versi terbaru.');
+      }
+    } catch (err) {
+      setUpdateErrorMsg(err.message || 'Gagal memeriksa pembaruan.');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleManualDownloadUpdate = async () => {
+    if (!availableUpdate?.updateInfo) return;
+    setCheckingUpdate(true);
+    setDownloadProgress(0);
+    try {
+      const bundle = await updaterService.downloadUpdate(
+        availableUpdate.updateInfo,
+        (p) => setDownloadProgress(p)
+      );
+      if (bundle?.id) {
+        await updaterService.setNextBundle(bundle.id);
+        setIsUpdateReadyToReload(true);
+        setUpdateStatusMsg('Pembaruan berhasil diunduh. Ketuk "Muat Ulang Sekarang" untuk menerapkan.');
+      }
+    } catch (err) {
+      setUpdateErrorMsg(err.message || 'Gagal mengunduh pembaruan.');
+    } finally {
+      setCheckingUpdate(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleManualReload = async () => {
+    if (!availableUpdate?.updateInfo) return;
+    setCheckingUpdate(true);
+    try {
+      await updaterService.reloadImmediately(availableUpdate.updateInfo.version);
+    } catch (err) {
+      setUpdateErrorMsg(err.message || 'Gagal memuat ulang bundle.');
+      setCheckingUpdate(false);
+    }
+  };
 
   // Timers for email and WhatsApp cooldown
   useEffect(() => {
@@ -727,7 +795,80 @@ export default function ProfilePage() {
         </form>
       </Card>
 
-      {/* 6. Tombol Logout */}
+      {/* 6. Informasi Sistem & Pembaruan OTA */}
+      <Card>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="section-title">Informasi Sistem & Pembaruan</h3>
+            <Badge variant="accent" size="sm">OTA Live</Badge>
+          </div>
+
+          <div className="rounded-[10px] bg-[var(--color-bg-subtle)] p-3 text-xs space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--color-text-secondary)]">Versi Aplikasi (APK):</span>
+              <span className="font-mono font-semibold text-[var(--color-text-primary)]">{versionInfo.nativeVersion}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--color-text-secondary)]">Versi Bundle UI (OTA):</span>
+              <span className="font-mono font-semibold text-[var(--color-brand)]">v{versionInfo.bundleVersion}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--color-text-secondary)]">Saluran Pembaruan:</span>
+              <span className="font-mono text-[var(--color-text-primary)]">production</span>
+            </div>
+          </div>
+
+          {updateStatusMsg && (
+            <div className="p-2.5 rounded-[8px] bg-[var(--color-success-bg)] text-[var(--color-success-fg)] text-xs flex items-center gap-2">
+              <CheckCircle2 size={15} className="shrink-0" />
+              <span className="leading-relaxed">{updateStatusMsg}</span>
+            </div>
+          )}
+
+          {updateErrorMsg && (
+            <div className="p-2.5 rounded-[8px] bg-[var(--color-danger-bg)] text-[var(--color-danger-fg)] text-xs flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0" />
+              <span className="leading-relaxed">{updateErrorMsg}</span>
+            </div>
+          )}
+
+          {isUpdateReadyToReload ? (
+            <Button
+              variant="brand"
+              size="sm"
+              fullWidth
+              loading={checkingUpdate}
+              onClick={handleManualReload}
+            >
+              Muat Ulang Sekarang
+            </Button>
+          ) : availableUpdate ? (
+            <Button
+              variant="brand"
+              size="sm"
+              fullWidth
+              loading={checkingUpdate}
+              onClick={handleManualDownloadUpdate}
+            >
+              {downloadProgress !== null
+                ? `Mengunduh… (${downloadProgress}%)`
+                : `Unduh Pembaruan v${availableUpdate.latestVersion}`}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              fullWidth
+              loading={checkingUpdate}
+              onClick={handleManualCheckUpdate}
+            >
+              Periksa Pembaruan Sistem
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* 7. Tombol Logout */}
       <Card>
         <div className="space-y-3">
           <Button

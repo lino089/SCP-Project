@@ -57,7 +57,7 @@ def parse_cell(cell_text):
     
     if quote_match:
         fet_staff_id = quote_match.group(1).strip()
-        teacher_name = quote_match.group(2).strip()
+        teacher_name = quote_match.group(2).strip().strip(',').strip()
         
         # Subject is text before quote
         subject_raw = full_text[:quote_match.start()].strip()

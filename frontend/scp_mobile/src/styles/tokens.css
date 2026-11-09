@@ -33,11 +33,13 @@
   --color-text-muted: #8A94A6;
 
   /* ---------------------------------------------------------
-   * BRAND ACCENT (Exness Yellow — retained per D-1)
-   * Reserved for brand identity marks, never for primary CTAs.
+   * BRAND ACCENT (SCP Yellow — retained per D-1)
+   * Dipakai untuk penanda brand dan CTA identitas (halaman login).
+   * Hover/active disamakan dengan website SCP (scp_web Button.css).
    * --------------------------------------------------------- */
   --color-brand: #FFDE00;
-  --color-brand-strong: #F5D400;
+  --color-brand-strong: #FFE63B;   /* hover — sama dengan website */
+  --color-brand-pressed: #E6C800;  /* active — sama dengan website */
   --color-brand-text: #0F172A;
   --color-brand-soft: rgba(255, 222, 0, 0.16);
 

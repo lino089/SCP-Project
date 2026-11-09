@@ -39,7 +39,7 @@ class TeacherMatcherService
             ];
         }
 
-        $cleanRaw = trim($rawName);
+        $cleanRaw = trim(trim($rawName), " \t\n\r\0\x0B,");
         if (isset($this->memoryCache[$cleanRaw])) {
             return $this->memoryCache[$cleanRaw];
         }

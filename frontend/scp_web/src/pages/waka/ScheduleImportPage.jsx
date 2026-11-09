@@ -63,11 +63,24 @@ function mapImportRow(r) {
   } else if (isDuplicateOrExcluded) {
     normalizedStatus = 'Excluded';
   } else {
-    normalizedStatus = 'Unmatched';
+    // Normalization: jika semua 4 entitas (guru, kelas, mapel, ruangan) telah lengkap terpetakan
+    // dan tidak mengalami konflik/tabrakan benturan waktu, baris ini otomatis tergolong Matched.
+    const hasAllEntities = Boolean(
+      (r.matched_class_id || r.matched_class?.id) &&
+      (r.matched_teacher_id || r.matched_teacher?.id) &&
+      (r.matched_subject_id || r.matched_subject?.id) &&
+      (r.matched_room_id || r.matched_room?.id)
+    );
+    if (hasAllEntities && matchStatus !== 'conflict' && r.status !== 'Conflict') {
+      normalizedStatus = 'Matched';
+    } else {
+      normalizedStatus = 'Unmatched';
+    }
   }
 
-  const issueDetail = r.issue_detail || raw.issue_detail || null;
-  const recommendations = r.recommendations || raw.recommendations || null;
+  const isMatchedRow = normalizedStatus === 'Matched';
+  const issueDetail = isMatchedRow ? null : (r.issue_detail || raw.issue_detail || null);
+  const recommendations = isMatchedRow ? null : (r.recommendations || raw.recommendations || null);
 
   return {
     id: r.id,
@@ -87,7 +100,7 @@ function mapImportRow(r) {
     match_status: matchStatus,
     is_excluded: isDuplicateOrExcluded,
     is_manual: Boolean(r.resolved_by_waka || r.is_manual),
-    room_source_conflict: Boolean(r.room_source_conflict),
+    room_source_conflict: isMatchedRow ? false : Boolean(r.room_source_conflict),
     raw_data: raw,
     issue_detail: issueDetail,
     recommendations: recommendations,
@@ -729,14 +742,16 @@ export default function ScheduleImportPage() {
         });
 
         if (res?.data) {
-          const updatedRow = mapImportRow(res.data);
-
-          if (applyToSameTeacher && res?.meta?.applied_bulk_count > 0) {
+          try {
             const detailRes = await scheduleImportApi.getImportDetail(currentId);
             if (detailRes?.data?.rows) {
               setRows(detailRes.data.rows.map(mapImportRow));
+            } else {
+              const updatedRow = mapImportRow(res.data);
+              setRows((prev) => prev.map((r) => (r.id === editingRow.id ? updatedRow : r)));
             }
-          } else {
+          } catch {
+            const updatedRow = mapImportRow(res.data);
             setRows((prev) => prev.map((r) => (r.id === editingRow.id ? updatedRow : r)));
           }
 
@@ -929,11 +944,6 @@ export default function ScheduleImportPage() {
           <span className="font-mono text-xs text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
             {r.roomName}
           </span>
-          {r.room_source_conflict && (
-            <span className="text-[10px] text-amber-600 font-medium leading-none">
-              *Konflik alokasi ruang PDF
-            </span>
-          )}
         </div>
       ),
     },
@@ -979,15 +989,11 @@ export default function ScheduleImportPage() {
         return (
           <div className="flex flex-col items-start gap-1">
             <Badge variant="error">Unmatched</Badge>
-            {r.issue_detail?.title ? (
+            {r.issue_detail?.title && (
               <span className="text-[10px] text-rose-800 font-medium bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 leading-tight">
                 {r.issue_detail.title}
               </span>
-            ) : r.room_source_conflict ? (
-              <span className="text-[10px] text-amber-800 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 leading-tight">
-                Alokasi Ruang Beda
-              </span>
-            ) : null}
+            )}
           </div>
         );
       },
@@ -1361,7 +1367,7 @@ export default function ScheduleImportPage() {
               )}
 
               {/* 1. Diagnosa Masalah / Penjelasan Konflik & Unmatched */}
-              {(editingRow.status === 'Conflict' || editingRow.status === 'Unmatched' || editingRow.issue_detail) && (
+              {(editingRow.status === 'Conflict' || editingRow.status === 'Unmatched') && editingRow.issue_detail && (
                 <div
                   className={`p-3.5 rounded-lg border flex flex-col gap-1.5 ${
                     editingRow.status === 'Conflict'
@@ -1398,142 +1404,126 @@ export default function ScheduleImportPage() {
                 </div>
               )}
 
-              {/* 2. Komparasi Alokasi Ruang dari Dokumen FET / Ruang Pangkalan (PRIORITAS UTAMA) */}
-              {(() => {
+              {/* 2. Resolusi Khusus Tabrakan Ruangan (Hanya muncul jika berstatus CONFLICT) */}
+              {editingRow.status === 'Conflict' && (() => {
                 const diag =
                   liveRecommendations?.room_source_options ||
                   editingRow.recommendations?.room_source_options ||
                   editingRow.issue_detail?.data;
+                const altRooms =
+                  liveRecommendations?.alternative_rooms ||
+                  editingRow.recommendations?.alternative_rooms ||
+                  [];
 
-                if (!diag || (!diag.room_kelas?.name && !diag.room_jadwal?.name)) return null;
-
-                const labelJadwal = diag.room_jadwal?.label || 'PDF Matriks Ruang';
-                const labelKelas = diag.room_kelas?.label || 'PDF Jadwal Kelas';
+                const isKelasAvailable = diag?.room_kelas?.is_available;
+                const roomKelasName = diag?.room_kelas?.name;
+                const roomKelasId = diag?.room_kelas?.id;
 
                 return (
-                  <div className="p-3 bg-indigo-50/90 border border-indigo-200 rounded-lg flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950">
-                      <Info size={14} className="text-indigo-600 shrink-0" />
-                      <span>Komparasi Alokasi Ruang dari Dokumen FET:</span>
-                    </div>
-                    <p className="text-[11px] text-indigo-900 m-0 leading-relaxed">
-                      {diag.recommendation_text}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                      {/* Opsi 1: Ruang dari Matriks Ruangan */}
-                      {diag.room_jadwal?.name && (
-                        <div
-                          className={`p-2.5 rounded-md border text-xs flex flex-col justify-between gap-2 transition-all ${
-                            String(resolvedForm.room_id) === String(diag.room_jadwal.id)
-                              ? 'bg-indigo-100/90 border-indigo-500 text-indigo-950 font-medium shadow-xs ring-1 ring-indigo-400'
-                              : 'bg-white border-indigo-200 text-gray-800 hover:border-indigo-300'
-                          }`}
-                        >
+                  <div className="flex flex-col gap-3">
+                    {/* Opsi Pemulihan: Ruang dari PDF Jadwal Kelas yang terbukti KOSONG */}
+                    {isKelasAvailable && roomKelasId && (
+                      <div className="p-3 bg-indigo-50/90 border border-indigo-200 rounded-lg flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950">
+                          <Info size={14} className="text-indigo-600 shrink-0" />
+                          <span>Opsi Pemulihan dari Berkas PDF Jadwal Kelas:</span>
+                        </div>
+                        <p className="text-[11px] text-indigo-900 m-0">
+                          Jadwal kelas ini mencantumkan ruangan <strong>{roomKelasName}</strong> yang terverifikasi 100% kosong pada jam ini:
+                        </p>
+                        <div className="flex items-center justify-between p-2.5 bg-white border border-indigo-200 rounded-md">
                           <div>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wide">
-                                {labelJadwal}
-                              </span>
-                              <span
-                                className={`text-[10px] font-semibold px-1 py-0.2 rounded truncate max-w-[130px] ${
-                                  diag.room_jadwal.is_available
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
-                                title={diag.room_jadwal.occupied_by ? `Terisi oleh ${diag.room_jadwal.occupied_by}` : undefined}
-                              >
-                                {diag.room_jadwal.is_available
-                                  ? '✓ Tersedia Kosong'
-                                  : diag.room_jadwal.occupied_by
-                                  ? `✗ Terisi (${diag.room_jadwal.occupied_by})`
-                                  : '✗ Terisi Jadwal Lain'}
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-sm text-gray-900">{roomKelasName}</span>
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold">
+                                ✓ Tersedia Kosong
                               </span>
                             </div>
-                            <div className="text-sm font-bold font-mono text-gray-900 mt-1">
-                              {diag.room_jadwal.name}
-                            </div>
+                            <span className="text-[11px] text-gray-500">Ruangan dari Jadwal Kelas</span>
                           </div>
                           <button
                             type="button"
-                            disabled={!diag.room_jadwal.id}
                             onClick={() => {
-                              if (diag.room_jadwal.id) {
-                                setResolvedForm({ ...resolvedForm, room_id: String(diag.room_jadwal.id) });
-                                setResolutionWarning('');
-                              }
+                              setResolvedForm({ ...resolvedForm, room_id: String(roomKelasId) });
+                              setResolutionWarning('');
                             }}
-                            className={`w-full py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
-                              String(resolvedForm.room_id) === String(diag.room_jadwal.id)
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer ${
+                              String(resolvedForm.room_id) === String(roomKelasId)
                                 ? 'bg-indigo-600 text-white cursor-default'
-                                : 'bg-white text-indigo-800 border border-indigo-300 hover:bg-indigo-100'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-300 hover:bg-indigo-100'
                             }`}
                           >
-                            {String(resolvedForm.room_id) === String(diag.room_jadwal.id)
-                              ? '✓ Ruangan Terpilih'
-                              : diag.recommended_choice === 'jadwal'
-                              ? 'Pilih Ruangan Ini (Disarankan)'
-                              : 'Pilih Ruang Matriks'}
+                            {String(resolvedForm.room_id) === String(roomKelasId) ? '✓ Terpilih' : `Gunakan ${roomKelasName}`}
                           </button>
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Opsi 2: Ruang dari PDF Kelas / Ruang Pangkalan */}
-                      {diag.room_kelas?.name && (
-                        <div
-                          className={`p-2.5 rounded-md border text-xs flex flex-col justify-between gap-2 transition-all ${
-                            String(resolvedForm.room_id) === String(diag.room_kelas.id)
-                              ? 'bg-indigo-100/90 border-indigo-500 text-indigo-950 font-medium shadow-xs ring-1 ring-indigo-400'
-                              : 'bg-white border-indigo-200 text-gray-800 hover:border-indigo-300'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wide">
-                                {labelKelas}
-                              </span>
-                              <span
-                                className={`text-[10px] font-semibold px-1 py-0.2 rounded truncate max-w-[130px] ${
-                                  diag.room_kelas.is_available
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
-                                title={diag.room_kelas.occupied_by ? `Terisi oleh ${diag.room_kelas.occupied_by}` : undefined}
-                              >
-                                {diag.room_kelas.is_available
-                                  ? '✓ Tersedia Kosong'
-                                  : diag.room_kelas.occupied_by
-                                  ? `✗ Terisi (${diag.room_kelas.occupied_by})`
-                                  : '✗ Terisi Jadwal Lain'}
-                              </span>
-                            </div>
-                            <div className="text-sm font-bold font-mono text-gray-900 mt-1">
-                              {diag.room_kelas.name}
-                            </div>
+                    {/* Rekomendasi Ruangan Alternatif yang 100% Bebas Benturan */}
+                    {altRooms.length > 0 && (
+                      <div className="p-3 bg-emerald-50/80 border border-emerald-300 rounded-lg flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-950">
+                            <Sparkles size={14} className="text-emerald-600 shrink-0" />
+                            <span>Rekomendasi Ruangan Alternatif (Bebas Benturan):</span>
                           </div>
-                          <button
-                            type="button"
-                            disabled={!diag.room_kelas.id}
-                            onClick={() => {
-                              if (diag.room_kelas.id) {
-                                setResolvedForm({ ...resolvedForm, room_id: String(diag.room_kelas.id) });
-                                setResolutionWarning('');
-                              }
-                            }}
-                            className={`w-full py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
-                              String(resolvedForm.room_id) === String(diag.room_kelas.id)
-                                ? 'bg-indigo-600 text-white cursor-default'
-                                : 'bg-white text-indigo-800 border border-indigo-300 hover:bg-indigo-100'
-                            }`}
-                          >
-                            {String(resolvedForm.room_id) === String(diag.room_kelas.id)
-                              ? '✓ Ruangan Terpilih'
-                              : diag.recommended_choice === 'kelas'
-                              ? 'Pilih Ruangan Ini (Disarankan)'
-                              : 'Pilih Ruang Kelas'}
-                          </button>
+                          <span className="text-[10px] text-emerald-800 font-medium">
+                            {altRooms.length} Ruangan Kosong
+                          </span>
                         </div>
-                      )}
-                    </div>
+                        <p className="text-[11px] text-emerald-800 m-0">
+                          Ruangan berikut telah diverifikasi 100% kosong pada {editingRow.day} Jam Ke-{editingRow.period_number} ({editingRow.duration_periods} JP):
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                          {altRooms.map((alt) => {
+                            const isSelected = String(resolvedForm.room_id) === String(alt.room_id);
+                            return (
+                              <div
+                                key={alt.room_id}
+                                className={`p-2.5 rounded-md border text-xs flex flex-col justify-between gap-2 transition-all ${
+                                  isSelected
+                                    ? 'bg-emerald-100/90 border-emerald-500 font-medium shadow-xs ring-1 ring-emerald-400'
+                                    : 'bg-white border-emerald-200 hover:border-emerald-300'
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-semibold text-emerald-700 uppercase">
+                                      {alt.type_label || (alt.category === 'lab' ? 'Laboratorium Komputer' : 'Ruang Teori')}
+                                    </span>
+                                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1 rounded">
+                                      ✓ Kosong
+                                    </span>
+                                  </div>
+                                  <div className="text-sm font-bold font-mono text-gray-900 mt-0.5">
+                                    {alt.room_name}
+                                  </div>
+                                  {alt.capacity && (
+                                    <div className="text-[10px] text-gray-500">
+                                      Kapasitas: {alt.capacity} siswa
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setResolvedForm({ ...resolvedForm, room_id: String(alt.room_id) });
+                                    setResolutionWarning('');
+                                  }}
+                                  className={`w-full py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white cursor-default'
+                                      : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                                  }`}
+                                >
+                                  {isSelected ? '✓ Terpilih' : 'Gunakan'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}

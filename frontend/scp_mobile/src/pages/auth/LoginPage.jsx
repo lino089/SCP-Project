@@ -103,21 +103,21 @@ export default function LoginPage() {
       <div className="w-full max-w-[420px] mx-auto my-auto space-y-4">
         {/* Brand & App Bar */}
         <div className="surface-card p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-[var(--color-border-light)] pb-3.5">
-            <div className="flex items-center gap-2.5">
-              <div className="icon-tile">
-                <span className="w-3 h-3 bg-[var(--color-brand)] rounded-[2px]" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base font-bold text-[var(--color-text-primary)] leading-tight truncate">
-                  School Class Progress
-                </h1>
-                <p className="text-[11px] font-mono text-[var(--color-text-secondary)] uppercase tracking-tight">
-                  Mobile Portal Terpadu
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-light)] pb-3.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img
+                src="/SCP_logo.png"
+                alt="Logo School Class Progress"
+                width="40"
+                height="40"
+                className="h-10 w-10 shrink-0 rounded-[10px]"
+                decoding="async"
+              />
+              <h1 className="min-w-0 text-base font-bold leading-tight text-[var(--color-text-primary)]">
+                School Class Progress
+              </h1>
             </div>
-            <Badge variant="accent" size="sm" mono>
+            <Badge variant="accent" size="sm">
               v1.0
             </Badge>
           </div>
@@ -196,7 +196,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              variant="primary"
+              variant="brand"
               size="lg"
               fullWidth
               loading={isLoading}
@@ -207,7 +207,7 @@ export default function LoginPage() {
             {/* Separator */}
             <div className="relative flex py-2 items-center">
               <div className="grow border-t border-[var(--color-border-subtle)]" />
-              <span className="shrink mx-3 text-[11px] font-mono text-[var(--color-text-muted)] uppercase">
+              <span className="shrink mx-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
                 Atau Masuk Dengan
               </span>
               <div className="grow border-t border-[var(--color-border-subtle)]" />
@@ -234,7 +234,7 @@ export default function LoginPage() {
         </div>
 
         {/* Device Detection Footer */}
-        <div className="text-center text-[11px] text-[var(--color-text-muted)] font-mono">
+        <div className="text-center text-[11px] text-[var(--color-text-muted)]">
           Perangkat: <span className="text-[var(--color-text-secondary)] font-medium">{deviceName}</span>
         </div>
       </div>

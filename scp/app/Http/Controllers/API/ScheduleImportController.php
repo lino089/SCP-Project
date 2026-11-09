@@ -358,7 +358,9 @@ class ScheduleImportController extends Controller
                 $startPeriod,
                 $duration,
                 $existingSchedules,
-                $batchSlots
+                $batchSlots,
+                'PDF Jadwal Kelas',
+                'PDF Matriks Ruang'
             );
         } else {
             // Jika terjadi tabrakan ruang atau ruang kelas kosong, cari Ruang Teori Pangkalan Rombel
