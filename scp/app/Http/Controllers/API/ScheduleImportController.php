@@ -8,7 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Models\ScheduleImport;
 use App\Models\ScheduleImportRow;
 use App\Models\Schedule;
+use App\Models\Room;
+use App\Models\User;
 use App\Services\ScheduleConflictService;
+use App\Services\TeacherMatcherService;
 use App\Services\MasterDataPrerequisiteService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -124,6 +127,7 @@ class ScheduleImportController extends Controller
             'matched_room_id' => 'nullable|exists:rooms,id',
             'matched_subject_id' => 'nullable|exists:subjects,id',
             'exclude' => 'nullable|boolean',
+            'override_conflict' => 'nullable|boolean',
             'apply_to_same_teacher_raw' => 'nullable|boolean',
         ]);
 
@@ -153,7 +157,10 @@ class ScheduleImportController extends Controller
         }
 
         $row->resolved_by_waka = true;
-        $this->evaluateRowStatus($row, $import);
+        // Resolusi manual Waka dari UI mengirim override_conflict: true agar langsung ditandai Matched (sama seperti Unmatched).
+        // Jika tidak dikirim (misal pada automated tests atau re-evaluasi), default bernilai false.
+        $overrideConflict = $request->boolean('override_conflict', false);
+        $this->evaluateRowStatus($row, $import, $overrideConflict);
         $row->save();
 
         // Optional bulk-apply to other rows with same raw teacher name
@@ -177,9 +184,15 @@ class ScheduleImportController extends Controller
             }
         }
 
-        $message = $appliedBulkCount > 0
-            ? "Baris import berhasil diupdate dan diterapkan ke {$appliedBulkCount} baris lain dengan guru yang sama."
-            : 'Baris import berhasil diupdate.';
+        $message = match ($row->match_status) {
+            'matched' => $overrideConflict
+                ? 'Baris jadwal berhasil disetujui secara manual (Override Waka) dan ditandai Matched.'
+                : ($appliedBulkCount > 0
+                    ? "Baris import berhasil dicocokkan dan diterapkan ke {$appliedBulkCount} baris lain."
+                    : 'Baris import berhasil diverifikasi dan ditandai Matched.'),
+            'conflict' => 'Data pemetaan tersimpan, namun baris ini masih terdeteksi KONFLIK dengan jadwal lain. Silakan pilih Ruangan Alternatif yang kosong atau centang opsi Setujui Benturan (Override Waka).',
+            default => 'Data tersimpan, namun masih berstatus Unmatched karena kelengkapan entitas belum terpenuhi.',
+        };
 
         return response()->json([
             'success' => true,
@@ -187,6 +200,7 @@ class ScheduleImportController extends Controller
             'data' => $row->fresh(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']),
             'meta' => [
                 'applied_bulk_count' => $appliedBulkCount,
+                'is_still_conflict' => $row->match_status === 'conflict',
             ],
         ], 200);
     }
@@ -238,10 +252,205 @@ class ScheduleImportController extends Controller
     }
 
     /**
+     * Get real-time conflict diagnosis and smart recommendations for a specific import row.
+     * GET /api/schedule-imports/{id}/rows/{row_id}/recommendations
+     */
+    public function getRecommendations($id, $row_id)
+    {
+        $import = ScheduleImport::findOrFail($id);
+        $row = ScheduleImportRow::where('import_id', $import->id)
+            ->with(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject'])
+            ->findOrFail($row_id);
+
+        $conflictService = new ScheduleConflictService();
+        $teacherMatcher = new TeacherMatcherService();
+
+        $allRooms = Room::all();
+        $allTeachers = User::where('role', 'teacher')->get();
+
+        $batchClassIds = $import->rows()
+            ->whereNotNull('matched_class_id')
+            ->pluck('matched_class_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $existingSchedules = Schedule::query()
+            ->where('cycle_type', $import->cycle_type)
+            ->when(!empty($batchClassIds), fn ($q) => $q->whereNotIn('class_id', $batchClassIds))
+            ->with([
+                'teacher:id,name',
+                'class:id,name',
+                'room:id,name',
+                'subject:id,name',
+            ])
+            ->get(['id', 'teacher_id', 'class_id', 'room_id', 'subject_id', 'cycle_type', 'day_of_week', 'period_number', 'duration_periods']);
+
+        // Build batchSlots from ALL active rows in this batch to prevent false positives
+        $batchSlots = [];
+        $otherActiveRows = $import->rows()
+            ->where('id', '!=', $row->id)
+            ->whereNotIn('match_status', ['excluded', 'duplicate'])
+            ->with(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject'])
+            ->get();
+
+        foreach ($otherActiveRows as $o) {
+            $day = (int) $o->day_of_week;
+            $start = (int) $o->period_number;
+            $dur = (int) ($o->duration_periods ?? 1);
+            $end = $start + $dur - 1;
+            
+            $rId = $o->matched_room_id;
+            if (!$rId) {
+                $rn = $o->raw_data['ruang_final'] ?? $o->raw_data['ruang_jadwal'] ?? null;
+                if ($rn) {
+                    $m = ScheduleConflictService::findRoom($allRooms, $rn);
+                    if ($m) $rId = $m->id;
+                }
+            }
+            $isShared = ScheduleConflictService::isSharedRoom($rId);
+
+            for ($p = $start; $p <= $end; $p++) {
+                $slotKey = "{$day}-{$p}";
+                if (!isset($batchSlots[$slotKey])) {
+                    $batchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => [], 'entries' => []];
+                }
+                if ($o->matched_teacher_id) $batchSlots[$slotKey]['teachers'][] = $o->matched_teacher_id;
+                if ($o->matched_class_id) $batchSlots[$slotKey]['classes'][] = $o->matched_class_id;
+                if ($rId && !$isShared) $batchSlots[$slotKey]['rooms'][] = $rId;
+                $batchSlots[$slotKey]['entries'][] = [
+                    'teacher_id' => $o->matched_teacher_id,
+                    'teacher_name' => $o->matchedTeacher?->name ?? $o->raw_data['guru_mentah'] ?? 'Guru',
+                    'class_id' => $o->matched_class_id,
+                    'class_name' => $o->matchedClass?->name ?? $o->raw_data['kelas_mentah'] ?? 'Kelas',
+                    'room_id' => $rId,
+                    'room_name' => $o->matchedRoom?->name ?? $o->raw_data['ruang_final'] ?? 'Ruangan',
+                    'subject_name' => $o->matchedSubject?->name ?? $o->raw_data['mapel_mentah'] ?? 'Mata Pelajaran',
+                ];
+            }
+        }
+
+        $day = (int) $row->day_of_week;
+        $startPeriod = (int) $row->period_number;
+        $duration = (int) ($row->duration_periods ?? 1);
+
+        $altRooms = $conflictService->findAlternativeRooms(
+            $day,
+            $startPeriod,
+            $duration,
+            $allRooms,
+            $existingSchedules,
+            $batchSlots,
+            $row->matched_room_id
+        );
+
+        $roomSourceDiag = null;
+        $rawKelasRoom = $row->raw_data['ruang_kelas'] ?? null;
+        $rawJadwalRoom = $row->raw_data['ruang_jadwal'] ?? null;
+
+        if ($row->room_source_conflict || ($rawKelasRoom && $rawJadwalRoom && $rawKelasRoom !== $rawJadwalRoom)) {
+            $rk = ScheduleConflictService::findRoom($allRooms, $rawKelasRoom);
+            $rj = ScheduleConflictService::findRoom($allRooms, $rawJadwalRoom);
+            $roomSourceDiag = $conflictService->diagnoseRoomSourceConflict(
+                $rk,
+                $rj,
+                $day,
+                $startPeriod,
+                $duration,
+                $existingSchedules,
+                $batchSlots
+            );
+        } else {
+            // Jika terjadi tabrakan ruang atau ruang kelas kosong, cari Ruang Teori Pangkalan Rombel
+            $classId = $row->matched_class_id;
+            if ($classId) {
+                $classRows = $import->rows()
+                    ->whereNotIn('match_status', ['excluded', 'duplicate'])
+                    ->where('matched_class_id', $classId)
+                    ->get();
+
+                $roomCounts = [];
+                foreach ($classRows as $cr) {
+                    $rn = $cr->matchedRoom?->name ?? $cr->raw_data['ruang_final'] ?? $cr->raw_data['ruang_jadwal'] ?? null;
+                    if ($rn && ScheduleConflictService::getRoomCategory($rn) === 'theory') {
+                        $roomCounts[trim($rn)] = ($roomCounts[trim($rn)] ?? 0) + 1;
+                    }
+                }
+
+                if (!empty($roomCounts)) {
+                    arsort($roomCounts);
+                    $homeRoomName = array_key_first($roomCounts);
+                    $homeRoom = ScheduleConflictService::findRoom($allRooms, $homeRoomName);
+                    $targetRoom = $row->matchedRoom ?? ScheduleConflictService::findRoom($allRooms, $rawJadwalRoom);
+
+                    if ($homeRoom && $targetRoom && (int) $homeRoom->id !== (int) $targetRoom->id) {
+                        $roomSourceDiag = $conflictService->diagnoseRoomSourceConflict(
+                            $homeRoom,
+                            $targetRoom,
+                            $day,
+                            $startPeriod,
+                            $duration,
+                            $existingSchedules,
+                            $batchSlots,
+                            'Ruang Pangkalan Rombel',
+                            'PDF Matriks Ruang'
+                        );
+                    }
+                }
+            }
+        }
+
+        $teacherCandidates = [];
+        if (!$row->matched_teacher_id) {
+            $rawTeacher = $row->raw_data['guru_mentah'] ?? $row->raw_data['teacher'] ?? null;
+            $res = $teacherMatcher->match($allTeachers, $rawTeacher);
+            $teacherCandidates = $res['candidates'] ?? [];
+        }
+
+        $issueDetail = $row->issue_detail;
+        if (!$issueDetail && $row->matched_teacher_id && $row->matched_class_id && $row->matched_room_id) {
+            $issueDetail = $conflictService->findConflictDetailsInMemory($existingSchedules, [
+                'teacher_id' => $row->matched_teacher_id,
+                'teacher_name' => $row->matchedTeacher?->name ?? 'Guru',
+                'class_id' => $row->matched_class_id,
+                'class_name' => $row->matchedClass?->name ?? 'Kelas',
+                'room_id' => $row->matched_room_id,
+                'room_name' => $row->matchedRoom?->name ?? 'Ruangan',
+                'cycle_type' => $import->cycle_type,
+                'day_of_week' => $day,
+                'period_number' => $startPeriod,
+                'duration_periods' => $duration,
+            ], $batchSlots);
+
+            if ($issueDetail) {
+                $raw = $row->raw_data ?? [];
+                $raw['issue_detail'] = $issueDetail;
+                if (!empty($altRooms)) {
+                    $raw['recommendations'] = array_merge($raw['recommendations'] ?? [], ['alternative_rooms' => $altRooms]);
+                }
+                $row->raw_data = $raw;
+                $row->save();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'issue_detail' => $issueDetail,
+                'alternative_rooms' => $altRooms,
+                'room_source_options' => $roomSourceDiag,
+                'teacher_candidates' => $teacherCandidates,
+            ],
+        ], 200);
+    }
+
+    /**
      * Evaluates whether row has all 4 entities and checks anti-collision conflicts.
      */
-    protected function evaluateRowStatus(ScheduleImportRow $row, ScheduleImport $import): void
+    protected function evaluateRowStatus(ScheduleImportRow $row, ScheduleImport $import, bool $overrideConflict = false): void
     {
+        $rawData = $row->raw_data ?? [];
+
         if (
             $row->matched_class_id &&
             $row->matched_teacher_id &&
@@ -260,33 +469,105 @@ class ScheduleImportController extends Controller
 
             // 1. Check intra-batch collisions against other non-excluded rows in the same import
             $intraConflict = false;
+            $collidedOther = null;
+            $collidedType = null;
             $startPeriod = (int) $row->period_number;
             $endPeriod = $startPeriod + (int) $row->duration_periods - 1;
             $isSharedRoom = ScheduleConflictService::isSharedRoom($row->matched_room_id);
 
             $otherRows = $import->rows()
                 ->where('id', '!=', $row->id)
-                ->where('match_status', '!=', 'excluded')
+                ->whereNotIn('match_status', ['excluded', 'duplicate'])
                 ->where('day_of_week', $row->day_of_week)
+                ->with(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject'])
                 ->get();
 
             foreach ($otherRows as $other) {
                 $otherStart = (int) $other->period_number;
                 $otherEnd = $otherStart + (int) $other->duration_periods - 1;
                 if ($startPeriod <= $otherEnd && $endPeriod >= $otherStart) {
-                    if (
-                        ($other->matched_teacher_id && $other->matched_teacher_id === $row->matched_teacher_id) ||
-                        ($other->matched_class_id && $other->matched_class_id === $row->matched_class_id) ||
-                        (!$isSharedRoom && $other->matched_room_id && $other->matched_room_id === $row->matched_room_id)
-                    ) {
+                    if ($other->matched_teacher_id && $other->matched_teacher_id === $row->matched_teacher_id) {
                         $intraConflict = true;
+                        $collidedOther = $other;
+                        $collidedType = 'teacher_collision';
+                        break;
+                    }
+                    if ($other->matched_class_id && $other->matched_class_id === $row->matched_class_id) {
+                        $intraConflict = true;
+                        $collidedOther = $other;
+                        $collidedType = 'class_collision';
+                        break;
+                    }
+                    if (!$isSharedRoom && $other->matched_room_id && $other->matched_room_id === $row->matched_room_id) {
+                        $intraConflict = true;
+                        $collidedOther = $other;
+                        $collidedType = 'room_collision';
                         break;
                     }
                 }
             }
 
             if ($intraConflict) {
-                $row->match_status = 'conflict';
+                $row->loadMissing(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']);
+                $dayName = ScheduleConflictService::getDayName($row->day_of_week);
+
+                if ($collidedType === 'teacher_collision') {
+                    $otherClass = $collidedOther->matchedClass?->name ?? 'kelas lain';
+                    $otherSub = $collidedOther->matchedSubject?->name ?? 'mapel lain';
+                    $rawData['issue_detail'] = [
+                        'type' => 'teacher_collision',
+                        'title' => 'Tabrakan Jadwal Guru',
+                        'description' => "Guru {$row->matchedTeacher?->name} sudah mengajar ({$otherSub}) di kelas {$otherClass} pada hari {$dayName} Jam Ke-{$startPeriod}.",
+                    ];
+                    $rawData['recommendations'] = [
+                        'action_hint' => 'Pilih guru pengampu yang berbeda atau ubah jam pelajaran.',
+                    ];
+                } elseif ($collidedType === 'class_collision') {
+                    $otherTeacher = $collidedOther->matchedTeacher?->name ?? 'guru lain';
+                    $otherSub = $collidedOther->matchedSubject?->name ?? 'mapel lain';
+                    $rawData['issue_detail'] = [
+                        'type' => 'class_collision',
+                        'title' => 'Tabrakan Jadwal Kelas',
+                        'description' => "Kelas {$row->matchedClass?->name} sudah memiliki jadwal KBM ({$otherSub}, {$otherTeacher}) pada hari {$dayName} Jam Ke-{$startPeriod}.",
+                    ];
+                    $rawData['recommendations'] = [
+                        'action_hint' => 'Periksa alokasi jam kelas agar tidak tumpang tindih.',
+                    ];
+                } else {
+                    $otherClass = $collidedOther->matchedClass?->name ?? 'kelas lain';
+                    $otherSub = $collidedOther->matchedSubject?->name ?? 'mapel lain';
+                    $rawData['issue_detail'] = [
+                        'type' => 'room_collision',
+                        'title' => 'Tabrakan Pemakaian Ruangan',
+                        'description' => "Ruangan '{$row->matchedRoom?->name}' sedang digunakan oleh kelas {$otherClass} ({$otherSub}) pada hari {$dayName} Jam Ke-{$startPeriod}.",
+                    ];
+                    $conflictService = new ScheduleConflictService();
+                    $allRooms = Room::all();
+                    $existingSchedules = Schedule::where('cycle_type', $import->cycle_type)->get();
+                    $altRooms = $conflictService->findAlternativeRooms(
+                        (int) $row->day_of_week,
+                        (int) $row->period_number,
+                        (int) ($row->duration_periods ?? 1),
+                        $allRooms,
+                        $existingSchedules,
+                        [],
+                        $row->matched_room_id
+                    );
+                    $rawData['recommendations'] = [
+                        'alternative_rooms' => $altRooms,
+                        'action_hint' => 'Pilih salah satu ruangan alternatif yang terbukti kosong.',
+                    ];
+                }
+
+                if ($overrideConflict) {
+                    $row->match_status = 'matched';
+                    $row->room_source_conflict = false;
+                    $rawData['overridden_by_waka'] = true;
+                    $rawData['override_note'] = 'Disetujui secara manual oleh Waka Kurikulum meskipun terdeteksi benturan.';
+                } else {
+                    $row->match_status = 'conflict';
+                    unset($rawData['overridden_by_waka']);
+                }
             } else {
                 $conflictService = new ScheduleConflictService();
                 $conflicts = $conflictService->findConflicts([
@@ -299,11 +580,51 @@ class ScheduleImportController extends Controller
                     'duration_periods' => $row->duration_periods,
                 ], ignoreClassIds: $batchClassIds);
 
-                $row->match_status = $conflicts->isEmpty() ? 'matched' : 'conflict';
+                if ($conflicts->isNotEmpty()) {
+                    $c = $conflicts->first();
+                    $row->loadMissing(['matchedClass', 'matchedTeacher', 'matchedRoom', 'matchedSubject']);
+                    $dayName = ScheduleConflictService::getDayName($row->day_of_week);
+
+                    if ($c->teacher_id === $row->matched_teacher_id) {
+                        $rawData['issue_detail'] = [
+                            'type' => 'teacher_collision',
+                            'title' => 'Tabrakan Jadwal Guru (Jadwal Aktif)',
+                            'description' => "Guru {$row->matchedTeacher?->name} sudah memiliki jadwal aktif di kelas {$c->class?->name} ({$c->subject?->name}) pada hari {$dayName} Jam Ke-{$c->period_number}.",
+                        ];
+                    } elseif ($c->class_id === $row->matched_class_id) {
+                        $rawData['issue_detail'] = [
+                            'type' => 'class_collision',
+                            'title' => 'Tabrakan Jadwal Kelas (Jadwal Aktif)',
+                            'description' => "Kelas {$row->matchedClass?->name} sudah memiliki jadwal aktif ({$c->subject?->name}) bersama {$c->teacher?->name} pada hari {$dayName} Jam Ke-{$c->period_number}.",
+                        ];
+                    } else {
+                        $rawData['issue_detail'] = [
+                            'type' => 'room_collision',
+                            'title' => 'Tabrakan Pemakaian Ruangan (Jadwal Aktif)',
+                            'description' => "Ruangan '{$row->matchedRoom?->name}' terisi jadwal aktif kelas {$c->class?->name} pada hari {$dayName} Jam Ke-{$c->period_number}.",
+                        ];
+                    }
+
+                    if ($overrideConflict) {
+                        $row->match_status = 'matched';
+                        $row->room_source_conflict = false;
+                        $rawData['overridden_by_waka'] = true;
+                        $rawData['override_note'] = 'Disetujui secara manual oleh Waka Kurikulum meskipun terdeteksi benturan.';
+                    } else {
+                        $row->match_status = 'conflict';
+                        unset($rawData['overridden_by_waka']);
+                    }
+                } else {
+                    $row->match_status = 'matched';
+                    $row->room_source_conflict = false;
+                    unset($rawData['issue_detail'], $rawData['recommendations'], $rawData['overridden_by_waka']);
+                }
             }
         } else {
             $row->match_status = 'unmatched';
         }
+
+        $row->raw_data = $rawData;
     }
 
     /**

@@ -22,6 +22,9 @@ export const scheduleImportApi = {
   getImportDetail: (id) => api.get(`/schedule-imports/${id}`),
   getScheduleImport: (id) => api.get(`/schedule-imports/${id}`),
 
+  getRowRecommendations: (importId, rowId) =>
+    api.get(`/schedule-imports/${importId}/rows/${rowId}/recommendations`),
+
   resolveImportRow: (importId, rowId, data) =>
     api.patch(`/schedule-imports/${importId}/rows/${rowId}`, data), // { matched_class_id, matched_teacher_id, matched_room_id, matched_subject_id, exclude: boolean, apply_to_same_teacher_raw?: boolean }
 

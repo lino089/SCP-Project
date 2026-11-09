@@ -128,15 +128,26 @@ class ParseSchedulePdfJob implements ShouldQueue
             $existingSchedules = Schedule::query()
                 ->where('cycle_type', $import->cycle_type)
                 ->when(!empty($batchClassIds), fn ($q) => $q->whereNotIn('class_id', $batchClassIds))
-                ->get(['id', 'teacher_id', 'class_id', 'room_id', 'cycle_type', 'day_of_week', 'period_number', 'duration_periods']);
+                ->with([
+                    'teacher:id,name',
+                    'class:id,name',
+                    'room:id,name',
+                    'subject:id,name',
+                ])
+                ->get(['id', 'teacher_id', 'class_id', 'room_id', 'subject_id', 'cycle_type', 'day_of_week', 'period_number', 'duration_periods']);
 
-            // Track intra-batch slots for conflict detection: key = "day-period"
-            $batchSlots = [];
             $teacherMatcher = new TeacherMatcherService();
 
-            foreach ($parseData as $row) {
+            // ==========================================
+            // PASS 1: Entity Resolution & Global Batch Slot Gathering
+            // ==========================================
+            $preparedRows = [];
+            $globalBatchSlots = [];
+            $classTheoryRoomCounts = [];
+
+            foreach ($parseData as $idx => $row) {
                 $matchedClass = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
-                
+
                 $rawTeacher = $row['guru_mentah'] ?? $row['teacher'] ?? null;
                 $teacherResult = $teacherMatcher->match($allTeachers, $rawTeacher);
                 $matchedTeacher = $teacherResult['matched_teacher'];
@@ -155,16 +166,184 @@ class ParseSchedulePdfJob implements ShouldQueue
 
                 $roomSourceConflict = (bool) ($row['room_source_conflict'] ?? false);
 
+                // Track theory room count per class to discover the class Home Room
+                if ($matchedClass && $matchedRoom && ScheduleConflictService::getRoomCategory($matchedRoom->name) === 'theory') {
+                    $cId = $matchedClass->id;
+                    $rId = $matchedRoom->id;
+                    $classTheoryRoomCounts[$cId][$rId] = ($classTheoryRoomCounts[$cId][$rId] ?? 0) + 1;
+                }
+
+                $preparedRows[$idx] = [
+                    'row' => $row,
+                    'matched_class' => $matchedClass,
+                    'matched_teacher' => $matchedTeacher,
+                    'matched_subject' => $matchedSubject,
+                    'matched_room' => $matchedRoom,
+                    'day' => $day,
+                    'start_period' => $startPeriod,
+                    'duration' => $duration,
+                    'end_period' => $endPeriod,
+                    'room_source_conflict' => $roomSourceConflict,
+                    'raw_teacher' => $rawTeacher,
+                ];
+
+                // Register into globalBatchSlots
+                $isSharedRoom = ScheduleConflictService::isSharedRoom($matchedRoom);
+                for ($p = $startPeriod; $p <= $endPeriod; $p++) {
+                    $slotKey = "{$day}-{$p}";
+                    if (!isset($globalBatchSlots[$slotKey])) {
+                        $globalBatchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => [], 'entries' => []];
+                    }
+                    if ($matchedTeacher) $globalBatchSlots[$slotKey]['teachers'][] = $matchedTeacher->id;
+                    if ($matchedClass) $globalBatchSlots[$slotKey]['classes'][] = $matchedClass->id;
+                    if ($matchedRoom && !$isSharedRoom) {
+                        $globalBatchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
+                    }
+                    $globalBatchSlots[$slotKey]['entries'][] = [
+                        'row_index' => $idx,
+                        'teacher_id' => $matchedTeacher?->id,
+                        'teacher_name' => $matchedTeacher?->name ?? $row['guru_mentah'] ?? 'Guru',
+                        'class_id' => $matchedClass?->id,
+                        'class_name' => $matchedClass?->name ?? $row['kelas_mentah'] ?? 'Kelas',
+                        'room_id' => $matchedRoom?->id,
+                        'room_name' => $matchedRoom?->name ?? $row['ruang_final'] ?? 'Ruangan',
+                        'subject_name' => $matchedSubject?->name ?? $row['mapel_mentah'] ?? 'Mata Pelajaran',
+                    ];
+                }
+            }
+
+            // Identify dominant Home Room for each class
+            $classHomeRooms = [];
+            foreach ($classTheoryRoomCounts as $cId => $counts) {
+                arsort($counts);
+                $topRoomId = array_key_first($counts);
+                $classHomeRooms[$cId] = $allRooms->firstWhere('id', $topRoomId);
+            }
+
+            // ==========================================
+            // PASS 2: Collision Detection, Recommendation Generation & Row Creation
+            // ==========================================
+            foreach ($preparedRows as $idx => $prep) {
+                $row = $prep['row'];
+                $matchedClass = $prep['matched_class'];
+                $matchedTeacher = $prep['matched_teacher'];
+                $matchedSubject = $prep['matched_subject'];
+                $matchedRoom = $prep['matched_room'];
+                $day = $prep['day'];
+                $startPeriod = $prep['start_period'];
+                $duration = $prep['duration'];
+                $endPeriod = $prep['end_period'];
+                $roomSourceConflict = $prep['room_source_conflict'];
+                $rawTeacher = $prep['raw_teacher'];
+
+                // Build batchSlots for this row by excluding entries belonging to this exact row index
+                $batchSlots = [];
+                for ($p = $startPeriod; $p <= $endPeriod; $p++) {
+                    $slotKey = "{$day}-{$p}";
+                    if (isset($globalBatchSlots[$slotKey])) {
+                        $slot = $globalBatchSlots[$slotKey];
+                        $filteredEntries = array_values(array_filter($slot['entries'], fn ($e) => ($e['row_index'] ?? null) !== $idx));
+                        $batchSlots[$slotKey] = [
+                            'teachers' => array_column($filteredEntries, 'teacher_id'),
+                            'classes' => array_column($filteredEntries, 'class_id'),
+                            'rooms' => array_column($filteredEntries, 'room_id'),
+                            'entries' => $filteredEntries,
+                        ];
+                    }
+                }
+
                 $hasMissingEntity = !$matchedClass || !$matchedTeacher || !$matchedSubject || !$matchedRoom;
+                $issueDetail = null;
+                $recommendations = null;
 
                 if ($hasMissingEntity || $roomSourceConflict) {
                     $matchStatus = 'unmatched';
+
+                    if ($roomSourceConflict) {
+                        $roomKelasObj = $this->findRoom($allRooms, $row['ruang_kelas'] ?? null);
+                        $roomJadwalObj = $this->findRoom($allRooms, $row['ruang_jadwal'] ?? null);
+                        $diag = $conflictService->diagnoseRoomSourceConflict(
+                            $roomKelasObj,
+                            $roomJadwalObj,
+                            $day,
+                            $startPeriod,
+                            $duration,
+                            $existingSchedules,
+                            $batchSlots
+                        );
+                        $altRooms = $conflictService->findAlternativeRooms(
+                            $day,
+                            $startPeriod,
+                            $duration,
+                            $allRooms,
+                            $existingSchedules,
+                            $batchSlots,
+                            $matchedRoom ?? $roomJadwalObj ?? $roomKelasObj
+                        );
+                        $issueDetail = [
+                            'type' => 'room_source_conflict',
+                            'title' => 'Ketidaksinkronan Alokasi Ruang',
+                            'description' => "Terdapat perbedaan alokasi ruang antara PDF Jadwal Kelas ('" . ($row['ruang_kelas'] ?? '-') . "') dan PDF Matriks Ruangan ('" . ($row['ruang_jadwal'] ?? '-') . "'). " . $diag['recommendation_text'],
+                            'data' => $diag,
+                        ];
+                        $recommendations = [
+                            'room_source_options' => $diag,
+                            'alternative_rooms' => $altRooms,
+                            'action_hint' => 'Pilih salah satu ruangan yang valid (PDF Ruangan atau PDF Kelas) atau gunakan ruangan alternatif.',
+                        ];
+                    } elseif (!$matchedTeacher) {
+                        $issueDetail = [
+                            'type' => 'missing_teacher',
+                            'title' => 'Guru Belum Terdaftar / Tidak Cocok',
+                            'description' => "Nama atau inisial guru '" . ($rawTeacher ?: 'Kosong') . "' tidak cocok dengan master data guru aktif di sistem.",
+                        ];
+                        $recommendations = [
+                            'teacher_candidates' => $row['teacher_candidates'] ?? [],
+                            'action_hint' => 'Pilih salah satu kandidat guru yang sesuai, atau daftarkan guru baru di Master Data.',
+                        ];
+                    } elseif (!$matchedClass) {
+                        $issueDetail = [
+                            'type' => 'missing_class',
+                            'title' => 'Kelas Tidak Dikenali',
+                            'description' => "Kode kelas '" . ($row['kelas_mentah'] ?? '-') . "' tidak ditemukan di master data kelas.",
+                        ];
+                        $recommendations = [
+                            'action_hint' => 'Sesuaikan kelas ke salah satu kelas master data atau buat kelas baru di Master Data.',
+                        ];
+                    } elseif (!$matchedSubject) {
+                        $issueDetail = [
+                            'type' => 'missing_subject',
+                            'title' => 'Mata Pelajaran Belum Terpetakan',
+                            'description' => "Mata pelajaran '" . ($row['mapel_mentah'] ?? '-') . "' tidak dapat dipetakan secara otomatis.",
+                        ];
+                        $recommendations = [
+                            'action_hint' => 'Pilih mata pelajaran yang sesuai dari dropdown resolusi.',
+                        ];
+                    } elseif (!$matchedRoom) {
+                        $issueDetail = [
+                            'type' => 'missing_room',
+                            'title' => 'Ruangan Belum Terdaftar',
+                            'description' => "Ruangan '" . ($row['ruang_final'] ?? '-') . "' tidak ditemukan di sistem.",
+                        ];
+                        $altRooms = $conflictService->findAlternativeRooms(
+                            $day,
+                            $startPeriod,
+                            $duration,
+                            $allRooms,
+                            $existingSchedules,
+                            $batchSlots
+                        );
+                        $recommendations = [
+                            'alternative_rooms' => $altRooms,
+                            'action_hint' => 'Pilih salah satu ruangan alternatif yang tersedia.',
+                        ];
+                    }
                 } else {
                     // Anti-collision checking: intra-batch and existing schedules
                     $hasConflict = false;
                     $isSharedRoom = ScheduleConflictService::isSharedRoom($matchedRoom);
 
-                    // 1. Check intra-batch collisions
+                    // 1. Check intra-batch collisions against all other rows in globalBatchSlots
                     for ($p = $startPeriod; $p <= $endPeriod; $p++) {
                         $slotKey = "{$day}-{$p}";
                         if (isset($batchSlots[$slotKey])) {
@@ -194,22 +373,73 @@ class ParseSchedulePdfJob implements ShouldQueue
 
                     if ($hasConflict) {
                         $matchStatus = 'conflict';
+                        $conflictInfo = $conflictService->findConflictDetailsInMemory($existingSchedules, [
+                            'teacher_id' => $matchedTeacher->id,
+                            'teacher_name' => $matchedTeacher->name,
+                            'class_id' => $matchedClass->id,
+                            'class_name' => $matchedClass->name,
+                            'room_id' => $matchedRoom->id,
+                            'room_name' => $matchedRoom->name,
+                            'cycle_type' => $import->cycle_type,
+                            'day_of_week' => $day,
+                            'period_number' => $startPeriod,
+                            'duration_periods' => $duration,
+                        ], $batchSlots);
+
+                        $issueDetail = $conflictInfo ?? [
+                            'type' => 'conflict',
+                            'title' => 'Konflik Jadwal',
+                            'description' => "Jadwal ini bertabrakan dengan jadwal lain pada hari " . ScheduleConflictService::getDayName($day) . " Jam Ke-{$startPeriod}.",
+                        ];
+
+                        $recommendations = [];
+                        if (($conflictInfo['type'] ?? '') === 'room_collision') {
+                            // Check if class has Home Room to provide document comparison option
+                            $homeRoom = $matchedClass ? ($classHomeRooms[$matchedClass->id] ?? null) : null;
+                            if ($homeRoom && (int) $homeRoom->id !== (int) $matchedRoom->id) {
+                                $diag = $conflictService->diagnoseRoomSourceConflict(
+                                    $homeRoom,
+                                    $matchedRoom,
+                                    $day,
+                                    $startPeriod,
+                                    $duration,
+                                    $existingSchedules,
+                                    $batchSlots,
+                                    'Ruang Pangkalan Rombel',
+                                    'PDF Matriks Ruang'
+                                );
+                                $recommendations['room_source_options'] = $diag;
+                                $issueDetail['data'] = $diag;
+                            }
+
+                            $altRooms = $conflictService->findAlternativeRooms(
+                                $day,
+                                $startPeriod,
+                                $duration,
+                                $allRooms,
+                                $existingSchedules,
+                                $batchSlots,
+                                $matchedRoom
+                            );
+                            $recommendations['alternative_rooms'] = $altRooms;
+                            $recommendations['action_hint'] = count($altRooms) > 0
+                                ? 'Pilih salah satu ruangan alternatif yang terbukti kosong di bawah ini.'
+                                : 'Tidak ada ruangan alternatif kosong pada jam ini. Pertimbangkan untuk memindahkan jam/hari pelajaran.';
+                        } elseif (($conflictInfo['type'] ?? '') === 'teacher_collision') {
+                            $recommendations['action_hint'] = 'Guru pengampu memiliki jadwal mengajar paralel di kelas lain pada jam yang sama. Sesuaikan jadwal guru atau ganti guru pengampu.';
+                        } elseif (($conflictInfo['type'] ?? '') === 'class_collision') {
+                            $recommendations['action_hint'] = 'Kelas ini sudah memiliki jadwal KBM lain pada jam tersebut. Sesuaikan alokasi jam pelajaran kelas.';
+                        }
                     } else {
                         $matchStatus = 'matched';
-
-                        // Register slot occupation in this batch
-                        for ($p = $startPeriod; $p <= $endPeriod; $p++) {
-                            $slotKey = "{$day}-{$p}";
-                            if (!isset($batchSlots[$slotKey])) {
-                                $batchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => []];
-                            }
-                            $batchSlots[$slotKey]['teachers'][] = $matchedTeacher->id;
-                            $batchSlots[$slotKey]['classes'][] = $matchedClass->id;
-                            if (!$isSharedRoom) {
-                                $batchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
-                            }
-                        }
                     }
+                }
+
+                if ($issueDetail) {
+                    $row['issue_detail'] = $issueDetail;
+                }
+                if ($recommendations) {
+                    $row['recommendations'] = $recommendations;
                 }
 
                 ScheduleImportRow::create([
@@ -325,76 +555,7 @@ class ParseSchedulePdfJob implements ShouldQueue
 
     protected function findRoom($rooms, ?string $roomCode): ?Room
     {
-        if (!$roomCode) return null;
-        $code = strtoupper(trim($roomCode));
-
-        // 1. Exact match
-        $match = $rooms->first(fn ($r) => strtoupper(trim($r->name)) === $code);
-        if ($match) return $match;
-
-        // 2. Numeric room (e.g. "12" -> "Ruang 12", "Ruang Teori 12", "R. 12")
-        // CRITICAL: Numeric rooms must NEVER match lab rooms (e.g. "16" must NOT match "L.16")
-        if (is_numeric($code)) {
-            $numMatch = $rooms->first(function ($r) use ($code) {
-                $rName = strtoupper(trim($r->name));
-                if (preg_match('/^(?:LAB|L\.)/i', $rName)) {
-                    return false;
-                }
-                return preg_match('/^(?:RUANG(?:\s+TEORI)?|R\.?)\s*' . preg_quote($code, '/') . '$/i', $rName)
-                    || $rName === $code;
-            });
-            if ($numMatch) return $numMatch;
-
-            // Pure numeric code with no exact/theory match must NOT fall through to substring matching
-            return null;
-        }
-
-        // 3. Lab with number (e.g. "L.16", "LAB 16" -> "Lab Komputer 16", "L.16")
-        // CRITICAL: Lab rooms must NEVER match pure numeric rooms
-        if (preg_match('/^(?:LAB\.?|L\.)\s*(\d+)$/i', $code, $m)) {
-            $num = $m[1];
-            $labMatch = $rooms->first(function ($r) use ($num) {
-                $rName = strtoupper(trim($r->name));
-                return preg_match('/^(?:LAB(?:ORATORIUM)?(?:\s+KOMPUTER)?|L\.?)\s*' . $num . '$/i', $rName);
-            });
-            if ($labMatch) return $labMatch;
-
-            // Lab code with no matching lab room must NOT fall through to match a theory room
-            return null;
-        }
-
-        // 4. Special rooms
-        if (in_array($code, ['OR', 'OR1', 'OR2', 'OR3', 'LAPANGAN'])) {
-            $orMatch = $rooms->first(fn ($r) => preg_match('/(?:OR|LAPANGAN)/i', $r->name));
-            if ($orMatch) return $orMatch;
-        }
-
-        if (in_array($code, ['L.IPA', 'LAB IPA', 'LAB.IPA'])) {
-            $ipaMatch = $rooms->first(fn ($r) => preg_match('/(?:IPA)/i', $r->name));
-            if ($ipaMatch) return $ipaMatch;
-        }
-
-        if (in_array($code, ['L.PB', 'LAB PB', 'LAB.PB'])) {
-            $pbMatch = $rooms->first(fn ($r) => preg_match('/(?:PB|PENATAAN)/i', $r->name));
-            if ($pbMatch) return $pbMatch;
-        }
-
-        if (in_array($code, ['HALL'])) {
-            $hallMatch = $rooms->first(fn ($r) => preg_match('/(?:HALL|MENARI)/i', $r->name));
-            if ($hallMatch) return $hallMatch;
-        }
-
-        // 5. Fallback substring (only for descriptive names, avoiding lab vs numeric cross-matches)
-        return $rooms->first(function ($r) use ($code) {
-            $rName = strtoupper(trim($r->name));
-            if (is_numeric($code) || is_numeric($rName)) {
-                return false;
-            }
-            if (preg_match('/^(?:LAB|L\.)/i', $code) xor preg_match('/^(?:LAB|L\.)/i', $rName)) {
-                return false;
-            }
-            return stripos($rName, $code) !== false || stripos($code, $rName) !== false;
-        });
+        return ScheduleConflictService::findRoom($rooms, $roomCode);
     }
 
     /**

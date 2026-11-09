@@ -31,6 +31,21 @@ class ScheduleImportRow extends Model
         'duration_periods' => 'integer',
     ];
 
+    protected $appends = [
+        'issue_detail',
+        'recommendations',
+    ];
+
+    public function getIssueDetailAttribute(): ?array
+    {
+        return $this->raw_data['issue_detail'] ?? null;
+    }
+
+    public function getRecommendationsAttribute(): ?array
+    {
+        return $this->raw_data['recommendations'] ?? null;
+    }
+
     public function import(): BelongsTo
     {
         return $this->belongsTo(ScheduleImport::class, 'import_id');

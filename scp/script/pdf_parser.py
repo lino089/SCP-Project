@@ -107,6 +107,24 @@ def parse_ruangan_pdf(file_path):
                         
                 if header_row_idx is None:
                     continue
+
+                # Deteksi dan sanitasi anomali header FET jenjang Kelas XI:
+                # Pola anomali: operator kurikulum menduplikasi tata letak kolom Kelas 12 (4 rombel AK + 1 rombel LPS)
+                # ke baris jenjang Kelas 11, sehingga terbaca 'XI AK 4' dan 'XI LPS' tanpa angka.
+                # Padahal struktur resmi SMK Negeri 1 Bantul untuk jenjang XI adalah 3 rombel AK (XI AK 1..3)
+                # dan 2 rombel LPS (XI LPS 1..2). Kelas XI AK 4 tidak pernah ada.
+                col_values = list(class_columns.values())
+                if "XI AK 4" in col_values and "XI LPS 1" not in col_values:
+                    for c_idx, c_name in list(class_columns.items()):
+                        if c_name == "XI AK 4":
+                            class_columns[c_idx] = "XI LPS 1"
+                        elif c_name == "XI LPS":
+                            class_columns[c_idx] = "XI LPS 2"
+                    sys.stderr.write(
+                        "[PENYELARASAN HEADER FET] Terdeteksi anomali duplikasi tata letak Kelas XII pada kolom jenjang XI: "
+                        "kolom '11 AK4' diselaraskan ke alokasi ruang 'XI LPS 1' dan '11 LPS' ke 'XI LPS 2' "
+                        "(menjaga kemurnian kelas Akuntansi XI AK 1..3 tetap utuh tanpa rombel hantu XI AK 4).\n"
+                    )
                     
                 current_day = None
                 for row in table[header_row_idx + 1:]:
@@ -223,14 +241,13 @@ def finalize_schedule(entry, norm_class, day_name, day_of_week, start_period, du
     room_jadwal = room_lookup.get((norm_class, day_of_week, start_period))
     room_kelas = entry["room_kelas"]
     
-    room_final = room_jadwal or room_kelas
+    norm_j = normalize_room_code(room_jadwal) if room_jadwal else None
+    norm_k = normalize_room_code(room_kelas) if room_kelas else None
+    room_final = norm_j or norm_k
     room_conflict = False
     
-    if room_kelas and room_jadwal:
-        norm_k = normalize_room_code(room_kelas)
-        norm_j = normalize_room_code(room_jadwal)
-        if norm_k != norm_j:
-            room_conflict = True
+    if norm_k and norm_j and norm_k != norm_j:
+        room_conflict = True
             
     schedules.append({
         "kelas_mentah": norm_class,
