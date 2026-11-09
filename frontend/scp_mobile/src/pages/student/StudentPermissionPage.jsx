@@ -1,7 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Calendar,
-  Clock,
   FileText,
   Trash2,
   Edit2,
@@ -23,11 +21,12 @@ import {
   Button,
   Input,
   Select,
-  Badge,
   BottomSheetModal,
-  Card,
   ConfirmSheet,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
+import { EmptyState } from '../../components/feedback';
 
 /**
  * LeaveFormFields — satu sumber markup untuk form pengajuan & edit izin (D-5).
@@ -221,6 +220,10 @@ export default function StudentPermissionPage() {
   // Doc preview fallback state
   const [docLoadError, setDocLoadError] = useState(false);
   const [docSourceUrl, setDocSourceUrl] = useState('');
+
+  // Pagination tabel
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -490,6 +493,12 @@ export default function StudentPermissionPage() {
     return ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
   }, [previewDoc]);
 
+  // Data tabel (client-side pagination)
+  const totalItems = leaveRequests.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = leaveRequests.slice((safePage - 1) * perPage, safePage * perPage);
+
   return (
     <div className="space-y-4">
       {/* Toast Notification */}
@@ -586,126 +595,116 @@ export default function StudentPermissionPage() {
           Riwayat Pengajuan Perizinan
         </h2>
 
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-24 bg-[var(--color-surface-subtle)] rounded-[14px] animate-pulse border border-[var(--color-border-subtle)]/60"
-              />
-            ))}
-          </div>
-        ) : leaveRequests.length === 0 ? (
-          <Card className="p-8 text-center bg-[var(--color-surface)] border border-dashed border-[var(--color-border-subtle)]">
-            <Calendar className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
-            <p className="text-xs font-semibold text-[var(--color-text-primary)]">Belum ada riwayat perizinan</p>
-            <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-              Klik tombol &ldquo;Ajukan Izin&rdquo; di atas untuk mengajukan izin ketidakhadiran baru.
-            </p>
-          </Card>
-        ) : (
-          leaveRequests.map((item) => {
+        <DataTable
+          columns={[
+            { key: 'no', label: '#', width: 28, align: 'center' },
+            { key: 'type', label: 'Izin / Tanggal' },
+            { key: 'actions', label: 'Aksi', width: 116, align: 'right' },
+          ]}
+          rows={pagedList}
+          isLoading={isLoading}
+          skeletonRows={Math.min(perPage, 6)}
+          ariaLabel="Riwayat pengajuan perizinan siswa"
+          empty={
+            <EmptyState
+              title="Belum Ada Riwayat Perizinan"
+              message="Klik tombol “Ajukan Izin” di atas untuk mengajukan izin ketidakhadiran baru."
+            />
+          }
+          renderRow={(item, index) => {
             const statusKey = (item.status_approval || item.status || '').toLowerCase();
             const isPending = statusKey === 'pending';
             const isApproved = statusKey === 'approved' || statusKey === 'disetujui';
+            const hasDoc = Boolean(item.document_path || item.document_url);
+
+            const dateRange =
+              item.type === 'tidak_masuk'
+                ? item.start_date === item.end_date
+                  ? item.start_date
+                  : `${item.start_date} s/d ${item.end_date}`
+                : item.start_date || item.date;
+
+            const timeRange =
+              item.type === 'keluar_sekolah' && item.departure_time
+                ? `${item.departure_time.slice(0, 5)}-${item.expected_return_time?.slice(0, 5)} WIB`
+                : null;
 
             return (
-              <div
-                key={item.id}
-                className="surface-card p-3.5 space-y-2.5"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-xs text-[var(--color-text-primary)]">
-                        {item.type === 'tidak_masuk'
-                          ? 'Tidak Masuk Sekolah'
-                          : 'Dispensasi Keluar Sekolah'}
-                      </span>
-                      <Badge
-                        variant={item.category === 'sakit' ? 'info' : 'outline'}
-                        className="text-[11px] capitalize px-1.5 py-0"
-                      >
-                        {item.category}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] mt-1 font-mono">
-                      <Calendar className="w-3 h-3 text-[var(--color-text-muted)]" />
-                      <span>
-                        {item.type === 'tidak_masuk'
-                          ? item.start_date === item.end_date
-                            ? item.start_date
-                            : `${item.start_date} s/d ${item.end_date}`
-                          : item.start_date || item.date}
-                      </span>
-                      {item.type === 'keluar_sekolah' && item.departure_time && (
-                        <>
-                          <span>•</span>
-                          <Clock className="w-3 h-3 text-[var(--color-text-muted)]" />
-                          <span>
-                            {item.departure_time?.slice(0, 5)} - {item.expected_return_time?.slice(0, 5)} WIB
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <Badge
-                    variant={isApproved ? 'success' : isPending ? 'warning' : 'error'}
-                    className="shrink-0 text-[11px]"
+              <tr key={item.id}>
+                <td className="data-table__no">
+                  {String((safePage - 1) * perPage + index + 1).padStart(2, '0')}
+                </td>
+                <td>
+                  <span
+                    className={`badge badge--${
+                      isApproved ? 'success' : isPending ? 'warning' : 'error'
+                    } badge--sm`}
                   >
                     {isApproved ? 'Disetujui' : isPending ? 'Menunggu' : 'Ditolak'}
-                  </Badge>
-                </div>
-
-                {/* Notes or Verification Remarks */}
-                {item.notes && (
-                  <p className="text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-bg-app)] border border-[var(--color-border-subtle)]/60 rounded-[10px] p-2">
-                    <span className="font-semibold text-[var(--color-text-primary)]">Catatan:</span> {item.notes}
-                  </p>
-                )}
-
-                {/* Bottom Actions */}
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--color-border-light)] text-xs">
-                  <div>
-                    {(item.document_path || item.document_url) && (
+                  </span>
+                  <span className="data-table__cell-title">
+                    {item.type === 'tidak_masuk'
+                      ? 'Tidak Masuk Sekolah'
+                      : 'Dispensasi Keluar Sekolah'}
+                  </span>
+                  <span className="data-table__cell-meta">
+                    {dateRange}
+                    {timeRange ? ` · ${timeRange}` : ''}
+                    {item.category ? ` · ${item.category}` : ''}
+                  </span>
+                  {item.notes && (
+                    <span className="data-table__cell-sub">Catatan: {item.notes}</span>
+                  )}
+                </td>
+                <td>
+                  <div className="data-table__actions">
+                    {hasDoc && (
                       <button
+                        type="button"
                         onClick={() => handleOpenDocPreview(item)}
-                        className="text-[11px] font-semibold text-[var(--color-info-fg)] hover:text-[var(--color-info-fg)] flex items-center gap-1"
+                        className="data-table__action"
+                        aria-label="Lihat Berkas Bukti"
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                        Lihat Berkas Bukti
+                        <Eye size={13} />
                       </button>
                     )}
+                    {isPending && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(item)}
+                          className="data-table__action"
+                          aria-label="Edit Perizinan"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmItem(item)}
+                          className="data-table__action data-table__action--danger"
+                          aria-label="Batalkan Perizinan"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
-
-                  {isPending && (
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenEdit(item)}
-                        className="text-[11px] px-2 py-1 h-7 border-[var(--color-border-subtle)]"
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDeleteConfirmItem(item)}
-                        className="text-[11px] px-2 py-1 h-7 text-[var(--color-danger-fg)] hover:bg-[var(--color-danger-bg)]"
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Batalkan
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                </td>
+              </tr>
             );
-          })
-        )}
+          }}
+          footer={
+            <PaginationBar
+              currentPage={safePage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+              disabled={isLoading}
+            />
+          }
+        />
       </div>
 
       {/* Modal Ajukan Izin Baru */}

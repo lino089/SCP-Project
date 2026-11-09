@@ -55,3 +55,37 @@
   min-width: 52px;
   text-align: center;
 }
+
+.pagination-bar__num {
+  font-family: var(--font-family-mono);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Pemilih jumlah baris per halaman */
+.pagination-bar__perpage select {
+  height: 28px;
+  padding: 0 22px 0 8px;
+  font-family: var(--font-family-mono);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+}
+
+.pagination-bar__perpage select:disabled {
+  opacity: 0.5;
+}
+
+/* Saat menempel di footer DataTable */
+.data-table__footer .pagination-bar {
+  border: 0;
+  border-radius: 0;
+  padding: 8px 10px;
+}

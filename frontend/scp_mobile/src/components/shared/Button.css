@@ -1,5 +1,5 @@
 /* ============================================================
- * Button — premium fintech (blue action, yellow brand reserved)
+ * Button — SCP (primary = yellow/black, secondary/outline quiet)
  * Sizes: sm 36 / md 44 / lg 48 · Radius: 10px
  * ============================================================ */
 
@@ -23,7 +23,7 @@
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--color-action);
+  outline: 2px solid var(--color-text-primary);
   outline-offset: 2px;
 }
 
@@ -66,17 +66,21 @@
   padding: 0;
 }
 
-/* Primary — action blue */
+/* Primary — SCP yellow (sama dengan website; teks hitam) */
 .btn--primary {
-  background-color: var(--color-action);
-  color: var(--color-action-text);
-  border-color: var(--color-action);
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  border-color: var(--btn-primary-border);
 }
 
-.btn--primary:hover:not(:disabled),
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--btn-primary-hover);
+  border-color: var(--btn-primary-hover);
+}
+
 .btn--primary:active:not(:disabled) {
-  background-color: var(--color-action-hover);
-  border-color: var(--color-action-hover);
+  background-color: var(--btn-primary-press);
+  border-color: var(--btn-primary-press);
 }
 
 /* Secondary — quiet surface button */

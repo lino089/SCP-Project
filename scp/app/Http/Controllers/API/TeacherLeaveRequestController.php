@@ -166,16 +166,11 @@ class TeacherLeaveRequestController extends Controller
         if ($isOwner || $isWaka) {
             $hasAccess = true;
         } elseif ($leaveRequest->approved_by !== null && (int) $leaveRequest->approved_by === (int) $user->id) {
-            // Keputusan 1 Opsi A: Pernah disetujui / diproses sendiri oleh user ini (termasuk jika tugas kesiswaan sudah berakhir)
+            // Keputusan 1 Opsi A: Pernah disetujui / diproses sendiri oleh user ini
             $hasAccess = true;
         } elseif ($isKesiswaan) {
-            // Jika pemohon adalah sesama guru kesiswaan aktif, wewenang eksklusif Waka (anti-peer-approval)
-            if ($leaveRequest->teacher && $leaveRequest->teacher->isKesiswaan()) {
-                $hasAccess = false;
-            } else {
-                // Periksa apakah user memiliki wewenang atas izin ini via resolver
-                $hasAccess = $this->authorityResolver->canUserApprove($user, $leaveRequest);
-            }
+            // Guru Kesiswaan dapat melihat izin guru reguler, walas, maupun sesama kesiswaan
+            $hasAccess = $this->authorityResolver->canUserApprove($user, $leaveRequest);
         }
 
         if (!$hasAccess) {
@@ -325,8 +320,9 @@ class TeacherLeaveRequestController extends Controller
     }
 
     /**
-     * Menyetujui perizinan guru (hanya Kesiswaan yang membina kelas terkait atau Waka Kurikulum).
+     * Menyetujui perizinan guru (Khusus Tim Kesiswaan/BK).
      * Menerapkan prinsip First-Responder atomik dengan pessimistic row locking.
+     * Sesuai aturan bisnis: Setelah menyetujui, sesi KBM otomatis dibebankan ke user Kesiswaan tersebut sebagai Guru Pengganti.
      * PATCH /api/teacher-leave-requests/{id}/approve
      */
     public function approve(Request $request, $id): JsonResponse
@@ -343,7 +339,7 @@ class TeacherLeaveRequestController extends Controller
             ], 403);
         }
 
-        return DB::transaction(function () use ($user, $id) {
+        return DB::transaction(function () use ($user, $id, $isKesiswaan) {
             $leave = TeacherLeaveRequest::where('id', $id)->lockForUpdate()->firstOrFail();
 
             if ($leave->status !== 'pending') {
@@ -361,18 +357,11 @@ class TeacherLeaveRequestController extends Controller
                 ], 403);
             }
 
-            // Validasi Otoritas Dinamis (Scoped BK, Eskalasi Kesiswaan, Fallback Waka)
+            // Validasi Otoritas Dinamis
             if (!$this->authorityResolver->canUserApprove($user, $leave)) {
-                if ($leave->teacher && $leave->teacher->isKesiswaan()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Akses ditolak. Permohonan izin dari Tim Kesiswaan hanya dapat diproses oleh Waka Kurikulum.',
-                    ], 403);
-                }
-
                 return response()->json([
                     'success' => false,
-                    'message' => 'Akses ditolak. Anda tidak memiliki wewenang untuk memverifikasi perizinan pada kelas yang bersangkutan.',
+                    'message' => 'Akses ditolak. Anda tidak memiliki wewenang untuk memverifikasi perizinan ini.',
                 ], 403);
             }
 
@@ -381,6 +370,24 @@ class TeacherLeaveRequestController extends Controller
                 'approved_by' => $user->id,
                 'verified_at' => Carbon::now('Asia/Jakarta'),
             ]);
+
+            // Otomatisasi Pembebanan Jurnal Pengganti:
+            // Sesi mengajar yang ditinggalkan langsung dibebankan ke Guru Kesiswaan yang menyetujui
+            if ($isKesiswaan && !empty($leave->schedule_ids) && is_array($leave->schedule_ids)) {
+                $targetDateStr = Carbon::parse($leave->date)->toDateString();
+                foreach ($leave->schedule_ids as $schedId) {
+                    \App\Models\Journal::updateOrCreate(
+                        [
+                            'schedule_id' => (int) $schedId,
+                            'date' => $targetDateStr,
+                        ],
+                        [
+                            'substitute_teacher_id' => $user->id,
+                            'status' => 'ongoing',
+                        ]
+                    );
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -394,7 +401,7 @@ class TeacherLeaveRequestController extends Controller
     }
 
     /**
-     * Menolak perizinan guru (hanya Kesiswaan yang membina kelas terkait atau Waka Kurikulum).
+     * Menolak perizinan guru (Khusus Tim Kesiswaan/BK atau Waka).
      * Menerapkan prinsip First-Responder atomik dengan pessimistic row locking.
      * PATCH /api/teacher-leave-requests/{id}/reject
      */
@@ -430,18 +437,11 @@ class TeacherLeaveRequestController extends Controller
                 ], 403);
             }
 
-            // Validasi Otoritas Dinamis (Scoped BK, Eskalasi Kesiswaan, Fallback Waka)
+            // Validasi Otoritas Dinamis
             if (!$this->authorityResolver->canUserApprove($user, $leave)) {
-                if ($leave->teacher && $leave->teacher->isKesiswaan()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Akses ditolak. Permohonan izin dari Tim Kesiswaan hanya dapat diproses oleh Waka Kurikulum.',
-                    ], 403);
-                }
-
                 return response()->json([
                     'success' => false,
-                    'message' => 'Akses ditolak. Anda tidak memiliki wewenang untuk memverifikasi perizinan pada kelas yang bersangkutan.',
+                    'message' => 'Akses ditolak. Anda tidak memiliki wewenang untuk memverifikasi perizinan ini.',
                 ], 403);
             }
 

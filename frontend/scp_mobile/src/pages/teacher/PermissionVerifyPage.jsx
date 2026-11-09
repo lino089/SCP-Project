@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
-import { Badge, Button, Modal } from '../../components/shared';
+import { Button, Modal, DataTable, PaginationBar } from '../../components/shared';
 import { SkeletonCard, EmptyState, ErrorState, ForbiddenState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
 
@@ -32,6 +32,15 @@ export default function PermissionVerifyPage() {
 
   // Main Category Tab: 'students' | 'teachers'
   const [activeCategory, setActiveCategory] = useState('students');
+
+  // Pagination tabel
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+
+  // Kembali ke halaman 1 saat filter berubah (dipasang sebelum early-return agar urutan hook stabil)
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, activeCategory, perPage]);
 
   // Status Filter: 'pending' | 'approved' | 'rejected'
   const [statusFilter, setStatusFilter] = useState('pending');
@@ -189,6 +198,12 @@ export default function PermissionVerifyPage() {
 
   const currentList = activeCategory === 'students' ? studentLeaves : teacherLeaves;
 
+  const totalItems = currentList.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = currentList.slice((safePage - 1) * perPage, safePage * perPage);
+
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -280,26 +295,32 @@ export default function PermissionVerifyPage() {
         ))}
       </div>
 
-      {/* List Items */}
+      {/* Daftar permohonan — tabel + pagination */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="section-label">
-            Daftar Permohonan ({currentList.length})
-          </span>
+          <span className="section-label">Daftar Permohonan ({totalItems})</span>
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : loadError ? (
+        {loadError ? (
           <ErrorState message={loadError} onRetry={handleRefresh} />
-        ) : currentList.length === 0 ? (
-          <EmptyState
-            title="Tidak Ada Data"
-            message={`Tidak ada perizinan berstatus ${statusFilter} saat ini.`}
-          />
         ) : (
-          <div className="space-y-2">
-            {currentList.map((item) => {
+          <DataTable
+            columns={[
+              { key: 'no', label: '#', width: 30, align: 'center' },
+              { key: 'name', label: 'Pemohon / Izin' },
+              { key: 'actions', label: 'Aksi', width: 96, align: 'right' },
+            ]}
+            rows={pagedList}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel="Daftar permohonan izin"
+            empty={
+              <EmptyState
+                title="Tidak Ada Data"
+                message={`Tidak ada perizinan berstatus ${statusFilter} saat ini.`}
+              />
+            }
+            renderRow={(item, index) => {
               const isStudent = activeCategory === 'students';
               const name = isStudent ? item.student?.name || 'Siswa' : item.teacher?.name || 'Guru';
               const roleInfo = isStudent
@@ -310,85 +331,82 @@ export default function PermissionVerifyPage() {
               const isBusy = processingId === item.id;
 
               return (
-                <div
-                  key={item.id}
-                  className="surface-card p-3 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="neutral" size="sm">
-                          {roleInfo}
-                        </Badge>
-                        <Badge variant="warning" size="sm">
-                          {item.type || 'Izin'}
-                        </Badge>
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] font-bold bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px]">
-                          {formatDateIndo(item.date || item.start_date)}
-                        </span>
-                      </div>
-
-                      <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">{name}</h3>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">
-                        Alasan: {item.reason || item.description || '-'}
-                      </p>
-
-                      {item.task_instruction && (
-                        <p className="text-[11px] text-[var(--color-warning-fg)] font-semibold mt-1">
-                          Tugas: "{item.task_instruction}"
-                        </p>
+                <tr key={item.id}>
+                  <td className="data-table__no">
+                    {String((page - 1) * perPage + index + 1).padStart(2, '0')}
+                  </td>
+                  <td>
+                    <span className="data-table__cell-title">{name}</span>
+                    <span className="data-table__cell-meta">
+                      {roleInfo} · {item.type || 'Izin'} ·{' '}
+                      {formatDateIndo(item.date || item.start_date)}
+                    </span>
+                    <span className="data-table__cell-sub">
+                      {item.reason || item.description || '-'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
+                      {docUrl && (
+                        <button
+                          type="button"
+                          className="data-table__action"
+                          onClick={() => setPreviewDocUrl(getStorageUrl(docUrl))}
+                          aria-label="Lihat bukti"
+                        >
+                          <Eye size={13} />
+                        </button>
+                      )}
+                      {isActionable && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              isStudent ? setRejectModalItem(item) : handleRejectTeacher(item.id)
+                            }
+                            className="data-table__action data-table__action--danger"
+                            aria-label="Tolak"
+                          >
+                            <X size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              isStudent
+                                ? handleApproveStudent(item.id)
+                                : handleApproveTeacher(item.id)
+                            }
+                            className="data-table__action"
+                            style={{
+                              backgroundColor: 'var(--color-success-bg)',
+                              borderColor: 'var(--color-success-border)',
+                              color: 'var(--color-success-fg)',
+                            }}
+                            aria-label="Setujui"
+                          >
+                            <Check size={13} />
+                          </button>
+                        </>
                       )}
                     </div>
-
-                    {/* Document Preview Trigger */}
-                    {docUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewDocUrl(getStorageUrl(docUrl))}
-                        className="p-1.5 bg-[var(--color-info-bg)] text-[var(--color-info-fg)] rounded-[10px] hover:bg-[var(--color-info-bg)] shrink-0"
-                        aria-label="Lihat Bukti"
-                      >
-                        <Eye size={15} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Verification Actions (Kesiswaan / Waka) */}
-                  {isActionable && (
-                    <div className="pt-2 border-t border-[var(--color-border-light)] flex gap-2">
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          isStudent
-                            ? setRejectModalItem(item)
-                            : handleRejectTeacher(item.id)
-                        }
-                        className="flex-1 py-1.5 rounded-[10px] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger-fg)] text-xs font-bold hover:bg-[var(--color-danger-bg)] transition-all flex items-center justify-center gap-1"
-                      >
-                        <X size={14} />
-                        Tolak
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          isStudent
-                            ? handleApproveStudent(item.id)
-                            : handleApproveTeacher(item.id)
-                        }
-                        className="flex-1 py-1.5 rounded-[10px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-1 shadow-[var(--shadow-card)]"
-                      >
-                        <Check size={14} />
-                        Setujui
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  </td>
+                </tr>
               );
-            })}
-          </div>
+            }}
+            footer={
+              <PaginationBar
+                currentPage={safePage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

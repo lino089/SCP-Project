@@ -171,8 +171,14 @@ class ScheduleController extends Controller
                 $query->where('class_id', $request->integer('class_id'));
             } else {
                 // Guru biasa, ATAU Wali Kelas tanpa filter class_id, ATAU meminta kelas lain di luar binaannya:
-                // Wajib dikunci hanya jadwal mengajar pribadinya
-                $query->where('teacher_id', $user->id);
+                // Kunci jadwal mengajar pribadinya ATAU jadwal yang digantikannya (inval) pada tanggal tersebut
+                $query->where(function ($q) use ($user, $targetDateStr) {
+                    $q->where('teacher_id', $user->id)
+                      ->orWhereHas('journals', function ($jq) use ($user, $targetDateStr) {
+                          $jq->where('substitute_teacher_id', $user->id)
+                             ->whereDate('date', $targetDateStr);
+                      });
+                });
 
                 if ($request->filled('class_id')) {
                     $query->where('class_id', $request->integer('class_id'));
@@ -217,7 +223,7 @@ class ScheduleController extends Controller
         $config = SystemConfiguration::first();
         $mondayIsUpacara = $config ? (bool) $config->monday_is_upacara : true;
 
-        $mapScheduleItem = function ($schedule) use ($referenceDate, $mondayIsUpacara) {
+        $mapScheduleItem = function ($schedule) use ($referenceDate, $mondayIsUpacara, $user) {
             // Resolusi tanggal jadwal dalam minggu referenceDate
             $startOfWeek = $referenceDate->copy()->startOfWeek(Carbon::MONDAY);
             $scheduleDate = $startOfWeek->copy()->addDays(max(0, ((int) $schedule->day_of_week) - 1));
@@ -227,6 +233,21 @@ class ScheduleController extends Controller
             $todayJournal = $schedule->journals?->first();
             $scheduleArray['journal_status'] = $todayJournal ? $todayJournal->status : 'not_started';
             $scheduleArray['journal_id'] = $todayJournal ? $todayJournal->id : null;
+            $scheduleArray['substitute_teacher_id'] = $todayJournal?->substitute_teacher_id;
+            $scheduleArray['is_substitute'] = ($user->role === 'teacher' && (int)$todayJournal?->substitute_teacher_id === (int)$user->id && (int)$schedule->teacher_id !== (int)$user->id);
+            $scheduleArray['original_teacher_name'] = $schedule->teacher?->name;
+
+            if ($scheduleArray['is_substitute']) {
+                $targetDateStr = $scheduleDate->toDateString();
+                $leaveRequest = \App\Models\TeacherLeaveRequest::where('teacher_id', $schedule->teacher_id)
+                    ->whereDate('date', $targetDateStr)
+                    ->where('status', 'approved')
+                    ->first();
+                if ($leaveRequest) {
+                    $scheduleArray['leave_task_instruction'] = $leaveRequest->task_instruction;
+                    $scheduleArray['leave_task_attachment_path'] = $leaveRequest->task_attachment_path;
+                }
+            }
 
             // Deteksi status pengecualian dari kalender akademik
             $classLevel = $schedule->schoolClass?->level;

@@ -78,15 +78,30 @@ export default function MonitoringRecapPage() {
   }, [hasRole, isKesiswaan, isWaliKelas]);
 
   // Load Data saat Mount dari API riil (P-12: allSettled + P-14: signal guard)
-  const loadInitialData = useCallback(async (signal) => {
+  const loadInitialData = useCallback(async (abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     setIsLoading(true);
     setLoadError(null);
     try {
+      const config = validSignal ? { signal: validSignal } : {};
       const [attRes, jourRes, clsRes] = await Promise.allSettled([
-        leaveApi.getAttendances({ per_page: 100 }, { signal }),
-        journalApi.getJournals({ per_page: 100 }, { signal }),
-        classApi.getClasses({ per_page: 50 }, { signal }),
+        leaveApi.getAttendances({ per_page: 100 }, config),
+        journalApi.getJournals({ per_page: 100 }, config),
+        classApi.getClasses({ per_page: 50 }, config),
       ]);
+
+      if (validSignal?.aborted) return;
+
+      const isCanceled = (res) =>
+        res.status === 'rejected' &&
+        (res.reason?.name === 'CanceledError' || res.reason?.code === 'ERR_CANCELED');
+
+      // Jika dibatalkan oleh AbortSignal, abaikan dan jangan set error
+      if (isCanceled(attRes) || isCanceled(jourRes)) {
+        return;
+      }
 
       let hasData = false;
       const failed = [];
@@ -96,6 +111,7 @@ export default function MonitoringRecapPage() {
         setAttendances(attList);
         hasData = true;
       } else {
+        console.warn('Gagal memuat presensi:', attRes.reason);
         failed.push('presensi');
       }
 
@@ -104,6 +120,7 @@ export default function MonitoringRecapPage() {
         setJournals(jourList);
         hasData = true;
       } else {
+        console.warn('Gagal memuat jurnal:', jourRes.reason);
         failed.push('jurnal');
       }
 
@@ -120,7 +137,9 @@ export default function MonitoringRecapPage() {
       console.warn('Gagal memuat data monitoring rekap:', err);
       setLoadError(err.message || 'Gagal memuat rekap presensi dan jurnal dari server.');
     } finally {
-      setIsLoading(false);
+      if (!validSignal?.aborted) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -131,13 +150,16 @@ export default function MonitoringRecapPage() {
   }, [loadInitialData]);
 
   // Muat data rekap harian KBM jika tanggal jurnal dipilih (P-9: W-3 fix + P-14: signal guard)
-  const fetchDailyRecap = useCallback(async (dateStr, signal) => {
-    if (!dateStr) {
+  const fetchDailyRecap = useCallback(async (dateStr, abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (!dateStr || validSignal?.aborted) {
       setDailyRecapData(null);
       return;
     }
     try {
-      const res = await journalApi.getDailyRecap({ date: dateStr }, { signal });
+      const config = validSignal ? { signal: validSignal } : {};
+      const res = await journalApi.getDailyRecap({ date: dateStr }, config);
+      if (validSignal?.aborted) return;
       const recap = unwrap(res);
       if (recap) {
         setDailyRecapData(recap);
@@ -680,7 +702,7 @@ export default function MonitoringRecapPage() {
             <AlertCircle style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }} />
             <span>{loadError}</span>
           </div>
-          <Button size="sm" variant="outline" onClick={loadInitialData}>
+          <Button size="sm" variant="outline" onClick={() => loadInitialData()}>
             <RotateCw className="w-3.5 h-3.5 mr-1" />
             Coba Lagi
           </Button>

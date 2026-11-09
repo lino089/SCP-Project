@@ -7,13 +7,12 @@ import {
 } from 'lucide-react';
 import {
   Button,
-  Badge,
   SearchInput,
   Select,
   PasswordSheet,
 } from '../../components/shared';
 import { classApi, studentApi } from '../../services/masterDataApi';
-import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
+import { EmptyState, ErrorState } from '../../components/feedback';
 
 export default function GradePromotionPage() {
   const [classList, setClassList] = useState([]);
@@ -23,6 +22,10 @@ export default function GradePromotionPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [levelFilter, setLevelFilter] = useState('ALL');
   const [classFilter, setClassFilter] = useState('ALL');
 
@@ -173,6 +176,18 @@ export default function GradePromotionPage() {
     });
   }, [studentList, levelFilter, classFilter, searchQuery]);
 
+  // Pagination tabel (client-side; data sudah lengkap untuk statistik)
+  const totalItems = filteredStudents.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const pagedStudents = useMemo(
+    () => filteredStudents.slice((page - 1) * perPage, page * perPage),
+    [filteredStudents, page, perPage]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [levelFilter, classFilter, searchQuery, perPage]);
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -280,96 +295,88 @@ export default function GradePromotionPage() {
         <SearchInput
           placeholder="Cari siswa atau NISN..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(value) => setSearchQuery(value)}
         />
       </div>
 
-      {/* Students List */}
+      {/* Daftar siswa — tabel + pagination */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="section-label">
-            Daftar Siswa ({filteredStudents.length})
-          </span>
+          <span className="section-label">Daftar Siswa ({totalItems})</span>
           {stats.heldBack > 0 && (
-            <Badge variant="danger" size="sm">
-              {stats.heldBack} Tinggal Kelas
-            </Badge>
+            <span className="badge badge--error badge--sm">{stats.heldBack} Tinggal Kelas</span>
           )}
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : fetchError ? (
+        {fetchError ? (
           <ErrorState message={fetchError} onRetry={handleRefresh} />
-        ) : filteredStudents.length === 0 ? (
-          <EmptyState
-            title="Tidak Ada Siswa"
-            message="Tidak ada siswa yang sesuai dengan filter yang dipilih."
-          />
         ) : (
-          <div className="space-y-2">
-            {filteredStudents.map((student) => {
+          <DataTable
+            columns={[
+              { key: 'no', label: '#', width: 30, align: 'center' },
+              { key: 'name', label: 'Nama / Rombel' },
+              { key: 'actions', label: 'Aksi', width: 78, align: 'right' },
+            ]}
+            rows={pagedStudents}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel="Daftar siswa kenaikan kelas"
+            empty={
+              <EmptyState
+                title="Tidak Ada Siswa"
+                message="Tidak ada siswa yang sesuai dengan filter yang dipilih."
+              />
+            }
+            renderRow={(student, index) => {
               const isHeld = Boolean(student.is_held_back);
               const isGrade12 = Number(student.school_class?.level) === 12;
               const isProcessing = holdingBackId === student.id;
 
               return (
-                <div
-                  key={student.id}
-                  className={`bg-[var(--color-surface)] border rounded-[14px] p-3 shadow-[var(--shadow-card)] space-y-2 transition-all ${
-                    isHeld ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)]/40' : 'border-[var(--color-border-subtle)]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="neutral" size="sm">
-                          {student.school_class?.name || 'Rombel'}
-                        </Badge>
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px]">
-                          NIS: {student.nis_nip || '-'}
+                <tr key={student.id}>
+                  <td className="data-table__no">
+                    {String((page - 1) * perPage + index + 1).padStart(2, '0')}
+                  </td>
+                  <td>
+                    <span className="data-table__cell-title">{student.name}</span>
+                    <span className="data-table__cell-meta">
+                      {student.nis_nip || '-'} · {student.school_class?.name || 'Tanpa rombel'}
+                    </span>
+                    <span className="data-table__cell-sub">
+                      {isHeld ? 'Tinggal Kelas' : isGrade12 ? 'Siap Lulus' : 'Siap Naik Kelas'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleHoldBack(student)}
+                        disabled={isProcessing}
+                        title={isHeld ? 'Batal tinggal kelas' : 'Tandai tinggal kelas'}
+                        className={`data-table__action ${isHeld ? 'data-table__action--danger' : ''}`}
+                        aria-label={isHeld ? 'Batal tinggal kelas' : 'Tandai tinggal kelas'}
+                      >
+                        <span style={{ fontSize: 10, fontWeight: 700 }}>
+                          {isProcessing ? '…' : isHeld ? 'Batal' : 'Tahan'}
                         </span>
-                        {isHeld ? (
-                          <Badge variant="danger" size="sm">
-                            Tinggal Kelas
-                          </Badge>
-                        ) : isGrade12 ? (
-                          <Badge variant="purple" size="sm">
-                            Siap Lulus
-                          </Badge>
-                        ) : (
-                          <Badge variant="success" size="sm">
-                            Siap Naik Kelas
-                          </Badge>
-                        )}
-                      </div>
-
-                      <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                        {student.name}
-                      </h3>
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleToggleHoldBack(student)}
-                      disabled={isProcessing}
-                      className={`px-2.5 py-1 rounded-[10px] text-[11px] font-semibold transition-all shrink-0 ${
-                        isHeld
-                          ? 'bg-[var(--color-danger-bg)] text-[var(--color-danger-fg)] hover:bg-rose-200'
-                          : 'bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-subtle)]'
-                      }`}
-                    >
-                      {isProcessing
-                        ? 'Memproses...'
-                        : isHeld
-                        ? 'Batal Tinggal Kelas'
-                        : 'Tandai Tinggal Kelas'}
-                    </button>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               );
-            })}
-          </div>
+            }}
+            footer={
+              <PaginationBar
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

@@ -9,12 +9,13 @@ import {
 } from 'lucide-react';
 import {
   Button,
-  Badge,
   Modal,
   Input,
   Select,
   PasswordSheet,
   SearchInput,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
@@ -25,7 +26,7 @@ import {
   resolveSlotTime,
   detectScheduleConflicts,
 } from '../../utils/timetableHelper';
-import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
+import { EmptyState, ErrorState } from '../../components/feedback';
 
 export default function ScheduleManagementPage() {
   const [activeCycle, setActiveCycle] = useState(1);
@@ -47,6 +48,10 @@ export default function ScheduleManagementPage() {
   const [selectedDay, setSelectedDay] = useState('Senin');
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination (client-side, data per hari sudah difilter lokal)
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
@@ -311,6 +316,18 @@ export default function ScheduleManagementPage() {
     }
   };
 
+  // Halaman tabel jadwal
+  const totalItems = filteredSchedules.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const pagedSchedules = useMemo(
+    () => filteredSchedules.slice((page - 1) * perPage, page * perPage),
+    [filteredSchedules, page, perPage]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedDay, selectedClassId, searchQuery, perPage]);
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -417,7 +434,7 @@ export default function ScheduleManagementPage() {
         <SearchInput
           placeholder="Cari guru / mapel..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(value) => setSearchQuery(value)}
         />
       </div>
 
@@ -431,11 +448,11 @@ export default function ScheduleManagementPage() {
         Tambah Slot Jadwal Baru
       </Button>
 
-      {/* Schedule Items List */}
+      {/* Jadwal hari terpilih — tabel + pagination */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="section-label">
-            Jadwal Hari {selectedDay} ({filteredSchedules.length} Slot)
+            Jadwal Hari {selectedDay} ({totalItems} Slot)
           </span>
           <Button
             size="sm"
@@ -448,18 +465,26 @@ export default function ScheduleManagementPage() {
           </Button>
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : loadError ? (
+        {loadError ? (
           <ErrorState message={loadError} onRetry={handleRefresh} />
-        ) : filteredSchedules.length === 0 ? (
-          <EmptyState
-            title="Tidak Ada Jadwal"
-            message={`Belum ada jadwal yang terdaftar untuk hari ${selectedDay} pada Siklus ${selectedCycle}.`}
-          />
         ) : (
-          <div className="space-y-2">
-            {filteredSchedules.map((s) => {
+          <DataTable
+            columns={[
+              { key: 'jp', label: 'JP', width: 46, align: 'center' },
+              { key: 'subject', label: 'Mapel / Kelas' },
+              { key: 'actions', label: 'Aksi', width: 74, align: 'right' },
+            ]}
+            rows={pagedSchedules}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel={`Jadwal hari ${selectedDay}`}
+            empty={
+              <EmptyState
+                title="Tidak Ada Jadwal"
+                message={`Belum ada jadwal yang terdaftar untuk hari ${selectedDay} pada Siklus ${selectedCycle}.`}
+              />
+            }
+            renderRow={(s) => {
               const timeSlot = resolveSlotTime(
                 s.day_of_week,
                 s.period_number,
@@ -467,60 +492,62 @@ export default function ScheduleManagementPage() {
                 mondayIsUpacara,
                 periodTemplates
               );
+              const jpLabel =
+                s.duration_periods > 1
+                  ? `${s.period_number}–${s.period_number + s.duration_periods - 1}`
+                  : `${s.period_number}`;
 
               return (
-                <div
-                  key={s.id}
-                  className="surface-card p-3 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="warning" size="sm">
-                          Jam Ke-{s.period_number} ({s.duration_periods} JP)
-                        </Badge>
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] font-bold bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px]">
-                          {timeSlot.timeText}
-                        </span>
-                        <Badge variant="neutral" size="sm">
-                          {s.school_class?.name || 'Rombel'}
-                        </Badge>
-                      </div>
-
-                      <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                        {s.subject?.name || 'Mata Pelajaran'}
-                      </h3>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] truncate mt-0.5">
-                        {s.teacher?.name || 'Guru Pengampu'}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                        Ruang: <span className="font-semibold text-[var(--color-text-secondary)]">{s.room?.name || '-'}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
+                <tr key={s.id}>
+                  <td className="data-table__no">
+                    <span className="data-table__mono">{jpLabel}</span>
+                  </td>
+                  <td>
+                    <span className="data-table__cell-title">
+                      {s.subject?.name || 'Mata Pelajaran'}
+                    </span>
+                    <span className="data-table__cell-sub">
+                      {s.school_class?.name || 'Rombel'} · {s.teacher?.name || 'Guru Pengampu'}
+                    </span>
+                    <span className="data-table__cell-meta">
+                      {timeSlot.timeText} · {s.room?.name || 'Tanpa ruang'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
                       <button
                         type="button"
+                        className="data-table__action"
                         onClick={() => handleOpenEdit(s)}
-                        className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded-[10px] hover:bg-[var(--color-surface-subtle)]"
-                        aria-label="Edit"
+                        aria-label="Ubah slot"
                       >
-                        <Edit2 size={14} />
+                        <Edit2 size={13} />
                       </button>
                       <button
                         type="button"
+                        className="data-table__action data-table__action--danger"
                         onClick={() => handleTriggerDelete(s.id)}
-                        className="p-1.5 text-rose-500 hover:text-[var(--color-danger-fg)] rounded-[10px] hover:bg-[var(--color-danger-bg)]"
-                        aria-label="Hapus"
+                        aria-label="Hapus slot"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               );
-            })}
-          </div>
+            }}
+            footer={
+              <PaginationBar
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

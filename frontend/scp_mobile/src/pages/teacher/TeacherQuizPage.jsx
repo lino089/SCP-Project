@@ -20,6 +20,8 @@ import {
   Input,
   Select,
   SearchInput,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
 import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
 import { formatDateIndo } from '../../utils/formatters';
@@ -33,6 +35,10 @@ export default function TeacherQuizPage() {
   // Filter Tabs: 'all' | 'published' | 'draft_review'
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination tabel daftar kuis
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
@@ -330,6 +336,12 @@ export default function TeacherQuizPage() {
     });
   }, [quizzes, activeTab, searchQuery]);
 
+  // Pagination client-side atas hasil filter
+  const totalItems = filteredQuizzes.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedQuizzes = filteredQuizzes.slice((safePage - 1) * perPage, safePage * perPage);
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -405,14 +417,14 @@ export default function TeacherQuizPage() {
       <SearchInput
         placeholder="Cari judul kuis atau rombel..."
         value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
+        onChange={(value) => setSearchQuery(value)}
       />
 
       {/* Quizzes List */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="section-label">
-            Daftar Kuis ({filteredQuizzes.length})
+            Daftar Kuis ({totalItems})
           </span>
           <Button
             size="sm"
@@ -425,92 +437,100 @@ export default function TeacherQuizPage() {
           </Button>
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : loadError ? (
+        {loadError ? (
           <ErrorState message={loadError} onRetry={handleRefresh} />
-        ) : filteredQuizzes.length === 0 ? (
-          <EmptyState
-            title="Belum Ada Kuis"
-            message="Belum ada kuis yang sesuai dengan kategori ini. Buat kuis baru untuk memulai evaluasi belajar."
-          />
         ) : (
-          <div className="space-y-2">
-            {filteredQuizzes.map((quiz) => {
+          <DataTable
+            columns={[
+              { key: 'no', label: '#', width: 30, align: 'center' },
+              { key: 'quiz', label: 'Kuis / Rombel' },
+              { key: 'actions', label: 'Aksi', width: 116, align: 'right' },
+            ]}
+            rows={pagedQuizzes}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel="Daftar kuis pembelajaran"
+            empty={
+              <EmptyState
+                title="Belum Ada Kuis"
+                message="Belum ada kuis yang sesuai dengan kategori ini. Buat kuis baru untuk memulai evaluasi belajar."
+              />
+            }
+            renderRow={(quiz, index) => {
               const isPublished = quiz.status === 'published';
 
               return (
-                <div
-                  key={quiz.id}
-                  className="surface-card p-3.5 space-y-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="neutral" size="sm">
-                          {quiz.school_class?.name || 'Rombel'}
-                        </Badge>
-                        <Badge variant={isPublished ? 'success' : 'warning'} size="sm">
-                          {isPublished ? 'Published' : 'Draft Review'}
-                        </Badge>
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px]">
-                          {quiz.duration_minutes || 30} Menit
-                        </span>
-                      </div>
-
-                      <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                        {quiz.title}
-                      </h3>
-
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                        Tenggat: {quiz.due_date ? formatDateIndo(quiz.due_date) : 'Tanpa Batas'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Quick Action Buttons */}
-                  <div className="pt-2 border-t border-[var(--color-border-light)] flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleOpenReviewQuestions(quiz)}
-                        className="px-2.5 py-1 text-xs gap-1"
+                <tr key={quiz.id}>
+                  <td className="data-table__no">
+                    {String((safePage - 1) * perPage + index + 1).padStart(2, '0')}
+                  </td>
+                  <td>
+                    <span className="data-table__cell-title">{quiz.title}</span>
+                    <span className="data-table__cell-meta">
+                      {quiz.school_class?.name || 'Rombel'} · {quiz.duration_minutes || 30} Menit
+                    </span>
+                    <span className="data-table__cell-sub">
+                      Tenggat: {quiz.due_date ? formatDateIndo(quiz.due_date) : 'Tanpa Batas'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`badge badge--${isPublished ? 'success' : 'warning'} badge--sm`}
                       >
-                        <FileText size={13} />
-                        Kelola Soal
-                      </Button>
+                        {isPublished ? 'Terbit' : 'Draft'}
+                      </span>
 
-                      {!isPublished && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedQuiz(quiz);
-                            setIsGeneratorModalOpen(true);
-                          }}
-                          className="px-2 py-1 text-xs gap-1 text-[var(--color-text-secondary)] bg-[var(--color-surface-subtle)] hover:bg-[var(--color-surface-subtle)]"
+                      <div className="data-table__actions">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReviewQuestions(quiz)}
+                          className="data-table__action"
+                          aria-label="Kelola soal"
                         >
-                          <Sparkles size={13} />
-                          AI
-                        </Button>
-                      )}
-                    </div>
+                          <FileText size={13} />
+                        </button>
 
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleOpenSubmissions(quiz)}
-                      className="px-2.5 py-1 text-xs gap-1 text-[var(--color-text-primary)] bg-[var(--color-surface-subtle)] hover:bg-[var(--color-border-subtle)]"
-                    >
-                      <Users size={13} />
-                      Hasil Siswa
-                    </Button>
-                  </div>
-                </div>
+                        {!isPublished && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedQuiz(quiz);
+                              setIsGeneratorModalOpen(true);
+                            }}
+                            className="data-table__action"
+                            aria-label="Generator soal AI"
+                          >
+                            <Sparkles size={13} />
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSubmissions(quiz)}
+                          className="data-table__action"
+                          aria-label="Hasil siswa"
+                        >
+                          <Users size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
               );
-            })}
-          </div>
+            }}
+            footer={
+              <PaginationBar
+                currentPage={safePage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

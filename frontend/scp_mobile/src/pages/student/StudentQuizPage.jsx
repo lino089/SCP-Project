@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Clock,
-  FileQuestion,
   CheckCircle2,
   AlertCircle,
   ChevronLeft,
@@ -11,8 +10,6 @@ import {
   RotateCw,
   Sparkles,
   ArrowLeft,
-  Calendar,
-  User,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { quizApi } from '../../services/quizApi';
@@ -20,9 +17,11 @@ import {
   Button,
   Badge,
   BottomSheetModal,
-  Card,
   ConfirmSheet,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
+import { EmptyState } from '../../components/feedback';
 
 export default function StudentQuizPage() {
   const { user } = useAuth();
@@ -31,6 +30,10 @@ export default function StudentQuizPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [filterTab, setFilterTab] = useState('all'); // 'all' | 'available' | 'graded'
+
+  // Pagination tabel daftar kuis
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Quiz Taking Mode States
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -162,6 +165,12 @@ export default function StudentQuizPage() {
       return true;
     });
   }, [quizzes, filterTab, getQuizMeta]);
+
+  // Pagination client-side atas hasil filter
+  const totalItems = filteredQuizzes.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedQuizzes = filteredQuizzes.slice((safePage - 1) * perPage, safePage * perPage);
 
   // Execute Submission
   const executeSubmission = useCallback(async () => {
@@ -626,100 +635,85 @@ export default function StudentQuizPage() {
 
       {/* Quizzes List */}
       <div className="space-y-3">
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-28 bg-[var(--color-surface-subtle)] rounded-[14px] animate-pulse border border-[var(--color-border-subtle)]/60"
-              />
-            ))}
-          </div>
-        ) : filteredQuizzes.length === 0 ? (
-          <Card className="p-8 text-center bg-[var(--color-surface)] border border-dashed border-[var(--color-border-subtle)]">
-            <FileQuestion className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
-            <p className="text-xs font-semibold text-[var(--color-text-primary)]">Tidak ada kuis pada kategori ini</p>
-            <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-              Guru belum merilis kuis baru untuk kelas Anda.
-            </p>
-          </Card>
-        ) : (
-          filteredQuizzes.map((quiz) => {
+        <DataTable
+          columns={[
+            { key: 'no', label: '#', width: 30, align: 'center' },
+            { key: 'quiz', label: 'Kuis / Guru' },
+            { key: 'status', label: 'Status', width: 124, align: 'right' },
+          ]}
+          rows={pagedQuizzes}
+          isLoading={loading}
+          skeletonRows={Math.min(perPage, 8)}
+          ariaLabel="Daftar kuis siswa"
+          empty={
+            <EmptyState
+              title="Tidak ada kuis pada kategori ini"
+              message="Guru belum merilis kuis baru untuk kelas Anda."
+            />
+          }
+          renderRow={(quiz, index) => {
             const meta = getQuizMeta(quiz);
+            const questionCount =
+              quiz.questions_count || (quiz.questions ? quiz.questions.length : 0);
+            const durationMinutes = quiz.duration_minutes || quiz.duration || 30;
 
             return (
-              <div
-                key={quiz.id}
-                className="surface-card p-4 shadow-[var(--shadow-card)] space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 className="font-semibold text-[var(--color-text-primary)] text-xs">{quiz.title}</h2>
-                    <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-secondary)] mt-1">
-                      <span className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-[var(--color-text-muted)]" />
-                        {quiz.teacher?.name || 'Guru Pengampu'}
-                      </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1 font-mono">
-                        <FileQuestion className="w-3 h-3 text-[var(--color-text-muted)]" />
-                        {quiz.questions_count || (quiz.questions ? quiz.questions.length : 0)} Soal
-                      </span>
-                    </div>
-                  </div>
-
-                  <Badge variant={meta.variant} className="text-[11px] shrink-0">
-                    {meta.label}
-                  </Badge>
-                </div>
-
-                <div className="pt-2 border-t border-[var(--color-border-light)] flex items-center justify-between text-[11px] text-[var(--color-text-secondary)]">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[var(--color-text-muted)]" />
-                    Durasi: {quiz.duration_minutes || quiz.duration || 30} Menit
+              <tr key={quiz.id}>
+                <td className="data-table__no">
+                  {String((safePage - 1) * perPage + index + 1).padStart(2, '0')}
+                </td>
+                <td>
+                  <span className="data-table__cell-title">{quiz.title}</span>
+                  <span className="data-table__cell-meta">
+                    {durationMinutes} Menit · {questionCount} Soal
                   </span>
-                  {quiz.due_date && (
-                    <span className="font-mono flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-[var(--color-text-muted)]" />
-                      Tenggat: {quiz.due_date.split('T')[0]}
-                    </span>
-                  )}
-                </div>
+                  <span className="data-table__cell-sub">
+                    {quiz.teacher?.name || 'Guru Pengampu'}
+                    {quiz.due_date ? ` · Tenggat ${quiz.due_date.split('T')[0]}` : ''}
+                  </span>
+                </td>
+                <td>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`badge badge--${meta.variant} badge--sm`}>{meta.label}</span>
 
-                {/* Action CTA */}
-                <div className="pt-1">
-                  {meta.canTake ? (
-                    <Button
-                      variant="primary"
-                      onClick={() => handleStartQuiz(quiz)}
-                      className="w-full text-xs font-bold py-2 shadow-[var(--shadow-card)] flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      {meta.actionLabel}
-                    </Button>
-                  ) : meta.canViewResult ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => handleInspectResults(quiz)}
-                      className="w-full text-xs font-semibold py-2 border-[var(--color-info-border)] text-[var(--color-info-fg)] hover:bg-[var(--color-info-bg)] flex items-center justify-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      {meta.actionLabel}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      disabled
-                      className="w-full text-xs text-[var(--color-text-muted)] bg-[var(--color-bg-app)] cursor-not-allowed"
-                    >
-                      {meta.actionLabel}
-                    </Button>
-                  )}
-                </div>
-              </div>
+                    {meta.canTake && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartQuiz(quiz)}
+                        className="data-table__action"
+                        aria-label={meta.actionLabel}
+                      >
+                        <Sparkles size={13} />
+                      </button>
+                    )}
+
+                    {!meta.canTake && meta.canViewResult && (
+                      <button
+                        type="button"
+                        onClick={() => handleInspectResults(quiz)}
+                        className="data-table__action"
+                        aria-label={meta.actionLabel}
+                      >
+                        <Eye size={13} />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
             );
-          })
-        )}
+          }}
+          footer={
+            <PaginationBar
+              currentPage={safePage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+              disabled={loading}
+            />
+          }
+        />
       </div>
 
       {/* Modal Review Nilai & Evaluasi AI */}

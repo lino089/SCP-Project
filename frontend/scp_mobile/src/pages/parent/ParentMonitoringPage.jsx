@@ -23,11 +23,17 @@ import {
   Button,
   BottomSheetModal,
   Card,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
 
 export default function ParentMonitoringPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
+
+  // Pagination tabel
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -217,6 +223,20 @@ export default function ParentMonitoringPage() {
     return ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
   }, [previewDoc]);
 
+  // Daftar aktif per tab + pagination
+  const tabList =
+    activeTab === 'attendance'
+      ? attendances
+      : activeTab === 'permissions'
+      ? leaveRequests
+      : activeTab === 'quizzes'
+      ? quizzes
+      : [];
+  const totalItems = tabList.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = tabList.slice((safePage - 1) * perPage, safePage * perPage);
+
   return (
     <div className="space-y-4">
       {/* Kartu Profil Anak Tertaut */}
@@ -387,205 +407,159 @@ export default function ParentMonitoringPage() {
       {/* =====================================
           TAB 1: PRESENSI KBM
          ===================================== */}
-      {activeTab === 'attendance' && (
+      {/* TAB 1-3: tabel data ananda */}
+      {(activeTab === 'attendance' || activeTab === 'permissions' || activeTab === 'quizzes') && (
         <div className="space-y-2.5">
           <h2 className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider px-0.5">
-            Riwayat Presensi KBM Ananda
+            {activeTab === 'attendance'
+              ? 'Riwayat Presensi KBM Ananda'
+              : activeTab === 'permissions'
+              ? 'Riwayat Surat Izin Ananda'
+              : 'Hasil Evaluasi Kuis AI'}
           </h2>
 
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 bg-[var(--color-surface-subtle)] rounded-[14px] animate-pulse" />
-              ))}
-            </div>
-          ) : attendances.length === 0 ? (
-            <Card className="p-8 text-center bg-[var(--color-surface)] border border-dashed border-[var(--color-border-subtle)]">
-              <Calendar className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
-              <p className="text-xs font-semibold text-[var(--color-text-primary)]">Belum ada data presensi tercatat</p>
-              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                Presensi akan tercatat setiap guru membuka dan menyelesaikan sesi KBM.
-              </p>
-            </Card>
-          ) : (
-            attendances.map((item, idx) => {
-              const st = (item.status || '').toLowerCase();
-              return (
-                <div
-                  key={item.id || idx}
-                  className="surface-card p-3.5 space-y-2"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-mono font-semibold text-[var(--color-text-primary)]">
-                      {item.date || (item.created_at ? item.created_at.split('T')[0] : '-')}
-                    </span>
-                    {st === 'hadir' || st === 'present' ? (
-                      <Badge variant="success">Hadir</Badge>
-                    ) : st === 'sakit' || st === 'sick' ? (
-                      <Badge variant="info">Sakit</Badge>
-                    ) : st === 'izin' || st === 'permit' ? (
-                      <Badge variant="warning">Izin</Badge>
-                    ) : (
-                      <Badge variant="error">Alpa</Badge>
-                    )}
-                  </div>
+          <DataTable
+            columns={
+              activeTab === 'attendance'
+                ? [
+                    { key: 'no', label: '#', width: 30, align: 'center' },
+                    { key: 'date', label: 'Tanggal / Keterangan' },
+                    { key: 'status', label: 'Status', width: 70, align: 'right' },
+                  ]
+                : activeTab === 'permissions'
+                ? [
+                    { key: 'no', label: '#', width: 30, align: 'center' },
+                    { key: 'type', label: 'Jenis Izin' },
+                    { key: 'actions', label: 'Aksi', width: 74, align: 'right' },
+                  ]
+                : [
+                    { key: 'no', label: '#', width: 30, align: 'center' },
+                    { key: 'quiz', label: 'Kuis / Guru' },
+                    { key: 'status', label: 'Status', width: 74, align: 'right' },
+                  ]
+            }
+            rows={pagedList}
+            isLoading={loading}
+            skeletonRows={Math.min(perPage, 6)}
+            ariaLabel="Data monitoring anak"
+            empty={
+              <span>
+                {activeTab === 'attendance'
+                  ? 'Belum ada data presensi tercatat.'
+                  : activeTab === 'permissions'
+                  ? 'Tidak ada pengajuan perizinan.'
+                  : 'Belum ada hasil kuis yang dirilis.'}
+              </span>
+            }
+            renderRow={(item, index) => {
+              const rowNo = String((safePage - 1) * perPage + index + 1).padStart(2, '0');
 
-                  <p className="text-xs text-[var(--color-text-primary)]">
-                    {item.journal?.topic_description ||
-                      item.journal?.schedule?.subject?.name ||
-                      'Sesi pembelajaran reguler'}
-                  </p>
+              if (activeTab === 'attendance') {
+                const st = (item.status || '').toLowerCase();
+                const isPresent = st === 'hadir' || st === 'present';
+                const isSick = st === 'sakit' || st === 'sick';
+                const isPermit = st === 'izin' || st === 'permit';
+                const badgeVariant = isPresent ? 'success' : isSick ? 'info' : isPermit ? 'warning' : 'error';
+                const badgeLabel = isPresent ? 'Hadir' : isSick ? 'Sakit' : isPermit ? 'Izin' : 'Alpa';
 
-                  {item.notes && (
-                    <div className="text-[11px] text-[var(--color-warning-fg)] bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)]/60 rounded-[6px] px-2 py-1 font-medium">
-                      Catatan Guru: {item.notes}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* =====================================
-          TAB 2: SURAT IZIN
-         ===================================== */}
-      {activeTab === 'permissions' && (
-        <div className="space-y-2.5">
-          <h2 className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider px-0.5">
-            Riwayat Surat Izin Ananda
-          </h2>
-
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 bg-[var(--color-surface-subtle)] rounded-[14px] animate-pulse" />
-              ))}
-            </div>
-          ) : leaveRequests.length === 0 ? (
-            <Card className="p-8 text-center bg-[var(--color-surface)] border border-dashed border-[var(--color-border-subtle)]">
-              <FileText className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
-              <p className="text-xs font-semibold text-[var(--color-text-primary)]">Tidak ada pengajuan perizinan</p>
-              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                Surat izin sakit atau dispensasi yang diajukan akan tampil di sini.
-              </p>
-            </Card>
-          ) : (
-            leaveRequests.map((item) => {
-              const statusKey = (item.status_approval || item.status || '').toLowerCase();
-              const isApproved = statusKey === 'approved' || statusKey === 'disetujui';
-              const isPending = statusKey === 'pending';
-
-              return (
-                <div
-                  key={item.id}
-                  className="surface-card p-3.5 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-xs text-[var(--color-text-primary)]">
-                          {item.type === 'tidak_masuk'
-                            ? 'Tidak Masuk Sekolah'
-                            : 'Dispensasi Keluar'}
-                        </span>
-                        <Badge variant="outline" className="text-[11px] capitalize px-1 py-0">
-                          {item.category}
-                        </Badge>
+                return (
+                  <tr key={item.id || index}>
+                    <td className="data-table__no">{rowNo}</td>
+                    <td>
+                      <span className="data-table__cell-title">
+                        {item.journal?.schedule?.subject?.name || 'Sesi pembelajaran reguler'}
+                      </span>
+                      <span className="data-table__cell-meta">
+                        {item.date || (item.created_at ? item.created_at.split('T')[0] : '-')}
+                      </span>
+                      {item.notes && (
+                        <span className="data-table__cell-sub">Catatan: {item.notes}</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="data-table__actions">
+                        <span className={`badge badge--${badgeVariant} badge--sm`}>{badgeLabel}</span>
                       </div>
-                      <span className="text-[11px] text-[var(--color-text-secondary)] font-mono mt-0.5 block">
+                    </td>
+                  </tr>
+                );
+              }
+
+              if (activeTab === 'permissions') {
+                const statusKey = (item.status_approval || item.status || '').toLowerCase();
+                const isApproved = statusKey === 'approved' || statusKey === 'disetujui';
+                const isPending = statusKey === 'pending';
+                const hasDoc = item.document_path || item.document_url;
+
+                return (
+                  <tr key={item.id}>
+                    <td className="data-table__no">{rowNo}</td>
+                    <td>
+                      <span className="data-table__cell-title">
+                        {item.type === 'tidak_masuk' ? 'Tidak Masuk Sekolah' : 'Dispensasi Keluar'}
+                      </span>
+                      <span className="data-table__cell-meta">
                         {item.start_date === item.end_date
                           ? item.start_date
                           : `${item.start_date} s/d ${item.end_date}`}
+                        {item.category ? ` · ${item.category}` : ''}
                       </span>
+                      {item.notes && <span className="data-table__cell-sub">{item.notes}</span>}
+                    </td>
+                    <td>
+                      <div className="data-table__actions">
+                        <span
+                          className={`badge badge--${
+                            isApproved ? 'success' : isPending ? 'warning' : 'error'
+                          } badge--sm`}
+                        >
+                          {isApproved ? 'Disetujui' : isPending ? 'Menunggu' : 'Ditolak'}
+                        </span>
+                        {hasDoc && (
+                          <button
+                            type="button"
+                            className="data-table__action"
+                            onClick={() => handleOpenDocPreview(item)}
+                            aria-label="Pratinjau surat lampiran"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
+              const quiz = item;
+              return (
+                <tr key={quiz.id}>
+                  <td className="data-table__no">{rowNo}</td>
+                  <td>
+                    <span className="data-table__cell-title">{quiz.title}</span>
+                    <span className="data-table__cell-meta">Guru: {quiz.teacher?.name || '-'}</span>
+                    <span className="data-table__cell-sub">Nilai belum tersedia di aplikasi mobile</span>
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
+                      <span className="badge badge--success badge--sm">Dirilis</span>
                     </div>
-
-                    <Badge
-                      variant={isApproved ? 'success' : isPending ? 'warning' : 'error'}
-                      className="text-[11px] shrink-0"
-                    >
-                      {isApproved ? 'Disetujui' : isPending ? 'Menunggu' : 'Ditolak'}
-                    </Badge>
-                  </div>
-
-                  {item.notes && (
-                    <p className="text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-bg-app)] p-2 rounded-[6px] border border-[var(--color-border-subtle)]/60">
-                      Catatan: {item.notes}
-                    </p>
-                  )}
-
-                  {(item.document_path || item.document_url) && (
-                    <div className="pt-1.5 border-t border-[var(--color-border-light)] flex justify-end">
-                      <button
-                        onClick={() => handleOpenDocPreview(item)}
-                        className="text-[11px] font-semibold text-[var(--color-info-fg)] hover:text-[var(--color-info-fg)] flex items-center gap-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        Pratinjau Surat Lampiran
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  </td>
+                </tr>
               );
-            })
-          )}
-        </div>
-      )}
-
-      {/* =====================================
-          TAB 3: NILAI KUIS AI
-         ===================================== */}
-      {activeTab === 'quizzes' && (
-        <div className="space-y-2.5">
-          <h2 className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider px-0.5">
-            Hasil Evaluasi Kuis AI
-          </h2>
-
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 bg-[var(--color-surface-subtle)] rounded-[14px] animate-pulse" />
-              ))}
-            </div>
-          ) : quizzes.length === 0 ? (
-            <Card className="p-8 text-center bg-[var(--color-surface)] border border-dashed border-[var(--color-border-subtle)]">
-              <Sparkles className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
-              <p className="text-xs font-semibold text-[var(--color-text-primary)]">Belum ada hasil kuis yang dirilis</p>
-              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                Nilai dan ulasan AI akan tampil setelah guru merilis hasil evaluasi kuis kelas.
-              </p>
-            </Card>
-          ) : (
-            quizzes.map((quiz) => (
-              <div
-                key={quiz.id}
-                className="surface-card p-3.5 space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-xs text-[var(--color-text-primary)]">{quiz.title}</h3>
-                    <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
-                      Guru: {quiz.teacher?.name || '-'}
-                    </span>
-                  </div>
-                  <Badge variant="success" size="sm" dot>
-                    Hasil Dirilis
-                  </Badge>
-                </div>
-
-                <div className="p-2.5 rounded-[10px] bg-[var(--color-surface-subtle)] border border-[var(--color-border-subtle)]">
-                  <p className="text-[11.5px] font-medium text-[var(--color-text-primary)]">
-                    Nilai belum tersedia
-                  </p>
-                  <p className="text-[10.5px] text-[var(--color-text-muted)] leading-snug mt-0.5">
-                    Rincian skor dan ulasan AI untuk kuis ini belum dapat ditampilkan pada aplikasi
-                    mobile. Silakan lihat melalui aplikasi web sekolah.
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
+            }}
+            footer={
+              <PaginationBar
+                currentPage={safePage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={loading}
+              />
+            }
+          />
         </div>
       )}
 

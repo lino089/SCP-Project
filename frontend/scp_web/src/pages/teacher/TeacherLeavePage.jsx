@@ -60,12 +60,12 @@ export default function TeacherLeavePage() {
   // State Modal Detail & Pratinjau Dokumen
   const [selectedDetail, setSelectedDetail] = useState(null);
 
-  // Fetch daftar izin guru dari backend (auto-scoped untuk guru yang login)
+  // Fetch daftar izin guru dari backend (khusus pengajuan pribadi guru yang login)
   const fetchLeaves = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const res = await leaveApi.getTeacherLeaveRequests({ per_page: 50 });
+      const res = await leaveApi.getTeacherLeaveRequests({ scope: 'mine', per_page: 50 });
       const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
       setLeaves(list);
     } catch (err) {

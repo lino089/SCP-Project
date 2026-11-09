@@ -16,5 +16,12 @@ deploy/heavy_job_proof.txt
 
 # Internal planning & design documents (do not push to repo)
 RENCANA_PENYEMPURNAAN_RESOLUSI_RUANG_DAN_KONFLIK_IMPORT.md
+RENCANA_REDESIGN_JURNAL_KBM_DAN_PRESENSI.md
+RENCANA_PEMBARUAN_SISTEM_PERIZINAN_GURU.md
 RENCANA_*.md
+
+# Java crash dumps & local test parse outputs
+hs_err_pid*.log
+replay_pid*.log
+test_parse_*.json
 

@@ -323,7 +323,8 @@ class TeacherLeaveVerificationScopingTest extends TestCase
     }
 
     /**
-     * 6. Guru BK/Kesiswaan mengajukan izin dan hanya Waka Kurikulum yang dapat memprosesnya (Eskalasi Wajib).
+     * 6. Guru BK/Kesiswaan mengajukan izin: disetujui oleh sesama Guru Kesiswaan (Peer-Approval)
+     *    serta mematuhi Anti-Self-Approval (tidak boleh menyetujui diri sendiri).
      */
     public function test_counselor_applicant_escalates_exclusively_to_waka(): void
     {
@@ -336,26 +337,17 @@ class TeacherLeaveVerificationScopingTest extends TestCase
             'status' => 'pending',
         ]);
 
-        // Rekan sesama Guru Kesiswaan (Counselor B) ditolak (Anti-Peer-Approval)
-        Sanctum::actingAs($this->counselorB);
+        // Counselor A sendiri ditolak saat mencoba menyetujui izinnya sendiri (Anti-Self-Approval)
+        Sanctum::actingAs($this->counselorA);
         $this->patchJson('/api/teacher-leave-requests/' . $leave->id . '/approve')
-            ->assertStatus(403)
-            ->assertJson([
-                'success' => false,
-                'message' => 'Akses ditolak. Permohonan izin dari Tim Kesiswaan hanya dapat diproses oleh Waka Kurikulum.',
-            ]);
+            ->assertStatus(403);
 
-        // Tidak muncul di inbox verifikasi Counselor B
-        $responseB = $this->getJson('/api/teacher-leave-requests?scope=verification');
-        $responseB->assertStatus(200);
-        $this->assertNotContains($leave->id, collect($responseB->json('data'))->pluck('id')->toArray());
-
-        // Waka Kurikulum berhasil memproses
-        Sanctum::actingAs($this->waka);
-        $responseWaka = $this->patchJson('/api/teacher-leave-requests/' . $leave->id . '/approve');
-        $responseWaka->assertStatus(200)
+        // Rekan sesama Guru Kesiswaan (Counselor B) berhasil menyetujui izin rekannya
+        Sanctum::actingAs($this->counselorB);
+        $responseB = $this->patchJson('/api/teacher-leave-requests/' . $leave->id . '/approve');
+        $responseB->assertStatus(200)
             ->assertJsonPath('data.status', 'approved')
-            ->assertJsonPath('data.approved_by.id', $this->waka->id);
+            ->assertJsonPath('data.approved_by.id', $this->counselorB->id);
     }
 
     /**

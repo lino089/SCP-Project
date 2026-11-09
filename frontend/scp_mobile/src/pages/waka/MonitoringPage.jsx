@@ -12,14 +12,15 @@ import leaveApi from '../../services/leaveApi';
 import { classApi } from '../../services/masterDataApi';
 import {
   Button,
-  Badge,
   Modal,
   Input,
   Select,
   SearchInput,
+  DataTable,
+  PaginationBar,
   SegmentedTabs,
 } from '../../components/shared';
-import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
+import { EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
 import { unwrap, unwrapList } from '../../utils/responseHelper';
 import { todayLocalISO } from '../../utils/dateUtils';
@@ -34,6 +35,10 @@ export default function MonitoringPage() {
   const [selectedDate, setSelectedDate] = useState(() => todayLocalISO());
   const [selectedClassId, setSelectedClassId] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination tabel (client-side)
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Data states
   const [journals, setJournals] = useState([]);
@@ -189,6 +194,15 @@ export default function MonitoringPage() {
     });
   }, [attendances, searchQuery]);
 
+  const activeList = activeTab === 'jurnal' ? filteredJournals : filteredAttendances;
+  const totalItems = activeList.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const pagedItems = activeList.slice((page - 1) * perPage, page * perPage);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, selectedDate, selectedClassId, searchQuery, perPage]);
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -305,193 +319,161 @@ export default function MonitoringPage() {
       </div>
 
       {/* Tab Content 1: Jurnal KBM */}
-      {activeTab === 'jurnal' && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="section-label">
-              Daftar Jurnal KBM ({filteredJournals.length})
-            </span>
-          </div>
+      {/* Tabel Jurnal KBM / Rekap Presensi */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="section-label">
+            {activeTab === 'jurnal'
+              ? `Daftar Jurnal KBM (${totalItems})`
+              : `Rekapitulasi Presensi (${totalItems})`}
+          </span>
+        </div>
 
-          {isLoading ? (
-            <SkeletonCard count={3} />
-          ) : loadError ? (
-            <ErrorState message={loadError} onRetry={handleRefresh} />
-          ) : filteredJournals.length === 0 ? (
-            <EmptyState
-              title="Tidak Ada Jurnal"
-              message={`Belum ada sesi KBM yang tercatat pada tanggal ${formatDateIndo(selectedDate)}.`}
-            />
-          ) : (
-            <div className="space-y-2">
-              {filteredJournals.map((j) => {
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={handleRefresh} />
+        ) : (
+          <DataTable
+            columns={
+              activeTab === 'jurnal'
+                ? [
+                    { key: 'jp', label: 'JP', width: 40, align: 'center' },
+                    { key: 'subject', label: 'Jurnal KBM' },
+                    { key: 'actions', label: 'Aksi', width: 74, align: 'right' },
+                  ]
+                : [
+                    { key: 'no', label: '#', width: 30, align: 'center' },
+                    { key: 'student', label: 'Siswa / Rombel' },
+                    { key: 'status', label: 'Status', width: 74, align: 'right' },
+                  ]
+            }
+            rows={pagedItems}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel={activeTab === 'jurnal' ? 'Daftar jurnal KBM' : 'Rekap presensi siswa'}
+            empty={
+              activeTab === 'jurnal' ? (
+                <EmptyState
+                  title="Tidak Ada Jurnal"
+                  message={`Belum ada sesi KBM yang tercatat pada tanggal ${formatDateIndo(selectedDate)}.`}
+                />
+              ) : (
+                <EmptyState
+                  title="Tidak Ada Data Presensi"
+                  message="Belum ada catatan presensi siswa untuk kriteria filter ini."
+                />
+              )
+            }
+            renderRow={(item, index) => {
+              const rowNo = String((page - 1) * perPage + index + 1).padStart(2, '0');
+
+              if (activeTab === 'jurnal') {
+                const j = item;
                 const isCompleted = j.status === 'completed';
-                const isOngoing = j.status === 'ongoing';
                 const isTeacherAbsent = j.status === 'teacher_absent';
                 const photoUrl = j.photo_url || j.photo_path;
+                const statusLabel = isCompleted
+                  ? 'Selesai'
+                  : j.status === 'ongoing'
+                  ? 'Berjalan'
+                  : isTeacherAbsent
+                  ? 'Guru berhalangan'
+                  : j.status;
 
                 return (
-                  <div
-                    key={j.id}
-                    className="surface-card p-3 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge variant="neutral" size="sm">
-                            {j.schedule?.school_class?.name || 'Rombel'}
-                          </Badge>
-                          <Badge variant="warning" size="sm">
-                            Jam Ke-{j.schedule?.period_number || 1}
-                          </Badge>
-                          {isCompleted ? (
-                            <Badge variant="success" size="sm">
-                              Selesai
-                            </Badge>
-                          ) : isOngoing ? (
-                            <Badge variant="info" size="sm">
-                              Sedang Berjalan
-                            </Badge>
-                          ) : isTeacherAbsent ? (
-                            <Badge variant="danger" size="sm">
-                              Guru Berhalangan
-                            </Badge>
-                          ) : (
-                            <Badge variant="neutral" size="sm">
-                              {j.status}
-                            </Badge>
-                          )}
-                        </div>
-
-                        <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                          {j.schedule?.subject?.name || 'Mata Pelajaran'}
-                        </h3>
-                        <p className="text-[11px] text-[var(--color-text-secondary)] truncate mt-0.5">
-                          {j.schedule?.teacher?.name || 'Guru Pengampu'}
-                          {j.substitute_teacher && (
-                            <span className="text-[var(--color-warning-fg)] font-semibold ml-1">
-                              (Diganti: {j.substitute_teacher.name})
-                            </span>
-                          )}
-                        </p>
-
-                        {j.topic_description && (
-                          <div className="mt-1.5 p-2 bg-[var(--color-bg-app)] border border-[var(--color-border-light)] rounded-[10px]">
-                            <p className="text-[11px] text-[var(--color-text-primary)] leading-relaxed italic">
-                              "{j.topic_description}"
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="shrink-0 flex flex-col items-end gap-1.5">
+                  <tr key={j.id}>
+                    <td className="data-table__no">
+                      <span className="data-table__mono">{j.schedule?.period_number || 1}</span>
+                    </td>
+                    <td>
+                      <span className="data-table__cell-title">
+                        {j.schedule?.subject?.name || 'Mata Pelajaran'}
+                      </span>
+                      <span className="data-table__cell-sub">
+                        {j.schedule?.school_class?.name || 'Rombel'} ·{' '}
+                        {j.schedule?.teacher?.name || 'Guru Pengampu'}
+                      </span>
+                      <span className="data-table__cell-meta">
+                        {statusLabel}
+                        {j.topic_description ? ` · ${j.topic_description}` : ''}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="data-table__actions">
                         {photoUrl && (
                           <button
                             type="button"
+                            className="data-table__action"
                             onClick={() => {
                               setPreviewPhotoUrl(getStorageUrl(photoUrl));
                               setPreviewPhotoTitle(
                                 `${j.schedule?.school_class?.name} - ${j.schedule?.subject?.name}`
                               );
                             }}
-                            className="w-11 h-11 rounded-[10px] border border-[var(--color-border-subtle)] overflow-hidden relative group"
-                            aria-label="Lihat Foto Bukti"
+                            aria-label="Lihat foto bukti KBM"
                           >
-                            <img
-                              src={getStorageUrl(photoUrl)}
-                              alt="Bukti KBM"
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-[var(--color-overlay-soft)] flex items-center justify-center text-white">
-                              <Eye size={14} />
-                            </div>
+                            <Eye size={13} />
                           </button>
                         )}
-
                         {canMarkAbsent && !isCompleted && !isTeacherAbsent && (
                           <button
                             type="button"
                             disabled={markingAbsentId === j.id}
                             onClick={() => handleMarkTeacherAbsent(j.id)}
-                            className="px-2 py-1 bg-[var(--color-danger-bg)] text-[var(--color-danger-fg)] border border-[var(--color-danger-border)] rounded-[10px] text-[11px] font-bold hover:bg-[var(--color-danger-bg)] transition-all"
+                            className="data-table__action data-table__action--danger"
+                            aria-label="Tandai jam kosong"
                           >
-                            {markingAbsentId === j.id ? 'Memproses...' : 'Tandai Jam Kosong'}
+                            <AlertTriangle size={13} />
                           </button>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+              }
 
-      {/* Tab Content 2: Presensi Siswa */}
-      {activeTab === 'presensi' && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="section-label">
-              Rekapitulasi Presensi ({filteredAttendances.length})
-            </span>
-          </div>
+              const a = item;
+              const status = a.status || 'Hadir';
+              const badgeVariant =
+                status === 'Hadir'
+                  ? 'success'
+                  : status === 'Sakit'
+                  ? 'info'
+                  : status === 'Izin'
+                  ? 'warning'
+                  : 'error';
 
-          {isLoading ? (
-            <SkeletonCard count={3} />
-          ) : loadError ? (
-            <ErrorState message={loadError} onRetry={handleRefresh} />
-          ) : filteredAttendances.length === 0 ? (
-            <EmptyState
-              title="Tidak Ada Data Presensi"
-              message="Belum ada catatan presensi siswa untuk kriteria filter ini."
-            />
-          ) : (
-            <div className="space-y-2">
-              {filteredAttendances.map((a) => {
-                const status = a.status || 'Hadir';
-                const badgeVariant =
-                  status === 'Hadir'
-                    ? 'success'
-                    : status === 'Sakit'
-                    ? 'info'
-                    : status === 'Izin'
-                    ? 'warning'
-                    : 'danger';
-
-                return (
-                  <div
-                    key={a.id}
-                    className="surface-card p-3 space-y-1"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-[var(--color-text-muted)] font-mono">
-                            {a.school_class?.name || 'Rombel'}
-                          </span>
-                        </div>
-                        <h3 className="text-xs font-bold text-[var(--color-text-primary)] truncate">
-                          {a.student?.name || 'Siswa'}
-                        </h3>
-                        {a.notes && (
-                          <p className="text-[11px] text-[var(--color-text-secondary)] italic mt-0.5">
-                            Catatan: {a.notes}
-                          </p>
-                        )}
-                      </div>
-
-                      <Badge variant={badgeVariant} size="sm">
-                        {status}
-                      </Badge>
+              return (
+                <tr key={a.id}>
+                  <td className="data-table__no">{rowNo}</td>
+                  <td>
+                    <span className="data-table__cell-title">{a.student?.name || 'Siswa'}</span>
+                    <span className="data-table__cell-meta">
+                      {a.school_class?.name || 'Rombel'}
+                      {a.notes ? ` · ${a.notes}` : ''}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
+                      <span className={`badge badge--${badgeVariant} badge--sm`}>{status}</span>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                  </td>
+                </tr>
+              );
+            }}
+            footer={
+              <PaginationBar
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
+        )}
+      </div>
 
       {/* Modal Pratinjau Foto KBM */}
       <Modal

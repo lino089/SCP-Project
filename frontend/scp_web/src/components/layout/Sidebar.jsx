@@ -15,6 +15,7 @@ import {
   Eye,
   User,
   Users,
+  CheckSquare,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import './Sidebar.css';
@@ -276,9 +277,20 @@ export default function Sidebar({ isOpen = false, onClose }) {
               onClick={() => onClose?.()}
             >
               <UserCheck size={16} strokeWidth={1.5} />
-              <span>
-                {isKesiswaan() || hasRole('waka') ? 'Verifikasi Perizinan' : 'Perizinan Siswa'}
-              </span>
+              <span>Perizinan Siswa</span>
+            </NavLink>
+          )}
+
+          {isKesiswaan() && (
+            <NavLink
+              to="/teacher/leave-approvals"
+              className={({ isActive }) =>
+                `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+              }
+              onClick={() => onClose?.()}
+            >
+              <CheckSquare size={16} strokeWidth={1.5} />
+              <span>Konfirmasi Izin Guru</span>
             </NavLink>
           )}
 

@@ -13,6 +13,7 @@ export { default as ConfirmSheet } from './ConfirmSheet';
 export { default as FileUpload } from './FileUpload';
 export { default as SearchInput } from './SearchInput';
 export { default as PaginationBar } from './PaginationBar';
+export { default as DataTable } from './DataTable';
 export { default as ProgressBar } from './ProgressBar';
 export { default as FilterSheet } from './FilterSheet';
 

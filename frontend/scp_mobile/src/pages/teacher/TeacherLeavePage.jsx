@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import leaveApi from '../../services/leaveApi';
 import journalApi from '../../services/journalApi';
-import { Badge, Button, Modal, Select, Input } from '../../components/shared';
-import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
+import { Badge, Button, Modal, Select, Input, DataTable, PaginationBar } from '../../components/shared';
+import { EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
 import { todayLocalISO } from '../../utils/dateUtils';
 
@@ -47,6 +47,10 @@ export default function TeacherLeavePage() {
 
   // Detail Modal
   const [selectedDetail, setSelectedDetail] = useState(null);
+
+  // Pagination tabel
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
@@ -185,6 +189,12 @@ export default function TeacherLeavePage() {
     }
   };
 
+  // Data tabel (client-side pagination)
+  const totalItems = leaves.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = leaves.slice((safePage - 1) * perPage, safePage * perPage);
+
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -243,25 +253,29 @@ export default function TeacherLeavePage() {
           </Button>
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : fetchError ? (
+        {fetchError ? (
           <ErrorState message={fetchError} onRetry={handleRefresh} />
-        ) : leaves.length === 0 ? (
-          <EmptyState
-            title="Belum Ada Riwayat Izin"
-            message="Anda belum pernah mengajukan permohonan izin mengajar."
-          />
         ) : (
-          <div className="space-y-2">
-            {leaves.map((item) => {
+          <DataTable
+            columns={[
+              { key: 'no', label: '#', width: 30, align: 'center' },
+              { key: 'reason', label: 'Alasan / Tanggal' },
+              { key: 'actions', label: 'Aksi', width: 54, align: 'right' },
+            ]}
+            rows={pagedList}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 8)}
+            ariaLabel="Riwayat permohonan izin mengajar"
+            empty={
+              <EmptyState
+                title="Belum Ada Riwayat Izin"
+                message="Anda belum pernah mengajukan permohonan izin mengajar."
+              />
+            }
+            renderRow={(item, index) => {
               const status = item.status || 'pending';
               const badgeVariant =
-                status === 'approved'
-                  ? 'success'
-                  : status === 'rejected'
-                  ? 'danger'
-                  : 'warning';
+                status === 'approved' ? 'success' : status === 'rejected' ? 'danger' : 'warning';
               const statusLabel =
                 status === 'approved'
                   ? 'Disetujui'
@@ -270,45 +284,49 @@ export default function TeacherLeavePage() {
                   : 'Menunggu';
 
               return (
-                <div
-                  key={item.id}
-                  className="surface-card p-3 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant={badgeVariant} size="sm">
-                          {statusLabel}
-                        </Badge>
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px] font-bold">
-                          {formatDateIndo(item.date)}
-                        </span>
-                      </div>
-
-                      <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                        {item.reason}
-                      </h3>
-
-                      {item.task_instruction && (
-                        <p className="text-[11px] text-[var(--color-text-secondary)] line-clamp-1 mt-0.5">
-                          Tugas: "{item.task_instruction}"
-                        </p>
-                      )}
+                <tr key={item.id}>
+                  <td className="data-table__no">
+                    {String((safePage - 1) * perPage + index + 1).padStart(2, '0')}
+                  </td>
+                  <td>
+                    <span className={`badge badge--${badgeVariant} badge--sm`}>
+                      {statusLabel}
+                    </span>
+                    <span className="data-table__cell-title">{item.reason}</span>
+                    <span className="data-table__cell-meta">{formatDateIndo(item.date)}</span>
+                    {item.task_instruction && (
+                      <span className="data-table__cell-sub">
+                        Tugas: &ldquo;{item.task_instruction}&rdquo;
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="data-table__actions">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetail(item)}
+                        className="data-table__action"
+                        aria-label="Lihat Detail"
+                      >
+                        <Eye size={13} />
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDetail(item)}
-                      className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded-[10px] hover:bg-[var(--color-surface-subtle)] shrink-0"
-                      aria-label="Lihat Detail"
-                    >
-                      <Eye size={16} />
-                    </button>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               );
-            })}
-          </div>
+            }}
+            footer={
+              <PaginationBar
+                currentPage={safePage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

@@ -24,6 +24,7 @@ const TeacherCalendarPage = lazy(() => import('../pages/teacher/TeacherCalendarP
 const TeacherSchedulePage = lazy(() => import('../pages/teacher/TeacherSchedulePage'));
 const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPage'));
 const TeacherLeavePage = lazy(() => import('../pages/teacher/TeacherLeavePage'));
+const TeacherLeaveApprovalPage = lazy(() => import('../pages/teacher/TeacherLeaveApprovalPage'));
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
 const StudentAttendanceRecapPage = lazy(() => import('../pages/teacher/StudentAttendanceRecapPage'));
@@ -94,6 +95,19 @@ export default function AppRouter() {
             >
               <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
               <Route path="/teacher/attendance-recap" element={<StudentAttendanceRecapPage />} />
+            </Route>
+
+            {/* Konfirmasi Izin Guru (Khusus Guru Kesiswaan) */}
+            <Route
+              element={
+                <RoleRoute
+                  allowedRoles={['teacher']}
+                  requireKesiswaan
+                  redirectTo="/teacher/dashboard"
+                />
+              }
+            >
+              <Route path="/teacher/leave-approvals" element={<TeacherLeaveApprovalPage />} />
             </Route>
 
             {/* Standard Teacher Routes */}

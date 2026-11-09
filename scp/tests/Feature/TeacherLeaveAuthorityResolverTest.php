@@ -115,7 +115,7 @@ class TeacherLeaveAuthorityResolverTest extends TestCase
         ]);
     }
 
-    public function test_kesiswaan_applicant_escalates_exclusively_to_waka(): void
+    public function test_kesiswaan_applicant_can_be_approved_by_peer_kesiswaan(): void
     {
         // Guru Kesiswaan A mengajukan izin
         $leave = TeacherLeaveRequest::create([
@@ -128,16 +128,13 @@ class TeacherLeaveAuthorityResolverTest extends TestCase
 
         $approverIds = $this->resolver->getAuthorizedApproverIds($leave);
 
-        // 1. Approver hanya Waka Kurikulum
-        $this->assertContains($this->waka->id, $approverIds);
+        // 1. Rekan sesama Guru Kesiswaan (Counselor B) berwenang menyetujui izin rekannya
+        $this->assertContains($this->counselorB->id, $approverIds);
         // 2. Anti-Self-Approval: Pemohon (Counselor A) TIDAK BOLEH ada di daftar
         $this->assertNotContains($this->counselorA->id, $approverIds);
-        // 3. Rekan sesama kesiswaan (Counselor B) TIDAK BOLEH menyetujui izin rekannya
-        $this->assertNotContains($this->counselorB->id, $approverIds);
 
-        $this->assertTrue($this->resolver->canUserApprove($this->waka, $leave));
+        $this->assertTrue($this->resolver->canUserApprove($this->counselorB, $leave));
         $this->assertFalse($this->resolver->canUserApprove($this->counselorA, $leave));
-        $this->assertFalse($this->resolver->canUserApprove($this->counselorB, $leave));
     }
 
     public function test_regular_teacher_with_single_class_schedule_assigned_to_counselor_a_and_waka(): void
@@ -252,12 +249,12 @@ class TeacherLeaveAuthorityResolverTest extends TestCase
         $this->assertNotContains($leave2->id, $counselorALeaves);
         $this->assertNotContains($leave3->id, $counselorALeaves);
 
-        // 3. Counselor B hanya dapat melihat Leave 2 (Kelas B)
+        // 3. Counselor B melihat Leave 2 (Kelas B) dan Leave 3 (karena izin sesama Kesiswaan disetujui oleh sesama Kesiswaan)
         $counselorBQuery = $this->resolver->scopePendingRequestsForUser(TeacherLeaveRequest::query(), $this->counselorB);
         $counselorBLeaves = $counselorBQuery->pluck('id')->toArray();
         $this->assertNotContains($leave1->id, $counselorBLeaves);
         $this->assertContains($leave2->id, $counselorBLeaves);
-        $this->assertNotContains($leave3->id, $counselorBLeaves);
+        $this->assertContains($leave3->id, $counselorBLeaves);
 
         // 4. Guru reguler tidak dapat melihat apa pun
         $regQuery = $this->resolver->scopePendingRequestsForUser(TeacherLeaveRequest::query(), $this->regularTeacher);

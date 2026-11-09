@@ -11,8 +11,13 @@ use Illuminate\Database\Eloquent\Builder;
 class TeacherLeaveAuthorityResolver
 {
     /**
-     * Menentukan daftar ID pengguna (Waka Kurikulum atau Guru BK/Kesiswaan)
+     * Menentukan daftar ID pengguna (Guru BK/Kesiswaan aktif)
      * yang berwenang memverifikasi pengajuan izin mengajar tertentu.
+     * Sesuai aturan bisnis terbaru:
+     * - Waka hanya sebagai monitoring (bukan approver perizinan harian).
+     * - Izin Guru Reguler & Wali Kelas disetujui oleh Kesiswaan/BK.
+     * - Izin Guru Kesiswaan disetujui oleh sesama Guru Kesiswaan aktif lainnya.
+     * - Anti-Self-Approval: Pemohon tidak boleh menyetujui izinnya sendiri.
      *
      * @param TeacherLeaveRequest $leave
      * @return array<int>
@@ -23,15 +28,26 @@ class TeacherLeaveAuthorityResolver
         $applicant = $leave->relationLoaded('teacher') ? $leave->teacher : User::find($applicantId);
         $wakaIds = User::where('role', 'vice_principal')->pluck('id')->map(fn($id) => (int)$id)->toArray();
 
-        // ATURAN 1 (Anti-Self-Approval & Eskalasi Kesiswaan):
-        // Jika guru pemohon adalah anggota Tim Kesiswaan / BK, wewenang verifikasi
-        // wajib dieskalasikan khusus ke Waka Kurikulum (tidak boleh peer-approval sesama kesiswaan).
+        // Ambil seluruh ID Guru Kesiswaan aktif di sekolah
+        $allActiveKesiswaanIds = TeacherAssignment::query()
+            ->where('type', 'kesiswaan')
+            ->where('is_active', true)
+            ->pluck('user_id')
+            ->unique()
+            ->map(fn($id) => (int)$id)
+            ->toArray();
+
+        // ATURAN 1 (Guru Kesiswaan Izin):
+        // Jika pemohon adalah anggota Tim Kesiswaan, wewenang verifikasi
+        // diserahkan ke sesama Guru Kesiswaan aktif lainnya (peer-approval) dan Waka sebagai supervisor.
         if ($applicant && $applicant->isKesiswaan()) {
-            return array_values(array_diff($wakaIds, [$applicantId]));
+            $peerKesiswaanIds = array_diff($allActiveKesiswaanIds, [$applicantId]);
+            $allApprovers = array_unique(array_merge($peerKesiswaanIds, $wakaIds));
+            return array_values(array_diff($allApprovers, [$applicantId]));
         }
 
-        // ATURAN 2 (Resolusi Berdasarkan Rombel Kelas Jadwal Mengajar):
-        // Ambil kelas-kelas dari jadwal mengajar yang ditinggalkan pada hari tersebut
+        // ATURAN 2 (Guru Reguler & Walas):
+        // Resolusi berdasarkan rombel kelas jadwal mengajar yang ditinggalkan
         $approverIds = [];
 
         if (!empty($leave->schedule_ids) && is_array($leave->schedule_ids)) {
@@ -44,13 +60,12 @@ class TeacherLeaveAuthorityResolver
                 ->toArray();
 
             if (!empty($classIds)) {
-                // Petugas BK/Kesiswaan AKTIF yang membina rombel kelas-kelas tersebut
                 $bkUserIds = TeacherAssignment::query()
                     ->where('type', 'kesiswaan')
                     ->where('is_active', true)
                     ->where(function ($q) use ($classIds) {
                         $q->whereIn('class_id', $classIds)
-                          ->orWhereNull('class_id'); // Dukung penugasan global legacy
+                          ->orWhereNull('class_id'); // Penugasan global
                     })
                     ->pluck('user_id')
                     ->map(fn($id) => (int)$id)
@@ -58,9 +73,10 @@ class TeacherLeaveAuthorityResolver
 
                 $approverIds = array_merge($approverIds, $bkUserIds);
             }
-        } else {
-            // Jika izin tidak memiliki schedule_ids (misal dinas luar umum),
-            // petugas kesiswaan AKTIF dengan penugasan global (legacy) tetap didukung selain Waka
+        }
+
+        // Fallback: Jika tidak terpetakan kelas spesifik, dukung petugas kesiswaan global
+        if (empty($approverIds)) {
             $globalBkUserIds = TeacherAssignment::query()
                 ->where('type', 'kesiswaan')
                 ->where('is_active', true)
@@ -68,21 +84,15 @@ class TeacherLeaveAuthorityResolver
                 ->pluck('user_id')
                 ->map(fn($id) => (int)$id)
                 ->toArray();
-
             $approverIds = array_merge($approverIds, $globalBkUserIds);
         }
 
-        // ATURAN 3 (Waka Kurikulum sebagai Supervisor Sentral):
-        // Waka Kurikulum selalu memiliki wewenang untuk seluruh perizinan guru di sekolah
+        // Waka Kurikulum selalu disertakan sebagai supervisor sentral / monitoring
         $allApprovers = array_unique(array_merge($approverIds, $wakaIds));
 
-        // ATURAN 4 (Anti-Self-Approval Terakhir):
-        // Pemohon tidak pernah boleh menyetujui izinnya sendiri dalam kondisi apa pun
+        // ATURAN 3: Anti-Self-Approval
         $finalApprovers = array_values(array_diff($allApprovers, [$applicantId]));
 
-        // ATURAN 5 (Universal Fallback):
-        // Jika tidak ada petugas kesiswaan terpetakan (misal izin dinas tanpa jam mengajar KBM),
-        // wewenang fallback otomatis ke seluruh Waka Kurikulum
         if (empty($finalApprovers)) {
             $finalApprovers = array_values(array_diff($wakaIds, [$applicantId]));
         }
@@ -92,10 +102,6 @@ class TeacherLeaveAuthorityResolver
 
     /**
      * Memeriksa apakah seorang pengguna memiliki kewenangan untuk memverifikasi izin tertentu.
-     *
-     * @param User $user
-     * @param TeacherLeaveRequest $leave
-     * @return bool
      */
     public function canUserApprove(User $user, TeacherLeaveRequest $leave): bool
     {
@@ -104,12 +110,7 @@ class TeacherLeaveAuthorityResolver
     }
 
     /**
-     * Memfilter query TeacherLeaveRequest pending yang berhak diverifikasi oleh pengguna tertentu.
-     *
-     * @param Builder $query
-     * @param User $user
-     * @param string|null $status
-     * @return Builder
+     * Memfilter query TeacherLeaveRequest yang berhak diverifikasi / dipantau oleh pengguna tertentu.
      */
     public function scopePendingRequestsForUser(Builder $query, User $user, ?string $status = 'pending'): Builder
     {
@@ -117,13 +118,12 @@ class TeacherLeaveAuthorityResolver
             $query->where('status', $status);
         }
 
-        // Waka Kurikulum dapat melihat dan memverifikasi seluruh pengajuan pending guru
+        // Waka Kurikulum: Monitoring seluruh pengajuan guru (read-only)
         if ($user->role === 'vice_principal') {
             return $query->where('teacher_id', '!=', $user->id);
         }
 
-        // Guru BK / Kesiswaan hanya dapat melihat pengajuan dari kelas binaannya
-        // dan bukan permohonan dari sesama anggota Tim Kesiswaan
+        // Guru BK / Kesiswaan: Berhak melihat pengajuan dari Guru Reguler, Walas, dan sesama Kesiswaan
         if ($user->role === 'teacher' && $user->isKesiswaan()) {
             $assignedClassIds = $user->getKesiswaanClassIds();
             $hasGlobalAssignment = $user->assignments()->where('type', 'kesiswaan')->whereNull('class_id')->exists();
@@ -132,28 +132,19 @@ class TeacherLeaveAuthorityResolver
             return $query->where('teacher_id', '!=', $user->id)
                 ->where(function ($outer) use ($user, $assignedClassIds, $hasGlobalAssignment, $includePersonalVerifiedHistory) {
                     $outer->where(function ($activeScope) use ($assignedClassIds, $hasGlobalAssignment) {
-                        $activeScope->whereDoesntHave('teacher.assignments', function ($q) {
-                            // Hindari izin dari rekan guru kesiswaan aktif (karena harus dieskalasikan ke waka)
+                        if ($hasGlobalAssignment || empty($assignedClassIds)) {
+                            return; // Assignment global atau umum: lihat seluruh antrean
+                        }
+
+                        $validScheduleIds = Schedule::whereIn('class_id', $assignedClassIds)->pluck('id')->toArray();
+
+                        // Dukung permohonan dari sesama rekan kesiswaan ATAU jadwal pada kelas binaan
+                        $activeScope->whereHas('teacher.assignments', function ($q) {
                             $q->where('type', 'kesiswaan')->where('is_active', true);
-                        })->where(function ($sub) use ($assignedClassIds, $hasGlobalAssignment) {
-                            if ($hasGlobalAssignment) {
-                                return; // Jika assignment global, izinkan seluruh guru non-kesiswaan
-                            }
-
-                            if (empty($assignedClassIds)) {
-                                $sub->whereRaw('1 = 0'); // Belum punya kelas binaan
-                                return;
-                            }
-
-                            // Ambil jadwal yang memiliki class_id sesuai kelas binaan petugas
-                            $validScheduleIds = Schedule::whereIn('class_id', $assignedClassIds)->pluck('id')->toArray();
-
+                        })->orWhere(function ($sub) use ($validScheduleIds) {
                             if (empty($validScheduleIds)) {
-                                $sub->whereRaw('1 = 0');
                                 return;
                             }
-
-                            // Cocokkan apakah schedule_ids pada izin beririsan dengan validScheduleIds
                             foreach ($validScheduleIds as $schedId) {
                                 $sub->orWhereJsonContains('schedule_ids', (int)$schedId)
                                     ->orWhereJsonContains('schedule_ids', (string)$schedId);
@@ -161,14 +152,13 @@ class TeacherLeaveAuthorityResolver
                         });
                     });
 
-                    // Keputusan 1 Opsi A: Tetap tampilkan riwayat izin yang pernah diverifikasi sendiri
                     if ($includePersonalVerifiedHistory) {
                         $outer->orWhere('approved_by', $user->id);
                     }
                 });
         }
 
-        // Guru reguler tanpa penugasan kesiswaan tidak memiliki akses verifikasi apa pun
+        // Guru reguler tanpa penugasan kesiswaan tidak memiliki akses verifikasi
         return $query->whereRaw('1 = 0');
     }
 }

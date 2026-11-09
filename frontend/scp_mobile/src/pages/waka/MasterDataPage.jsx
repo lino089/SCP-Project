@@ -13,13 +13,14 @@ import {
 } from 'lucide-react';
 import {
   Button,
-  Badge,
   Modal,
   Input,
   Select,
   SearchInput,
   PasswordSheet,
   SegmentedTabs,
+  DataTable,
+  PaginationBar,
 } from '../../components/shared';
 import {
   classApi,
@@ -28,7 +29,7 @@ import {
   teacherApi,
   studentApi,
 } from '../../services/masterDataApi';
-import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback';
+import { EmptyState, ErrorState } from '../../components/feedback';
 
 const TABS = [
   { id: 'kelas', label: 'Rombel', icon: Building2 },
@@ -37,6 +38,15 @@ const TABS = [
   { id: 'ruang', label: 'Ruang', icon: Layers },
   { id: 'siswa', label: 'Siswa', icon: GraduationCap },
 ];
+
+function rowMeta(tab, item) {
+  if (tab === 'kelas') return `Tingkat ${item.level || '-'}${item.major ? ` · ${item.major}` : ''}`;
+  if (tab === 'guru') return `${item.nis_nip || 'Tanpa NIP'} · ${item.email || 'Tanpa email'}`;
+  if (tab === 'mapel') return `${item.code || '-'} · ${item.default_jp || 2} JP`;
+  if (tab === 'ruang') return `${item.code || '-'} · ${item.capacity || 36} siswa`;
+  if (tab === 'siswa') return `${item.nis_nip || '-'} · ${item.school_class?.name || 'Tanpa rombel'}`;
+  return '';
+}
 
 export default function MasterDataPage() {
   const [activeTab, setActiveTab] = useState('kelas');
@@ -51,6 +61,13 @@ export default function MasterDataPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+
+  // Pagination (server-side)
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
@@ -77,77 +94,58 @@ export default function MasterDataPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Debounce pencarian (server-side)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Kembali ke halaman 1 saat tab / pencarian / jumlah baris berubah
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, debouncedSearch, perPage]);
+
+  const setListForTab = useCallback((tab, list) => {
+    if (tab === 'kelas') setClassList(list);
+    else if (tab === 'guru') setTeacherList(list);
+    else if (tab === 'mapel') setSubjectList(list);
+    else if (tab === 'ruang') setRoomList(list);
+    else if (tab === 'siswa') setStudentList(list);
+  }, []);
+
   const fetchTabData = useCallback(async () => {
+    setIsLoading(true);
     try {
-      if (activeTab === 'kelas') {
-        const res = await classApi.getClasses({ per_page: 100 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setClassList(list);
-      } else if (activeTab === 'guru') {
-        const res = await teacherApi.getTeachers({ per_page: 100 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setTeacherList(list);
-      } else if (activeTab === 'mapel') {
-        const res = await subjectApi.getSubjects({ per_page: 100 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setSubjectList(list);
-      } else if (activeTab === 'ruang') {
-        const res = await roomApi.getRooms({ per_page: 100 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setRoomList(list);
-      } else if (activeTab === 'siswa') {
-        const res = await studentApi.getStudents({ per_page: 100 });
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setStudentList(list);
-      }
+      const params = { page, per_page: perPage };
+      if (debouncedSearch) params.search = debouncedSearch;
+
+      let res;
+      if (activeTab === 'kelas') res = await classApi.getClasses(params);
+      else if (activeTab === 'guru') res = await teacherApi.getTeachers(params);
+      else if (activeTab === 'mapel') res = await subjectApi.getSubjects(params);
+      else if (activeTab === 'ruang') res = await roomApi.getRooms(params);
+      else res = await studentApi.getStudents(params);
+
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setListForTab(activeTab, list);
+
+      const meta = res?.meta || {};
+      const total = Number(meta.total ?? list.length);
+      setTotalItems(total);
+      setTotalPages(Number(meta.last_page ?? Math.max(1, Math.ceil(total / perPage))) || 1);
       setLoadError(null);
     } catch (err) {
       setLoadError(err.message || 'Gagal memuat master data.');
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab]);
+  }, [activeTab, page, perPage, debouncedSearch, setListForTab]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function init() {
-      try {
-        if (activeTab === 'kelas') {
-          const res = await classApi.getClasses({ per_page: 100 });
-          const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          if (isMounted) setClassList(list);
-        } else if (activeTab === 'guru') {
-          const res = await teacherApi.getTeachers({ per_page: 100 });
-          const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          if (isMounted) setTeacherList(list);
-        } else if (activeTab === 'mapel') {
-          const res = await subjectApi.getSubjects({ per_page: 100 });
-          const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          if (isMounted) setSubjectList(list);
-        } else if (activeTab === 'ruang') {
-          const res = await roomApi.getRooms({ per_page: 100 });
-          const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          if (isMounted) setRoomList(list);
-        } else if (activeTab === 'siswa') {
-          const res = await studentApi.getStudents({ per_page: 100 });
-          const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          if (isMounted) setStudentList(list);
-        }
-        if (isMounted) setLoadError(null);
-      } catch (err) {
-        if (isMounted) setLoadError(err.message || 'Gagal memuat master data.');
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    init();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTab]);
+    fetchTabData();
+  }, [fetchTabData]);
 
   const handleRefresh = () => {
-    setIsLoading(true);
     fetchTabData();
   };
 
@@ -284,24 +282,14 @@ export default function MasterDataPage() {
     }
   };
 
-  // Filtered List based on Search
+  // Daftar aktif (server-side pagination — pencarian & halaman diurus API)
   const currentItems = useMemo(() => {
-    let list = [];
-    if (activeTab === 'kelas') list = classList;
-    else if (activeTab === 'guru') list = teacherList;
-    else if (activeTab === 'mapel') list = subjectList;
-    else if (activeTab === 'ruang') list = roomList;
-    else if (activeTab === 'siswa') list = studentList;
-
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter((item) => {
-      const name = item.name?.toLowerCase() || '';
-      const code = item.code?.toLowerCase() || '';
-      const nip = item.nis_nip?.toLowerCase() || '';
-      return name.includes(q) || code.includes(q) || nip.includes(q);
-    });
-  }, [activeTab, classList, teacherList, subjectList, roomList, studentList, searchQuery]);
+    if (activeTab === 'kelas') return classList;
+    if (activeTab === 'guru') return teacherList;
+    if (activeTab === 'mapel') return subjectList;
+    if (activeTab === 'ruang') return roomList;
+    return studentList;
+  }, [activeTab, classList, teacherList, subjectList, roomList, studentList]);
 
   return (
     <div className="space-y-4">
@@ -359,7 +347,7 @@ export default function MasterDataPage() {
         <SearchInput
           placeholder={`Cari data ${activeTab}...`}
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(value) => setSearchQuery(value)}
         />
         <Button
           size="sm"
@@ -372,98 +360,76 @@ export default function MasterDataPage() {
         </Button>
       </div>
 
-      {/* Card Items List */}
+      {/* Daftar data — tabel + pagination */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="section-label">
-            Daftar {activeTab.toUpperCase()} ({currentItems.length} Data)
+            Daftar {activeTab.toUpperCase()} ({totalItems} Data)
           </span>
         </div>
 
-        {isLoading ? (
-          <SkeletonCard count={3} />
-        ) : loadError ? (
+        {loadError ? (
           <ErrorState message={loadError} onRetry={handleRefresh} />
-        ) : currentItems.length === 0 ? (
-          <EmptyState
-            title={`Tidak Ada Data ${activeTab}`}
-            message={`Belum ada data pada kategori ini atau kata kunci pencarian tidak ditemukan.`}
-          />
         ) : (
-          <div className="space-y-2">
-            {currentItems.map((item) => (
-              <div
-                key={item.id}
-                className="surface-card p-3 space-y-1.5"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {item.code && (
-                        <Badge variant="neutral" size="sm">
-                          {item.code}
-                        </Badge>
-                      )}
-                      {item.level && (
-                        <Badge variant="info" size="sm">
-                          Tingkat {item.level}
-                        </Badge>
-                      )}
-                      {item.nis_nip && (
-                        <span className="text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-subtle)] px-1.5 py-0.5 rounded-[6px]">
-                          NIP/NIS: {item.nis_nip}
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-xs font-bold text-[var(--color-text-primary)] mt-1 truncate">
-                      {item.name}
-                    </h3>
-
-                    {activeTab === 'guru' && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] truncate mt-0.5">
-                        {item.email || 'Tanpa Email'} • {item.phone || 'Tanpa No. HP'}
-                      </p>
-                    )}
-                    {activeTab === 'mapel' && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                        Beban Standar: <span className="font-semibold">{item.default_jp || 2} JP</span>
-                      </p>
-                    )}
-                    {activeTab === 'ruang' && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                        Kapasitas: <span className="font-semibold">{item.capacity || 36} Siswa</span>
-                      </p>
-                    )}
-                    {activeTab === 'siswa' && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                        Rombel: <span className="font-semibold">{item.school_class?.name || '-'}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
+          <DataTable
+            columns={[
+              { key: 'no', label: '#', width: 30, align: 'center' },
+              { key: 'name', label: 'Nama / Identitas' },
+              { key: 'actions', label: 'Aksi', width: 74, align: 'right' },
+            ]}
+            rows={currentItems}
+            isLoading={isLoading}
+            skeletonRows={Math.min(perPage, 10)}
+            ariaLabel={`Daftar ${activeTab}`}
+            empty={
+              <EmptyState
+                title={`Tidak Ada Data ${activeTab}`}
+                message="Belum ada data pada kategori ini atau kata kunci pencarian tidak ditemukan."
+              />
+            }
+            renderRow={(item, index) => (
+              <tr key={item.id}>
+                <td className="data-table__no">
+                  {String((page - 1) * perPage + index + 1).padStart(2, '0')}
+                </td>
+                <td>
+                  <span className="data-table__cell-title">{item.name}</span>
+                  <span className="data-table__cell-meta">{rowMeta(activeTab, item)}</span>
+                </td>
+                <td>
+                  <div className="data-table__actions">
                     <button
                       type="button"
+                      className="data-table__action"
                       onClick={() => handleOpenEdit(item)}
-                      className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded-[10px] hover:bg-[var(--color-surface-subtle)]"
-                      aria-label="Edit"
+                      aria-label={`Ubah ${item.name}`}
                     >
-                      <Pencil size={14} />
+                      <Pencil size={13} />
                     </button>
                     <button
                       type="button"
+                      className="data-table__action data-table__action--danger"
                       onClick={() => handleTriggerDelete(item.id)}
-                      className="p-1.5 text-rose-500 hover:text-[var(--color-danger-fg)] rounded-[10px] hover:bg-[var(--color-danger-bg)]"
-                      aria-label="Hapus"
+                      aria-label={`Hapus ${item.name}`}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                </td>
+              </tr>
+            )}
+            footer={
+              <PaginationBar
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                disabled={isLoading}
+              />
+            }
+          />
         )}
       </div>
 

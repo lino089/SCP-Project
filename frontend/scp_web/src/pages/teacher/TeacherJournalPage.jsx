@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   PlayCircle,
   CheckCircle,
+  CheckCircle2,
   AlertTriangle,
   AlertCircle,
   ShieldCheck,
@@ -19,17 +20,19 @@ import {
   MapPin,
   User,
   Camera,
+  Lock,
+  Ban,
+  Layers,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
 import { compressImage } from '../../utils/imageCompressor';
 import { getStorageUrl } from '../../utils/formatters';
-import { unwrap, unwrapList } from '../../utils/responseHelper';
-import { todayLocalISO, getJakartaDayInfo } from '../../utils/dateUtils';
-import {
-  Button,
-  Badge,
-} from '../../components/shared';
+import { unwrapList } from '../../utils/responseHelper';
+import { todayLocalISO, getJakartaDayInfo, getJakartaTimeString } from '../../utils/dateUtils';
+import { calculateSessionStatus } from '../../utils/sessionStatusHelper';
+import { Button, Badge } from '../../components/shared';
 import { ForbiddenState, EmptyState } from '../../components/feedback';
 import './TeacherJournal.css';
 
@@ -38,12 +41,16 @@ export default function TeacherJournalPage() {
   const navigate = useNavigate();
   const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
 
-  // Ambil data jadwal dari route state atau fallback
+  // Jadwal yang dikirimkan via route state saat navigasi dari Kalender/Dashboard
   const passedSchedule = location.state?.schedule;
 
-  // Jadwal aktif KBM
+  // State Daftar Seluruh Jadwal Hari Ini
+  const [todaySchedules, setTodaySchedules] = useState([]);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+  const [currentTime, setCurrentTime] = useState(getJakartaTimeString() || '08:00');
+
+  // State Sesi KBM yang Sedang Dipilih / Aktif untuk Pengisian Jurnal
   const [schedule, setSchedule] = useState(passedSchedule || null);
-  const [isLoadingInitial, setIsLoadingInitial] = useState(!passedSchedule);
   const [journalId, setJournalId] = useState(null);
   const [classOpened, setClassOpened] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,7 +63,7 @@ export default function TeacherJournalPage() {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [compressedFileSize, setCompressedFileSize] = useState(null);
 
-  // Live Camera State (Khusus Pengambilan Foto Langsung Perangkat)
+  // Live Camera State
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' | 'user'
   const [cameraError, setCameraError] = useState('');
@@ -64,6 +71,7 @@ export default function TeacherJournalPage() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const activeWorkingRef = useRef(null);
 
   // Data Siswa & Presensi
   const [students, setStudents] = useState([]);
@@ -72,42 +80,80 @@ export default function TeacherJournalPage() {
   const [studentNotes, setStudentNotes] = useState({});
   const [savedJournalData, setSavedJournalData] = useState(null);
 
-  // Ambil jadwal default hari ini bila pengguna langsung membuka /teacher/journal tanpa navigasi (P-13: perbaiki fallback)
+  // Timer Real-Time untuk memperbarui waktu setiap 15 detik agar status sesi berganti otomatis
   useEffect(() => {
-    let isMounted = true;
-    if (!schedule) {
-      setIsLoadingInitial(true);
+    const timer = setInterval(() => {
+      setCurrentTime(getJakartaTimeString() || '08:00');
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Muat seluruh jadwal mengajar guru pada hari ini
+  const loadTodaySchedules = useCallback(async () => {
+    setIsLoadingInitial(true);
+    setErrorMessage('');
+    try {
       const dayInfo = getJakartaDayInfo();
       const cycle = Number(user?.academic_setting?.active_cycle || user?.active_cycle || 1);
-      journalApi
-        .getTeacherSchedules({ day: dayInfo.dayOfWeek, cycle, per_page: 50 })
-        .then((res) => {
-          if (!isMounted) return;
-          const list = unwrapList(res);
-          if (list.length > 0) {
-            // Urutkan berdasarkan period_number dan pilih jadwal hari ini yang paling awal
-            const sorted = [...list].sort(
-              (a, b) => Number(a.period_number || 1) - Number(b.period_number || 1)
-            );
-            setSchedule(sorted[0]);
-          }
-        })
-        .catch((err) => {
-          console.warn('Gagal memuat jadwal hari ini guru:', err);
-        })
-        .finally(() => {
-          if (isMounted) setIsLoadingInitial(false);
-        });
-    } else {
+      const res = await journalApi.getTeacherSchedules({
+        day: dayInfo.dayOfWeek,
+        cycle,
+        per_page: 50,
+        all: 1,
+      });
+
+      const list = unwrapList(res);
+      // Urutkan jadwal secara kronologis berdasarkan period_number (Jam Ke-1 s/d Jam Ke-10)
+      const sorted = [...list].sort(
+        (a, b) => Number(a.period_number || 1) - Number(b.period_number || 1)
+      );
+      setTodaySchedules(sorted);
+
+      // Jika ada passedSchedule dari navigasi, sinkronkan dengan data terbaru
+      if (passedSchedule) {
+        const found = sorted.find((s) => s.id === passedSchedule.id);
+        if (found) {
+          setSchedule(found);
+        } else {
+          setSchedule(passedSchedule);
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal memuat jadwal hari ini guru:', err);
+      setErrorMessage('Gagal memuat jadwal mengajar hari ini. Silakan muat ulang halaman.');
+    } finally {
       setIsLoadingInitial(false);
     }
-    return () => {
-      isMounted = false;
-    };
-  }, [schedule, user?.academic_setting?.active_cycle, user?.active_cycle]);
+  }, [user?.academic_setting?.active_cycle, user?.active_cycle, passedSchedule]);
 
-  // Penegakan Otorisasi Ketat:
-  // Apakah user adalah pemilik jadwal ATAU guru Kesiswaan?
+  useEffect(() => {
+    loadTodaySchedules();
+  }, [loadTodaySchedules]);
+
+  // Statistik Ringkasan Sesi Hari Ini
+  const sessionSummary = useMemo(() => {
+    const counts = {
+      total: todaySchedules.length,
+      completed: 0,
+      ready: 0,
+      upcoming: 0,
+      expired: 0,
+      exempted: 0,
+    };
+
+    todaySchedules.forEach((item) => {
+      const calc = calculateSessionStatus(item, currentTime);
+      if (calc.status === 'completed') counts.completed += 1;
+      else if (calc.status === 'ready') counts.ready += 1;
+      else if (calc.status === 'upcoming') counts.upcoming += 1;
+      else if (calc.status === 'expired') counts.expired += 1;
+      else if (calc.status === 'exempted' || calc.status === 'teacher_absent') counts.exempted += 1;
+    });
+
+    return counts;
+  }, [todaySchedules, currentTime]);
+
+  // Penegakan Otorisasi untuk Sesi yang Sedang Dipilih
   const isOriginalTeacher = useMemo(() => {
     if (!schedule || !user) return true;
     return schedule.teacher_id === user.id;
@@ -121,11 +167,10 @@ export default function TeacherJournalPage() {
   const isAccessDenied = useMemo(() => {
     if (!schedule || !user) return false;
     const isHomeroom = schedule?.class_id ? isWaliKelas(schedule.class_id) : false;
-    // Diizinkan jika: Guru Pengampu Asli, Tim Kesiswaan, Waka Kurikulum, atau Wali Kelas rombel tersebut
     return !isOriginalTeacher && !isKesiswaan() && !hasRole('waka') && !isHomeroom;
   }, [schedule, user, isOriginalTeacher, isKesiswaan, hasRole, isWaliKelas]);
 
-  // Muat tugas titipan jika dalam mode pengganti Kesiswaan atau Wali Kelas
+  // Data Rombel, Mapel, Ruang untuk Sesi Aktif
   const taskTitipan = useMemo(() => {
     if (isSubstituteMode) {
       return schedule?.task_instruction || '';
@@ -133,7 +178,6 @@ export default function TeacherJournalPage() {
     return '';
   }, [isSubstituteMode, schedule?.task_instruction]);
 
-  // Data Relasi & Penamaan Sesi KBM
   const className = useMemo(() => {
     return (
       schedule?.school_class?.name ||
@@ -179,7 +223,7 @@ export default function TeacherJournalPage() {
     }
   }, [schedule]);
 
-  // Helper kompresi dan set foto dokumentasi
+  // Helper kompresi foto
   const handlePhotoSelect = async (file) => {
     if (!file) {
       setUploadedPhoto(null);
@@ -200,7 +244,6 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Bersihkan object URL saat unmount
   useEffect(() => {
     return () => {
       if (photoPreview) {
@@ -209,7 +252,7 @@ export default function TeacherJournalPage() {
     };
   }, [photoPreview]);
 
-  // Hentikan stream kamera aktif
+  // Kamera stream
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -222,18 +265,15 @@ export default function TeacherJournalPage() {
     setIsCapturing(false);
   }, []);
 
-  // Mulai stream kamera perangkat langsung
   const startCamera = async (facing = cameraFacing) => {
     setCameraError('');
     setIsCapturing(false);
 
-    // Hentikan stream sebelumnya bila masih berjalan
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
 
-    // Pastikan browser mendukung getUserMedia
     if (!navigator?.mediaDevices?.getUserMedia) {
       if (fileInputRef.current) {
         fileInputRef.current.click();
@@ -264,8 +304,6 @@ export default function TeacherJournalPage() {
     } catch (err) {
       console.warn('Gagal mengakses kamera via getUserMedia:', err);
       setIsCameraActive(false);
-
-      // Coba fallback intent capture pada mobile device jika getUserMedia terhambat
       if (fileInputRef.current) {
         fileInputRef.current.click();
       } else {
@@ -278,14 +316,12 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Switch kamera depan/belakang
   const switchCamera = () => {
     const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
     setCameraFacing(nextFacing);
     startCamera(nextFacing);
   };
 
-  // Jepret foto langsung dari stream video
   const capturePhoto = async () => {
     if (!videoRef.current || isCapturing) return;
     setIsCapturing(true);
@@ -321,7 +357,6 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Kaitkan stream ke videoRef saat isCameraActive berubah
   useEffect(() => {
     if (isCameraActive && videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -329,7 +364,6 @@ export default function TeacherJournalPage() {
     }
   }, [isCameraActive]);
 
-  // Bersihkan track kamera saat komponen unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -338,7 +372,6 @@ export default function TeacherJournalPage() {
     };
   }, []);
 
-  // Helper ubah catatan siswa individual
   const handleNoteChange = useCallback((studentId, noteText) => {
     setStudentNotes((prev) => ({
       ...prev,
@@ -346,19 +379,23 @@ export default function TeacherJournalPage() {
     }));
   }, []);
 
-  // Buka Sesi Kelas KBM (POST /api/journals)
-  const handleOpenClass = async () => {
-    if (!schedule) return;
-    if (schedule.is_teaching_exempted) {
-      setErrorMessage(`Pengisian jurnal dibatalkan karena terdapat agenda sekolah: ${schedule.exemption_reason || 'Kegiatan Khusus'}.`);
+  // BUKA SESI KBM UNTUK SESI TERTENTU (POST /api/journals)
+  const handleOpenClassForSchedule = async (targetSchedule) => {
+    if (!targetSchedule) return;
+    if (targetSchedule.is_teaching_exempted) {
+      setErrorMessage(`Pengisian jurnal dibatalkan karena terdapat agenda sekolah: ${targetSchedule.exemption_reason || 'Kegiatan Khusus'}.`);
       return;
     }
+
+    setSchedule(targetSchedule);
+    setSubmitted(false);
+    setClassOpened(false);
     setIsSubmitting(true);
     setErrorMessage('');
 
     try {
       const res = await journalApi.openJournal({
-        schedule_id: schedule.id,
+        schedule_id: targetSchedule.id,
         status: 'ongoing',
         date: todayLocalISO(),
       });
@@ -366,13 +403,24 @@ export default function TeacherJournalPage() {
       if (res.success && res.data) {
         setJournalId(res.data.id);
         setSavedJournalData(res.data);
-        if (res.data.topic_description && !topic) {
+        if (res.data.topic_description) {
           setTopic(res.data.topic_description);
+        } else {
+          setTopic('');
         }
       }
 
+      // Perbarui status lokal pada todaySchedules
+      setTodaySchedules((prev) =>
+        prev.map((s) =>
+          s.id === targetSchedule.id
+            ? { ...s, journal_status: 'ongoing', journal_id: res.data?.id || s.journal_id }
+            : s
+        )
+      );
+
       // Ambil daftar siswa kelas terkait
-      const classId = schedule.school_class_id || schedule.class_id;
+      const classId = targetSchedule.school_class_id || targetSchedule.class_id;
       if (!classId) {
         setErrorMessage('Data rombel kelas pada jadwal ini tidak ditemukan.');
         return;
@@ -381,12 +429,9 @@ export default function TeacherJournalPage() {
       const studentList = studRes.data || [];
       setStudents(studentList);
 
-      // Tangkap respons meta.approved_leaves
       const leaves = res.meta?.approved_leaves || [];
       setApprovedLeaves(leaves);
 
-      // Inisialisasi Presensi & Catatan:
-      // Periksa apakah sudah ada riwayat presensi yang tersimpan sebelumnya
       const initAttendance = {};
       const initNotes = {};
       const existingAttendances = res.data?.attendances || [];
@@ -412,6 +457,11 @@ export default function TeacherJournalPage() {
       setAttendance(initAttendance);
       setStudentNotes(initNotes);
       setClassOpened(true);
+
+      // Scroll halus ke form kerja
+      setTimeout(() => {
+        activeWorkingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     } catch (err) {
       const status = err.status || err.response?.status;
       const msg = err.message || err.response?.data?.message;
@@ -425,13 +475,19 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Melihat Detail Jurnal & Catatan Siswa untuk Jurnal yang sudah Selesai (Completed)
-  const handleViewJournalDetail = async () => {
-    const targetId = schedule?.journal_id || journalId;
-    if (!targetId) return;
+  // LIHAT DETAIL JURNAL SESI YANG SUDAH SELESAI
+  const handleViewJournalDetailForSchedule = async (targetSchedule) => {
+    const targetId = targetSchedule?.journal_id || (schedule?.id === targetSchedule?.id ? journalId : null);
+    if (!targetId) {
+      setErrorMessage('ID jurnal untuk sesi ini tidak ditemukan.');
+      return;
+    }
 
+    setSchedule(targetSchedule);
+    setClassOpened(false);
     setIsSubmitting(true);
     setErrorMessage('');
+
     try {
       const res = await journalApi.getJournalDetail(targetId);
       if (res.success && res.data) {
@@ -441,6 +497,8 @@ export default function TeacherJournalPage() {
         setTopic(jData.topic_description || '');
         if (jData.photo_url || jData.photo_path) {
           setPhotoPreview(getStorageUrl(jData.photo_url || jData.photo_path));
+        } else {
+          setPhotoPreview(null);
         }
 
         const existingAttendances = jData.attendances || [];
@@ -468,6 +526,10 @@ export default function TeacherJournalPage() {
         setAttendance(initAtt);
         setStudentNotes(initNts);
         setSubmitted(true);
+
+        setTimeout(() => {
+          activeWorkingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
       }
     } catch (err) {
       setErrorMessage(err.message || 'Gagal memuat detail jurnal & catatan presensi.');
@@ -476,27 +538,29 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Menandai Guru Berhalangan Hadir (Jam Kosong) oleh Kesiswaan / Waka
-  const handleMarkTeacherAbsent = async () => {
-    if (!schedule) return;
+  // Menandai Guru Berhalangan Hadir
+  const handleMarkTeacherAbsent = async (targetSchedule) => {
+    const s = targetSchedule || schedule;
+    if (!s) return;
     const confirm = window.confirm(
-      'Apakah Anda yakin ingin menandai kelas ini sebagai Guru Berhalangan Hadir (Jam Kosong)?'
+      'Apakah Anda yakin ingin menandai sesi ini sebagai Guru Berhalangan Hadir (Jam Kosong)?'
     );
     if (!confirm) return;
 
     try {
-      await journalApi.markTeacherAbsent(journalId, {
-        schedule_id: schedule.id,
+      await journalApi.markTeacherAbsent(s.journal_id, {
+        schedule_id: s.id,
       });
       alert('Jadwal berhasil ditandai sebagai Guru Berhalangan Hadir (teacher_absent).');
-      navigate('/teacher/schedule');
+      loadTodaySchedules();
+      setClassOpened(false);
+      setSubmitted(false);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Gagal menandai status jam kosong.';
       alert(msg);
     }
   };
 
-  // Ubah status kehadiran per siswa
   const handleStatusChange = useCallback((studentId, newStatus) => {
     setAttendance((prev) => ({
       ...prev,
@@ -504,7 +568,6 @@ export default function TeacherJournalPage() {
     }));
   }, []);
 
-  // Hitung jumlah statistik kehadiran secara langsung
   const counts = useMemo(() => {
     const res = { hadir: 0, sakit: 0, izin: 0, alpa: 0 };
     Object.values(attendance).forEach((status) => {
@@ -516,11 +579,10 @@ export default function TeacherJournalPage() {
     return res;
   }, [attendance]);
 
-  // Submit Penyelesaian Jurnal Atomik (PUT /api/journals/{id})
+  // SUBMIT PENYELESAIAN JURNAL (PUT /api/journals/{id})
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validasi topik materi (wajib minimal 10 karakter jika bukan mode pengganti kesiswaan)
     if (!isSubstituteMode && (!topic || topic.trim().length < 10)) {
       setErrorMessage('Deskripsi topik materi pembelajaran wajib diisi minimal 10 karakter.');
       return;
@@ -533,7 +595,7 @@ export default function TeacherJournalPage() {
     }
 
     if (!uploadedPhoto) {
-      setErrorMessage('Wajib mengunggah minimal 1 foto bukti dokumentasi KBM.');
+      setErrorMessage('Wajib mengunggah minimal 1 foto bukti dokumentasi KBM via kamera.');
       return;
     }
 
@@ -541,7 +603,6 @@ export default function TeacherJournalPage() {
     setErrorMessage('');
 
     try {
-      // Susun array exceptions HANYA untuk siswa yang tidak Hadir (PRD 5.8)
       const exceptions = [];
       Object.entries(attendance).forEach(([stId, status]) => {
         if (status !== 'Hadir') {
@@ -555,7 +616,6 @@ export default function TeacherJournalPage() {
         }
       });
 
-      // Konstruksi FormData multipart
       const formData = new FormData();
       formData.append(
         'topic_description',
@@ -563,7 +623,6 @@ export default function TeacherJournalPage() {
       );
       formData.append('photo', uploadedPhoto);
 
-      // Kirim array exceptions untuk parsing Laravel
       exceptions.forEach((exc, index) => {
         formData.append(`exceptions[${index}][student_id]`, exc.student_id);
         formData.append(`exceptions[${index}][status]`, exc.status);
@@ -572,7 +631,6 @@ export default function TeacherJournalPage() {
         }
       });
 
-      // Kirim array student_notes untuk setiap siswa yang memiliki catatan (Hadir maupun Absen)
       let noteIndex = 0;
       Object.entries(studentNotes).forEach(([stId, noteText]) => {
         const cleanNote = (noteText || '').trim();
@@ -588,6 +646,15 @@ export default function TeacherJournalPage() {
         setSavedJournalData(res.data);
       }
       setSubmitted(true);
+
+      // Perbarui status sesi yang bersangkutan pada todaySchedules
+      setTodaySchedules((prev) =>
+        prev.map((s) =>
+          s.id === schedule.id
+            ? { ...s, journal_status: 'completed', journal_id: targetJournalId }
+            : s
+        )
+      );
     } catch (err) {
       const status = err.status || err.response?.status;
       const msg = err.message || err.response?.data?.message;
@@ -605,113 +672,72 @@ export default function TeacherJournalPage() {
     }
   };
 
-  // Jika hak akses ditolak (403)
-  if (isAccessDenied) {
+  // Tutup panel kerja aktif untuk kembali ke daftar sesi penuh
+  const handleCloseWorkingSession = () => {
+    setClassOpened(false);
+    setSubmitted(false);
+    setSchedule(null);
+    setUploadedPhoto(null);
+    setPhotoPreview(null);
+    stopCamera();
+  };
+
+  // Jika hak akses ditolak (403) pada sesi yang dipilih
+  if (isAccessDenied && schedule) {
     return (
       <div className="teacher-journal">
         <ForbiddenState
           title="Akses Jurnal Ditolak (403 Forbidden)"
           message="Hanya guru pengajar jadwal atau Tim Kesiswaan (Piket) yang berhak membuka, mengisi, atau menggantikan jurnal KBM kelas ini."
-          actionText="Kembali ke Kalender Mengajar"
-          onAction={() => navigate('/teacher/schedule')}
+          actionText="Kembali ke Daftar Sesi Hari Ini"
+          onAction={handleCloseWorkingSession}
         />
-      </div>
-    );
-  }
-
-  // Jika sedang memuat jadwal awal
-  if (isLoadingInitial) {
-    return (
-      <div className="teacher-journal">
-        <div className="teacher-journal__header">
-          <div className="teacher-journal__title-group">
-            <h1>Jurnal KBM &amp; Presensi Kelas</h1>
-            <p className="teacher-journal__subtitle">
-              Buka kelas berjalan, catat topik materi pembelajaran, verifikasi kehadiran siswa, dan unggah foto dokumentasi KBM.
-            </p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-12 my-6 text-center max-w-lg mx-auto">
-          <RotateCw className="w-8 h-8 animate-spin text-slate-700 mx-auto mb-3" />
-          <p className="text-xs text-slate-500">Memeriksa sesi KBM aktif Anda...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Jika belum ada jadwal KBM aktif yang dipilih
-  if (!schedule) {
-    return (
-      <div className="teacher-journal">
-        <div className="teacher-journal__header">
-          <div className="teacher-journal__title-group">
-            <h1>Jurnal KBM &amp; Presensi Kelas</h1>
-            <p className="teacher-journal__subtitle">
-              Buka kelas berjalan, catat topik materi pembelajaran, verifikasi kehadiran siswa, dan unggah foto dokumentasi KBM.
-            </p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-8 my-6 text-center max-w-lg mx-auto">
-          <EmptyState
-            title="Belum Ada Jadwal KBM yang Dipilih"
-            message="Silakan pilih jadwal KBM aktif Anda dari Kalender Mengajar untuk membuka sesi pembelajaran kelas hari ini."
-            actionText="Buka Kalender Jadwal Mengajar"
-            onAction={() => navigate('/teacher/schedule')}
-          />
-        </div>
       </div>
     );
   }
 
   return (
     <div className="teacher-journal">
-      {/* Header Halaman */}
+      {/* 1. Header Halaman Terpadu */}
       <div className="teacher-journal__header">
         <div className="teacher-journal__title-group">
           <h1>Jurnal KBM &amp; Presensi Kelas</h1>
           <p className="teacher-journal__subtitle">
-            Buka kelas berjalan, catat topik materi pembelajaran, verifikasi kehadiran siswa, dan unggah foto dokumentasi KBM.
+            Daftar seluruh sesi mengajar Anda hari ini. Buka sesi aktif, isi topik pembelajaran, verifikasi presensi, dan lampirkan foto dokumentasi kelas.
           </p>
         </div>
 
         <div className="teacher-journal__header-badges">
-          {isSubstituteMode ? (
-            <>
-              <Badge variant="warning">Mode Guru Pengganti (Kesiswaan)</Badge>
-              <Badge variant="neutral">
-                {className} &bull; {subjectName}
-              </Badge>
-            </>
-          ) : (
-            <>
-              <Badge variant="default">{subjectName}</Badge>
-              <Badge variant="neutral">
-                {className} &bull; {roomName}
-              </Badge>
-            </>
-          )}
+          <Badge variant="neutral">
+            <Calendar size={13} className="mr-1 inline text-gray-500" />
+            {sessionDateFormatted}
+          </Badge>
+          <Badge variant="default">
+            Putaran {user?.academic_setting?.active_cycle || user?.active_cycle || 1}
+          </Badge>
+          <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
+            Waktu: <strong>{currentTime} WIB</strong>
+          </span>
         </div>
       </div>
 
-      {/* Banner Ambil Alih Kelas oleh Tim Kesiswaan */}
-      {isSubstituteMode && (
-        <div className="teacher-journal__kesiswaan-banner">
-          <div className="flex items-center gap-3">
-            <ShieldCheck size={22} className="text-amber-500 shrink-0" />
-            <div>
-              <div className="teacher-journal__kesiswaan-banner-title">
-                Ambil Alih Kelas KBM oleh Tim Kesiswaan (Piket)
-              </div>
-              <div className="teacher-journal__kesiswaan-banner-sub">
-                Guru Pengampu Asli (<strong>{schedule?.teacher?.name || 'Guru Pengampu'}</strong>) sedang berhalangan hadir.
-              </div>
-            </div>
-          </div>
-          <span className="teacher-journal__kesiswaan-pill">
-            Topik Pembelajaran Bersifat Opsional
-          </span>
+      {/* 2. Banner Ringkasan Sesi KBM Hari Ini */}
+      <div className="teacher-journal__summary-bar">
+        <div className="teacher-journal__summary-title">
+          <Layers size={16} className="text-blue-600" />
+          <span>Agenda Mengajar Hari Ini:</span>
         </div>
-      )}
+        <Badge variant="default">Total: {sessionSummary.total} Sesi</Badge>
+        <Badge variant="success">Selesai: {sessionSummary.completed}</Badge>
+        <Badge variant="primary">Dapat Diisi: {sessionSummary.ready}</Badge>
+        <Badge variant="neutral">Segera: {sessionSummary.upcoming}</Badge>
+        {sessionSummary.expired > 0 && (
+          <Badge variant="error">Telah Berakhir: {sessionSummary.expired}</Badge>
+        )}
+        {sessionSummary.exempted > 0 && (
+          <Badge variant="warning">Dikecualikan: {sessionSummary.exempted}</Badge>
+        )}
+      </div>
 
       {/* Tampilan Error Banner */}
       {errorMessage && (
@@ -721,733 +747,858 @@ export default function TeacherJournalPage() {
         </div>
       )}
 
-      {/* KONDISI 1: SUKSES SUBMIT / DETAIL JURNAL (COMPLETED STATE) */}
-      {submitted ? (
-        <div className="flex flex-col gap-6 max-w-4xl mx-auto my-4">
-          <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
-                <CheckCircle size={28} />
+      {/* 3. DAFTAR SELURUH SESI MENGAJAR HARI INI */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <Clock size={16} className="text-amber-500" />
+            Daftar Sesi Mengajar Hari Ini
+          </h2>
+          <span className="text-xs text-gray-500">
+            Diurutkan berdasarkan jadwal jam pelajaran (pagi s.d. sore)
+          </span>
+        </div>
+
+        {isLoadingInitial ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+            <RotateCw className="w-8 h-8 animate-spin text-slate-700 mx-auto mb-3" />
+            <p className="text-xs text-slate-500">Memuat seluruh sesi KBM hari ini...</p>
+          </div>
+        ) : todaySchedules.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center max-w-lg mx-auto">
+            <EmptyState
+              title="Tidak Ada Jadwal Mengajar Hari Ini"
+              message="Anda tidak memiliki jadwal KBM yang terdaftar pada hari ini. Silakan periksa kalender mengajar mingguan Anda."
+              actionText="Buka Kalender Jadwal Mengajar"
+              onAction={() => navigate('/teacher/schedule')}
+            />
+          </div>
+        ) : (
+          <div className="teacher-journal__sessions-grid">
+            {todaySchedules.map((item, idx) => {
+              const calc = calculateSessionStatus(item, currentTime);
+              const isSelected = schedule?.id === item.id;
+              const itemClassName =
+                item.school_class?.name ||
+                item.schoolClass?.name ||
+                item.class_name ||
+                (item.class_id ? `Kelas #${item.class_id}` : 'Rombel Kelas');
+              const itemSubject = item.subject?.name || item.subject_name || 'Mata Pelajaran';
+              const rawRoom = item.room?.name || item.room_name || '';
+              const itemRoom = rawRoom
+                ? String(rawRoom).toLowerCase().startsWith('ruang') || String(rawRoom).toLowerCase().startsWith('lab')
+                  ? String(rawRoom)
+                  : `Ruang ${rawRoom}`
+                : 'Ruang Belajar';
+              const startP = item.period_number || 1;
+              const durP = item.duration_periods || 1;
+              const endP = startP + durP - 1;
+
+              // Card styling modifier
+              let cardModifier = '';
+              if (isSelected) cardModifier += ' teacher-journal__session-card--active';
+              if (calc.status === 'ready') cardModifier += ' teacher-journal__session-card--ready';
+              else if (calc.status === 'upcoming') cardModifier += ' teacher-journal__session-card--upcoming';
+              else if (calc.status === 'expired') cardModifier += ' teacher-journal__session-card--expired';
+              else if (calc.status === 'completed') cardModifier += ' teacher-journal__session-card--completed';
+              else if (calc.status === 'exempted') cardModifier += ' teacher-journal__session-card--exempted';
+
+              return (
+                <div key={item.id} className={`teacher-journal__session-card ${cardModifier}`}>
+                  {/* Header Kartu Sesi */}
+                  <div className="teacher-journal__session-card-header">
+                    <div className="teacher-journal__session-card-tags">
+                      <span className="font-mono text-xs font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                        Sesi {idx + 1}: Jam Ke-{startP} s/d {endP} ({durP} JP)
+                      </span>
+                      <span className="text-xs font-medium text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 flex items-center gap-1">
+                        <Clock size={12} className="text-gray-400" />
+                        {calc.startTime || '07:15'} - {calc.endTime || '08:35'} WIB
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {calc.status === 'ready' && (
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-md">
+                          <span className="teacher-journal__pulse-dot teacher-journal__pulse-dot--active" />
+                          {calc.label}
+                        </span>
+                      )}
+                      {calc.status === 'completed' && (
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                          <CheckCircle2 size={14} className="text-emerald-600" />
+                          Selesai Disimpan
+                        </span>
+                      )}
+                      {calc.status === 'upcoming' && (
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md">
+                          <Lock size={13} className="text-slate-500" />
+                          Segera
+                        </span>
+                      )}
+                      {calc.status === 'expired' && (
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-md">
+                          <AlertCircle size={14} className="text-red-600" />
+                          Sesi Telah Berakhir
+                        </span>
+                      )}
+                      {calc.status === 'exempted' && (
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md">
+                          <AlertTriangle size={13} className="text-amber-600" />
+                          Agenda Sekolah
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Body Kartu Sesi */}
+                  <div className="teacher-journal__session-card-body">
+                    <div className="teacher-journal__session-card-info">
+                      <h3 className="teacher-journal__session-card-title">
+                        <span>{itemSubject}</span>
+                        <span className="teacher-journal__class-badge">{itemClassName}</span>
+                        {item.is_substitute && (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-amber-100 text-amber-900 font-semibold border border-amber-300">
+                            Sesi Inval (Pengganti)
+                          </span>
+                        )}
+                      </h3>
+
+                      <div className="teacher-journal__session-card-meta">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={13} className="text-rose-500" />
+                          {itemRoom}
+                        </span>
+                        <span>&bull;</span>
+                        <span className="flex items-center gap-1">
+                          <User size={13} className="text-emerald-600" />
+                          {item.is_substitute ? (
+                            <span>
+                              Menggantikan: <strong>{item.original_teacher_name}</strong>
+                            </span>
+                          ) : (
+                            <span>{item.teacher?.name || user?.name || 'Guru Pengampu'}</span>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Tampilan Tugas Titipan KBM untuk Sesi Pengganti */}
+                      {item.is_substitute && (item.leave_task_instruction || item.leave_task_attachment_path) && (
+                        <div className="my-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-950">
+                          <div className="flex items-center gap-1.5 font-semibold text-amber-900 mb-1">
+                            <BookOpen size={13} className="text-amber-700" />
+                            <span>Tugas Titipan dari {item.original_teacher_name}:</span>
+                          </div>
+                          {item.leave_task_instruction && (
+                            <p className="text-[11.5px] text-amber-900 whitespace-pre-line mb-1">
+                              {item.leave_task_instruction}
+                            </p>
+                          )}
+                          {item.leave_task_attachment_path && (
+                            <a
+                              href={getStorageUrl(item.leave_task_attachment_path)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 underline mt-0.5"
+                            >
+                              <ExternalLink size={11} />
+                              <span>Unduh Lampiran Berkas Tugas Siswa</span>
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      <p className="teacher-journal__session-card-desc">
+                        {calc.status === 'ready' && (
+                          <span className="text-blue-700 font-medium">
+                            {calc.description}
+                          </span>
+                        )}
+                        {calc.status === 'upcoming' && (
+                          <span className="text-slate-500">
+                            {calc.description}
+                          </span>
+                        )}
+                        {calc.status === 'expired' && (
+                          <span className="text-red-600">
+                            {calc.description} Sesi tidak lagi dapat diisi mandiri.
+                          </span>
+                        )}
+                        {calc.status === 'completed' && (
+                          <span className="text-emerald-700 font-medium">
+                            Jurnal pembelajaran dan kehadiran siswa telah tersimpan.
+                          </span>
+                        )}
+                        {calc.status === 'exempted' && (
+                          <span className="text-amber-800">
+                            {calc.description}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Tombol Aksi per Sesi */}
+                    <div className="teacher-journal__session-card-actions">
+                      {calc.status === 'ready' && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={PlayCircle}
+                          loading={isSubmitting && isSelected}
+                          disabled={isSubmitting}
+                          onClick={() => handleOpenClassForSchedule(item)}
+                        >
+                          {isSelected && classOpened
+                            ? 'Sedang Mengisi Form'
+                            : calc.isOngoing
+                            ? 'Lanjutkan Jurnal'
+                            : 'Mulai Jurnal'}
+                        </Button>
+                      )}
+
+                      {calc.status === 'completed' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={Eye}
+                            loading={isSubmitting && isSelected}
+                            disabled={isSubmitting}
+                            onClick={() => handleViewJournalDetailForSchedule(item)}
+                          >
+                            Lihat Detail
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Edit3}
+                            disabled={isSubmitting}
+                            onClick={() => handleOpenClassForSchedule(item)}
+                            title="Buka form untuk memperbarui data jurnal"
+                          >
+                            Perbarui
+                          </Button>
+                        </>
+                      )}
+
+                      {calc.status === 'upcoming' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Lock}
+                          disabled
+                          title="Sesi KBM belum dimulai"
+                        >
+                          Belum Dimulai
+                        </Button>
+                      )}
+
+                      {calc.status === 'expired' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Ban}
+                          disabled
+                          title="Batas waktu toleransi pengisian KBM telah berakhir"
+                        >
+                          Sesi Berakhir
+                        </Button>
+                      )}
+
+                      {calc.status === 'exempted' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={AlertTriangle}
+                          disabled
+                        >
+                          KBM Ditiadakan
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 4. AREA KERJA FORM JURNAL / DETAIL PRESENSI (DITAMPILKAN KETIKA SESI DIPILIH) */}
+      {schedule && (classOpened || submitted) && (
+        <div ref={activeWorkingRef} className="teacher-journal__working-section">
+          {/* Header Area Kerja Sesi Terpilih */}
+          <div className="teacher-journal__working-header">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-blue-700 flex items-center gap-1.5 mb-1">
+                <ChevronRight size={14} />
+                <span>
+                  {submitted ? 'Detail & Rekapitulasi Jurnal Tersimpan' : 'Form Pengisian Jurnal & Presensi Sesi'}
+                </span>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-gray-900">
-                  {isSubstituteMode ? 'Presensi Piket Kesiswaan Selesai' : 'Jurnal KBM & Presensi Selesai Disimpan'}
-                </h2>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  Materi pembelajaran, foto KBM, dan data kehadiran siswa serta catatan individual tercatat secara permanen.
-                </p>
-              </div>
+              <h3 className="text-base font-bold text-gray-900">
+                {subjectName} &bull; {className} (Jam Ke-{startPeriod} s/d {endPeriod} - {roomName})
+              </h3>
             </div>
 
             <div className="flex items-center gap-2">
               <Button
-                variant="secondary"
-                size="sm"
-                icon={ArrowLeft}
-                onClick={() => navigate('/teacher/schedule')}
-              >
-                Kembali ke Jadwal
-              </Button>
-              <Button
                 variant="outline"
                 size="sm"
-                icon={Edit3}
-                onClick={() => {
-                  setSubmitted(false);
-                  setClassOpened(true);
-                }}
+                icon={X}
+                onClick={handleCloseWorkingSession}
               >
-                Edit / Perbarui
+                Tutup / Pilih Sesi Lain
               </Button>
             </div>
           </div>
 
-          {/* Ringkasan Jurnal: Topik & Foto */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-4">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Topik Materi Pembelajaran
-              </div>
-              <p className="text-xs text-gray-900 leading-relaxed font-medium">
-                {topic || savedJournalData?.topic_description || '-'}
-              </p>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Statistik Presensi
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="success">Hadir: {counts.hadir}</Badge>
-                  <Badge variant="info">Sakit: {counts.sakit}</Badge>
-                  <Badge variant="warning">Izin: {counts.izin}</Badge>
-                  <Badge variant="error">Alpa: {counts.alpa}</Badge>
+          {/* Banner Ambil Alih Kelas oleh Tim Kesiswaan */}
+          {isSubstituteMode && (
+            <div className="teacher-journal__kesiswaan-banner mb-5">
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={22} className="text-amber-500 shrink-0" />
+                <div>
+                  <div className="teacher-journal__kesiswaan-banner-title">
+                    Ambil Alih Kelas KBM oleh Tim Kesiswaan (Piket)
+                  </div>
+                  <div className="teacher-journal__kesiswaan-banner-sub">
+                    Guru Pengampu Asli (<strong>{teacherName}</strong>) sedang berhalangan hadir.
+                  </div>
                 </div>
               </div>
-              {(photoPreview || savedJournalData?.photo_url || savedJournalData?.photo_path) && (
-                <a
-                  href={photoPreview || getStorageUrl(savedJournalData?.photo_url || savedJournalData?.photo_path)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
-                >
-                  <Eye size={13} /> Lihat Foto
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Tabel Detail Presensi & Catatan Siswa */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <FileText size={16} className="text-amber-500" />
-                Detail Kehadiran &amp; Catatan Siswa ({students.length} Siswa)
-              </h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[640px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">No</th>
-                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">NIS</th>
-                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Nama Siswa</th>
-                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-32">Status</th>
-                    <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Catatan Siswa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {students.map((st, idx) => {
-                    const stStatus = attendance[st.id] || 'Hadir';
-                    const note = (studentNotes[st.id] || '').trim();
-                    return (
-                      <tr key={st.id} className="hover:bg-gray-50/50">
-                        <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{String(idx + 1).padStart(2, '0')}</td>
-                        <td className="py-2.5 px-3 font-mono text-gray-700">{st.nis_nip || st.nis || '-'}</td>
-                        <td className="py-2.5 px-3 font-medium text-gray-900">{st.name}</td>
-                        <td className="py-2.5 px-3">
-                          {stStatus === 'Hadir' && <Badge variant="success">Hadir</Badge>}
-                          {stStatus === 'Sakit' && <Badge variant="info">Sakit</Badge>}
-                          {stStatus === 'Izin' && <Badge variant="warning">Izin</Badge>}
-                          {stStatus === 'Alpa' && <Badge variant="error">Alpa</Badge>}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {note ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-900 border border-amber-200 font-medium text-xs">
-                              <MessageSquare size={12} className="text-amber-600 shrink-0" />
-                              {note}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 italic">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      ) : !classOpened ? (
-        /* KONDISI 2: STANDBY SESI KELAS SIAP DIBUKA */
-        <div className="teacher-journal__standby-card">
-          {/* 1. Header Kartu: Status & Judul Utama */}
-          <div className="teacher-journal__card-header">
-            <div className="teacher-journal__card-header-main">
-              <div className="teacher-journal__standby-pulse">
-                <span
-                  className={`teacher-journal__pulse-dot ${
-                    schedule?.journal_status === 'completed'
-                      ? 'teacher-journal__pulse-dot--completed'
-                      : isSubstituteMode
-                      ? 'teacher-journal__pulse-dot--warning'
-                      : 'teacher-journal__pulse-dot--active'
-                  }`}
-                />
-                <span
-                  className={`teacher-journal__pulse-label ${
-                    schedule?.journal_status === 'completed'
-                      ? 'text-emerald-700'
-                      : isSubstituteMode
-                      ? 'text-amber-800'
-                      : 'text-blue-700'
-                  }`}
-                >
-                  {schedule?.journal_status === 'completed'
-                    ? 'Jurnal KBM Selesai Disimpan'
-                    : isSubstituteMode
-                    ? 'Sesi Ambil Alih Kelas Siap'
-                    : 'Sesi Kelas Siap Dibuka'}
-                </span>
-              </div>
-
-              <div className="teacher-journal__card-title-row">
-                <h2 className="teacher-journal__standby-title">{subjectName}</h2>
-                <span className="teacher-journal__class-badge">{className}</span>
-              </div>
-            </div>
-
-            <div className="teacher-journal__card-header-aside">
-              <span className="teacher-journal__cycle-pill">
-                Putaran {schedule?.cycle_type || 1}
-              </span>
-              <span className="teacher-journal__duration-pill">
-                {duration} Jam Pelajaran ({duration} JP)
-              </span>
-            </div>
-          </div>
-
-          {/* 2. Grid Informasi Utama (Tanggal, Waktu, Ruang, Guru Pengampu) */}
-          <div className="teacher-journal__info-grid">
-            {/* Tile 1: Tanggal Pelaksanaan */}
-            <div className="teacher-journal__info-tile">
-              <div className="teacher-journal__tile-icon text-blue-600 bg-blue-50">
-                <Calendar size={18} />
-              </div>
-              <div className="teacher-journal__tile-content">
-                <span className="teacher-journal__tile-label">Tanggal KBM</span>
-                <strong className="teacher-journal__tile-value">
-                  {sessionDateFormatted}
-                </strong>
-              </div>
-            </div>
-
-            {/* Tile 2: Jam Pelajaran */}
-            <div className="teacher-journal__info-tile">
-              <div className="teacher-journal__tile-icon text-amber-600 bg-amber-50">
-                <Clock size={18} />
-              </div>
-              <div className="teacher-journal__tile-content">
-                <span className="teacher-journal__tile-label">Alokasi Waktu KBM</span>
-                <strong className="teacher-journal__tile-value">
-                  Jam Ke-{startPeriod} s/d {endPeriod} ({duration} JP)
-                </strong>
-              </div>
-            </div>
-
-            {/* Tile 3: Ruang Belajar */}
-            <div className="teacher-journal__info-tile">
-              <div className="teacher-journal__tile-icon text-rose-600 bg-rose-50">
-                <MapPin size={18} />
-              </div>
-              <div className="teacher-journal__tile-content">
-                <span className="teacher-journal__tile-label">Ruang Kelas</span>
-                <strong className="teacher-journal__tile-value">
-                  {roomName}
-                </strong>
-              </div>
-            </div>
-
-            {/* Tile 4: Guru Pengampu */}
-            <div className="teacher-journal__info-tile">
-              <div className="teacher-journal__tile-icon text-emerald-600 bg-emerald-50">
-                <User size={18} />
-              </div>
-              <div className="teacher-journal__tile-content">
-                <span className="teacher-journal__tile-label">
-                  {isSubstituteMode ? 'Guru Pengampu Asli' : 'Guru Pengampu'}
-                </span>
-                <strong className="teacher-journal__tile-value truncate" title={teacherName}>
-                  {teacherName}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Tugas Titipan Guru Asli jika Mode Kesiswaan */}
-          {isSubstituteMode && taskTitipan && (
-            <div className="teacher-journal__task-box">
-              <span className="teacher-journal__task-box-title flex items-center gap-1.5">
-                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
-                Instruksi Tugas Titipan Guru Pengampu Asli:
-              </span>
-              <p className="teacher-journal__task-box-body">"{taskTitipan}"</p>
-            </div>
-          )}
-
-          {/* 4. Notis Khusus jika Jurnal Sudah Selesai */}
-          {schedule?.journal_status === 'completed' && (
-            <div className="teacher-journal__completed-notice">
-              <CheckCircle size={16} className="text-emerald-600 shrink-0" />
-              <span>
-                Jurnal pembelajaran, presensi kehadiran siswa, dan catatan individual sesi ini telah tercatat secara permanen di database.
+              <span className="teacher-journal__kesiswaan-pill">
+                Topik Pembelajaran Bersifat Opsional
               </span>
             </div>
           )}
 
-          {/* 5. Action Buttons Bar dengan hierarki terstruktur */}
-          <div className="teacher-journal__actions-bar">
-            <Button
-              variant="secondary"
-              size="md"
-              icon={ArrowLeft}
-              onClick={() => navigate('/teacher/schedule')}
-            >
-              Kembali ke Jadwal
-            </Button>
-
-            {schedule?.is_teaching_exempted ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs flex items-center gap-2">
-                <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                <span>
-                  <strong>KBM Dikecualikan:</strong> {schedule.exemption_reason || 'Agenda Khusus Sekolah'}. Guru tidak berkewajiban membuka jurnal.
-                </span>
-              </div>
-            ) : (
-              <div className="teacher-journal__actions-primary">
-                {schedule?.journal_status === 'completed' ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="md"
-                      icon={Edit3}
-                      onClick={handleOpenClass}
-                    >
-                      Buka &amp; Perbarui Jurnal
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      icon={Eye}
-                      loading={isSubmitting}
-                      onClick={handleViewJournalDetail}
-                    >
-                      Lihat Detail Jurnal &amp; Catatan Siswa
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {(isKesiswaan() || hasRole('waka')) && (
-                      <Button
-                        variant="outline"
-                        size="md"
-                        onClick={handleMarkTeacherAbsent}
-                      >
-                        Tandai Guru Berhalangan
-                      </Button>
-                    )}
-                    <Button
-                      variant="primary"
-                      size="md"
-                      icon={PlayCircle}
-                      loading={isSubmitting}
-                      onClick={handleOpenClass}
-                    >
-                      {isSubstituteMode
-                        ? 'Mulai Presensi & Ambil Alih Kelas'
-                        : schedule?.journal_status === 'ongoing'
-                          ? 'Lanjutkan Presensi & Jurnal'
-                          : 'Mulai & Buka Kelas Sekarang'}
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* KONDISI 3: FORM JURNAL AKTIF & PRESENSI KELAS */
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          {/* Box Tugas Titipan Guru jika Kesiswaan */}
-          {isSubstituteMode && taskTitipan && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-950">
-              <span className="font-bold block text-sm mb-1 text-amber-900">
-                📢 Instruksi Tugas Titipan Guru Pengampu Asli:
-              </span>
-              <p className="text-amber-900 text-xs leading-relaxed font-medium">
-                "{taskTitipan}"
-              </p>
-              <span className="text-[11px] text-amber-700 block mt-1.5">
-                Bacakan instruksi di atas kepada siswa di kelas sebelum mengisi absensi kehadiran.
-              </span>
-            </div>
-          )}
-
-          {/* GRID: Topik Materi & Dokumentasi Foto */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Topik & Materi Pembelajaran */}
-            <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-gray-900">
-                  {isSubstituteMode
-                    ? '1. Catatan / Kondisi Kelas (Opsional)'
-                    : '1. Topik & Materi Pembelajaran'}
-                </h2>
-                {!isSubstituteMode && (
-                  <span
-                    className={`text-[11px] font-mono ${topic.trim().length >= 10 ? 'text-emerald-600' : 'text-gray-400'}`}
-                  >
-                    {topic.trim().length}/10 karakter min
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  {isSubstituteMode ? (
-                    'Catatan Pengawasan Kelas (Opsional - Diisi Kesiswaan)'
-                  ) : (
-                    <>
-                      Topik Pembelajaran <span className="text-red-500">*</span>
-                    </>
-                  )}
-                </label>
-                <textarea
-                  rows={4}
-                  required={!isSubstituteMode}
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder={
-                    isSubstituteMode
-                      ? 'Kosongkan jika hanya mengabsen siswa & menyampaikan tugas titipan guru asli...'
-                      : 'Contoh: Pemfaktoran Persamaan Kuadrat dan Aplikasi Kontekstual Latihan Soal Bab 2'
-                  }
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-gray-900 bg-white"
-                />
-                <span className="text-[11px] text-gray-400 mt-1 block">
-                  {isSubstituteMode
-                    ? 'Tidak wajib diisi jika materi telah tercakup dalam tugas titipan guru asli.'
-                    : 'Wajib diisi minimal 10 karakter untuk rekapitulasi kurikulum sekolah.'}
-                </span>
-              </div>
-            </div>
-
-            {/* 2. Dokumentasi Foto Kelas (Wajib Kamera Langsung) */}
-            <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-gray-900">
-                  2. Dokumentasi Foto Kelas <span className="text-red-500">*</span>
-                </h2>
-                {compressedFileSize && (
-                  <span className="text-[11px] font-mono text-emerald-600 font-semibold">
-                    Terkonversi: {compressedFileSize} KB
-                  </span>
-                )}
-              </div>
-
-              <p className="text-xs text-gray-500">
-                Ambil bukti foto kegiatan KBM secara langsung via kamera perangkat.
-              </p>
-
-              {/* Hidden file input strictly with capture="environment" for fallback device native camera */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handlePhotoSelect(f);
-                }}
-              />
-
-              {photoPreview ? (
-                /* Mode 1: Pratinjau Foto Kamera yang Berhasil Diambil */
-                <div className="teacher-journal__photo-preview">
-                  <img
-                    src={photoPreview}
-                    alt="Pratinjau Foto Dokumentasi KBM"
-                    className="teacher-journal__photo-img"
-                  />
-                  <div className="teacher-journal__photo-badge">
-                    <ShieldCheck size={13} />
-                    <span>Foto Kamera Terverifikasi</span>
-                  </div>
-                  <div className="teacher-journal__photo-info">
-                    <span className="font-mono text-xs text-gray-700 truncate max-w-[200px] sm:max-w-[280px]">
-                      {uploadedPhoto?.name || 'Dokumentasi_KBM.jpg'} ({compressedFileSize || 0} KB)
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-gray-700 hover:text-black flex items-center gap-1 cursor-pointer bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
-                        onClick={() => {
-                          handlePhotoSelect(null);
-                          startCamera();
-                        }}
-                      >
-                        <RotateCw size={13} /> Ambil Ulang
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 cursor-pointer px-1 py-1"
-                        onClick={() => handlePhotoSelect(null)}
-                      >
-                        <X size={14} /> Hapus
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : isCameraActive ? (
-                /* Mode 2: Viewfinder Kamera Langsung Aktif */
-                <div className="teacher-journal__camera-viewfinder">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="teacher-journal__camera-stream"
-                  />
-                  {/* Top Bar Kamera */}
-                  <div className="teacher-journal__camera-topbar">
-                    <span className="teacher-journal__camera-live-badge">
-                      <span className="teacher-journal__live-pulse"></span>
-                      KAMERA LANGSUNG
-                    </span>
-                    <div className="teacher-journal__camera-controls">
-                      <button
-                        type="button"
-                        className="teacher-journal__camera-ctrl-btn"
-                        onClick={switchCamera}
-                        title="Putar Kamera Depan / Belakang"
-                      >
-                        <RotateCw size={13} />
-                        <span>Putar</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="teacher-journal__camera-ctrl-btn"
-                        onClick={stopCamera}
-                        title="Tutup Kamera"
-                      >
-                        <X size={14} />
-                        <span>Tutup</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Bottom Bar Shutter */}
-                  <div className="teacher-journal__camera-bottombar">
-                    <button
-                      type="button"
-                      className="teacher-journal__shutter-btn"
-                      onClick={capturePhoto}
-                      disabled={isCapturing}
-                      title="Ambil Foto Dokumentasi"
-                    >
-                      <Camera size={26} />
-                    </button>
-                    <p className="teacher-journal__shutter-hint">
-                      {isCapturing ? 'Memproses foto...' : 'Ketuk tombol untuk mengambil foto'}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* Mode 3: Idle Box - Buka Kamera Perangkat */
-                <div
-                  className="teacher-journal__camera-box"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  <div className="teacher-journal__camera-icon-wrap">
-                    <Camera size={24} />
+          {/* KONDISI A: TAMPILAN DETAIL JURNAL SELESAI (COMPLETED) */}
+          {submitted ? (
+            <div className="flex flex-col gap-6 max-w-4xl mx-auto my-2">
+              <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                    <CheckCircle size={28} />
                   </div>
                   <div>
-                    <h3 className="teacher-journal__camera-title">Ambil Foto Dokumentasi Langsung</h3>
-                    <p className="teacher-journal__camera-desc mt-1">
-                      Wajib mengambil foto dokumentasi kelas secara langsung melalui kamera perangkat. Pemilihan dari galeri atau file manager dinonaktifkan.
+                    <h2 className="text-base font-bold text-gray-900">
+                      {isSubstituteMode ? 'Presensi Piket Kesiswaan Selesai' : 'Jurnal KBM & Presensi Selesai Disimpan'}
+                    </h2>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      Materi pembelajaran, bukti foto dokumentasi KBM, dan data kehadiran siswa serta catatan individual tercatat secara permanen di database.
                     </p>
                   </div>
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={() => startCamera()}
-                    className="px-4 py-2 bg-[#FFDE00] hover:bg-[#F5C200] active:scale-95 text-black font-semibold text-xs rounded-lg flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={Edit3}
+                    onClick={() => {
+                      setSubmitted(false);
+                      setClassOpened(true);
+                    }}
                   >
-                    <Camera size={15} />
-                    <span>Buka Kamera Perangkat</span>
-                  </button>
+                    Edit / Perbarui Data
+                  </Button>
+                </div>
+              </div>
 
-                  <div className="teacher-journal__camera-warning">
-                    <AlertTriangle size={13} />
-                    <span>Pengunggahan berkas galeri / disk dinonaktifkan untuk menjaga keaslian dokumentasi.</span>
+              {/* Ringkasan Jurnal: Topik & Foto */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Topik Materi Pembelajaran
+                  </div>
+                  <p className="text-xs text-gray-900 leading-relaxed font-medium">
+                    {topic || savedJournalData?.topic_description || '-'}
+                  </p>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Statistik Presensi Siswa
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="success">Hadir: {counts.hadir}</Badge>
+                      <Badge variant="info">Sakit: {counts.sakit}</Badge>
+                      <Badge variant="warning">Izin: {counts.izin}</Badge>
+                      <Badge variant="error">Alpa: {counts.alpa}</Badge>
+                    </div>
+                  </div>
+                  {(photoPreview || savedJournalData?.photo_url || savedJournalData?.photo_path) && (
+                    <a
+                      href={photoPreview || getStorageUrl(savedJournalData?.photo_url || savedJournalData?.photo_path)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
+                    >
+                      <Eye size={13} /> Lihat Foto
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Tabel Detail Presensi Siswa */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <FileText size={16} className="text-amber-500" />
+                    Detail Kehadiran &amp; Catatan Siswa ({students.length} Siswa)
+                  </h3>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[640px]">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">No</th>
+                        <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">NIS</th>
+                        <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Nama Siswa</th>
+                        <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-32">Status</th>
+                        <th className="py-2 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider">Catatan Siswa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {students.map((st, idx) => {
+                        const stStatus = attendance[st.id] || 'Hadir';
+                        const note = (studentNotes[st.id] || '').trim();
+                        return (
+                          <tr key={st.id} className="hover:bg-gray-50/50">
+                            <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{String(idx + 1).padStart(2, '0')}</td>
+                            <td className="py-2.5 px-3 font-mono text-gray-700">{st.nis_nip || st.nis || '-'}</td>
+                            <td className="py-2.5 px-3 font-medium text-gray-900">{st.name}</td>
+                            <td className="py-2.5 px-3">
+                              {stStatus === 'Hadir' && <Badge variant="success">Hadir</Badge>}
+                              {stStatus === 'Sakit' && <Badge variant="info">Sakit</Badge>}
+                              {stStatus === 'Izin' && <Badge variant="warning">Izin</Badge>}
+                              {stStatus === 'Alpa' && <Badge variant="error">Alpa</Badge>}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {note ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-900 border border-amber-200 font-medium text-xs">
+                                  <MessageSquare size={12} className="text-amber-600 shrink-0" />
+                                  {note}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* KONDISI B: FORM PENGISIAN JURNAL AKTIF & PRESENSI KELAS */
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+              {/* Box Tugas Titipan Guru jika Kesiswaan */}
+              {isSubstituteMode && taskTitipan && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-950">
+                  <span className="font-bold block text-sm mb-1 text-amber-900">
+                    📢 Instruksi Tugas Titipan Guru Pengampu Asli:
+                  </span>
+                  <p className="text-amber-900 text-xs leading-relaxed font-medium">
+                    "{taskTitipan}"
+                  </p>
+                  <span className="text-[11px] text-amber-700 block mt-1.5">
+                    Bacakan instruksi di atas kepada siswa di kelas sebelum mengisi absensi kehadiran.
+                  </span>
+                </div>
+              )}
+
+              {/* GRID: Topik Materi & Dokumentasi Foto */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1. Topik & Materi Pembelajaran */}
+                <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold text-gray-900">
+                      {isSubstituteMode
+                        ? '1. Catatan / Kondisi Kelas (Opsional)'
+                        : '1. Topik & Materi Pembelajaran'}
+                    </h2>
+                    {!isSubstituteMode && (
+                      <span
+                        className={`text-[11px] font-mono ${topic.trim().length >= 10 ? 'text-emerald-600' : 'text-gray-400'}`}
+                      >
+                        {topic.trim().length}/10 karakter min
+                      </span>
+                    )}
                   </div>
 
-                  {cameraError && (
-                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 text-center max-w-sm mt-1">
-                      {cameraError}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      {isSubstituteMode ? (
+                        'Catatan Pengawasan Kelas (Opsional - Diisi Kesiswaan)'
+                      ) : (
+                        <>
+                          Topik Pembelajaran <span className="text-red-500">*</span>
+                        </>
+                      )}
+                    </label>
+                    <textarea
+                      rows={4}
+                      required={!isSubstituteMode}
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value)}
+                      placeholder={
+                        isSubstituteMode
+                          ? 'Kosongkan jika hanya mengabsen siswa & menyampaikan tugas titipan guru asli...'
+                          : 'Contoh: Pemfaktoran Persamaan Kuadrat dan Aplikasi Kontekstual Latihan Soal Bab 2'
+                      }
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-gray-900 bg-white"
+                    />
+                    <span className="text-[11px] text-gray-400 mt-1 block">
+                      {isSubstituteMode
+                        ? 'Tidak wajib diisi jika materi telah tercakup dalam tugas titipan guru asli.'
+                        : 'Wajib diisi minimal 10 karakter untuk rekapitulasi kurikulum sekolah.'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Dokumentasi Foto Kelas (Wajib Kamera Langsung) */}
+                <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold text-gray-900">
+                      2. Dokumentasi Foto Kelas <span className="text-red-500">*</span>
+                    </h2>
+                    {compressedFileSize && (
+                      <span className="text-[11px] font-mono text-emerald-600 font-semibold">
+                        Terkonversi: {compressedFileSize} KB
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-gray-500">
+                    Ambil bukti foto kegiatan KBM secara langsung via kamera perangkat.
+                  </p>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handlePhotoSelect(f);
+                    }}
+                  />
+
+                  {photoPreview ? (
+                    <div className="teacher-journal__photo-preview">
+                      <img
+                        src={photoPreview}
+                        alt="Pratinjau Foto Dokumentasi KBM"
+                        className="teacher-journal__photo-img"
+                      />
+                      <div className="teacher-journal__photo-badge">
+                        <ShieldCheck size={13} />
+                        <span>Foto Kamera Terverifikasi</span>
+                      </div>
+                      <div className="teacher-journal__photo-info">
+                        <span className="font-mono text-xs text-gray-700 truncate max-w-[200px] sm:max-w-[280px]">
+                          {uploadedPhoto?.name || 'Dokumentasi_KBM.jpg'} ({compressedFileSize || 0} KB)
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-gray-700 hover:text-black flex items-center gap-1 cursor-pointer bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                            onClick={() => {
+                              handlePhotoSelect(null);
+                              startCamera();
+                            }}
+                          >
+                            <RotateCw size={13} /> Ambil Ulang
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 cursor-pointer px-1 py-1"
+                            onClick={() => handlePhotoSelect(null)}
+                          >
+                            <X size={14} /> Hapus
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : isCameraActive ? (
+                    <div className="teacher-journal__camera-viewfinder">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="teacher-journal__camera-stream"
+                      />
+                      <div className="teacher-journal__camera-topbar">
+                        <span className="teacher-journal__camera-live-badge">
+                          <span className="teacher-journal__live-pulse"></span>
+                          KAMERA LANGSUNG
+                        </span>
+                        <div className="teacher-journal__camera-controls">
+                          <button
+                            type="button"
+                            className="teacher-journal__camera-ctrl-btn"
+                            onClick={switchCamera}
+                            title="Putar Kamera Depan / Belakang"
+                          >
+                            <RotateCw size={13} />
+                            <span>Putar</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="teacher-journal__camera-ctrl-btn"
+                            onClick={stopCamera}
+                            title="Tutup Kamera"
+                          >
+                            <X size={14} />
+                            <span>Tutup</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="teacher-journal__camera-bottombar">
+                        <button
+                          type="button"
+                          className="teacher-journal__shutter-btn"
+                          onClick={capturePhoto}
+                          disabled={isCapturing}
+                          title="Ambil Foto Dokumentasi"
+                        >
+                          <Camera size={26} />
+                        </button>
+                        <p className="teacher-journal__shutter-hint">
+                          {isCapturing ? 'Memproses foto...' : 'Ketuk tombol untuk mengambil foto'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="teacher-journal__camera-box">
+                      <div className="teacher-journal__camera-icon-wrap">
+                        <Camera size={24} />
+                      </div>
+                      <div>
+                        <h3 className="teacher-journal__camera-title">Ambil Foto Dokumentasi Langsung</h3>
+                        <p className="teacher-journal__camera-desc mt-1">
+                          Wajib mengambil foto dokumentasi kelas secara langsung melalui kamera perangkat. Pemilihan dari galeri atau disk dinonaktifkan.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => startCamera()}
+                        className="px-4 py-2 bg-[#FFDE00] hover:bg-[#F5C200] active:scale-95 text-black font-semibold text-xs rounded-lg flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                      >
+                        <Camera size={15} />
+                        <span>Buka Kamera Perangkat</span>
+                      </button>
+
+                      <div className="teacher-journal__camera-warning">
+                        <AlertTriangle size={13} />
+                        <span>Pengunggahan berkas galeri / disk dinonaktifkan untuk menjaga keaslian dokumentasi.</span>
+                      </div>
+
+                      {cameraError && (
+                        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 text-center max-w-sm mt-1">
+                          {cameraError}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* 3. Presensi Kehadiran Siswa (Exception-Based) */}
-          <div className="border border-gray-200 rounded-xl p-5 bg-white">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-sm font-bold text-gray-900">
-                  3. Presensi Kehadiran Siswa ({students.length} Siswa Terdaftar)
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Secara default seluruh siswa berstatus <strong>Hadir</strong>. Ubah status hanya untuk siswa yang berhalangan hadir.
-                </p>
               </div>
 
-              {/* Status Chips Summary */}
-              <div className="teacher-journal__counts-bar">
-                <span className="teacher-journal__count-chip teacher-journal__count-chip--hadir">
-                  Hadir: {counts.hadir}
-                </span>
-                <span className="teacher-journal__count-chip teacher-journal__count-chip--sakit">
-                  Sakit: {counts.sakit}
-                </span>
-                <span className="teacher-journal__count-chip teacher-journal__count-chip--izin">
-                  Izin: {counts.izin}
-                </span>
-                <span className="teacher-journal__count-chip teacher-journal__count-chip--alpa">
-                  Alpa: {counts.alpa}
-                </span>
-              </div>
-            </div>
+              {/* 3. Presensi Kehadiran Siswa (Exception-Based) */}
+              <div className="border border-gray-200 rounded-xl p-5 bg-white">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900">
+                      3. Presensi Kehadiran Siswa ({students.length} Siswa Terdaftar)
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Secara default seluruh siswa berstatus <strong>Hadir</strong>. Ubah status hanya untuk siswa yang berhalangan hadir.
+                    </p>
+                  </div>
 
-            {/* Tabel Presensi Exception-Based */}
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[760px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/70">
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">
-                      No
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">
-                      NIS
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[180px]">
-                      Nama Peserta Didik
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[240px]">
-                      Catatan Siswa (Opsional)
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider text-right w-64">
-                      Status Kehadiran (Pilih Jika Absen)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {students.map((st, idx) => {
-                    const currentStatus = attendance[st.id] || 'Hadir';
-                    const hasApprovedLeave = approvedLeaves.some(
-                      (l) => l.student_id === st.id
-                    );
-                    const currentNote = studentNotes[st.id] || '';
+                  {/* Status Chips Summary */}
+                  <div className="teacher-journal__counts-bar">
+                    <span className="teacher-journal__count-chip teacher-journal__count-chip--hadir">
+                      Hadir: {counts.hadir}
+                    </span>
+                    <span className="teacher-journal__count-chip teacher-journal__count-chip--sakit">
+                      Sakit: {counts.sakit}
+                    </span>
+                    <span className="teacher-journal__count-chip teacher-journal__count-chip--izin">
+                      Izin: {counts.izin}
+                    </span>
+                    <span className="teacher-journal__count-chip teacher-journal__count-chip--alpa">
+                      Alpa: {counts.alpa}
+                    </span>
+                  </div>
+                </div>
 
-                    return (
-                      <tr key={st.id} className="hover:bg-gray-50/50">
-                        <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">
-                          {String(idx + 1).padStart(2, '0')}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <code className="font-mono text-[11px] text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                            {st.nis_nip || st.nis || '-'}
-                          </code>
-                        </td>
-                        <td className="py-2.5 px-3 font-medium text-gray-900">
-                          <div className="flex items-center gap-2">
-                            <span>{st.name}</span>
-                            {hasApprovedLeave && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                <FileCheck2 size={11} /> Surat Izin Resmi
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3">
-                          <div className="relative flex items-center">
-                            <input
-                              type="text"
-                              value={currentNote}
-                              onChange={(e) => handleNoteChange(st.id, e.target.value)}
-                              placeholder="Tulis catatan siswa (opsional)..."
-                              maxLength={500}
-                              className={`w-full text-xs py-1.5 px-2.5 pr-7 rounded border transition-all text-gray-800 placeholder:text-gray-400 outline-none ${
-                                currentNote.trim()
-                                  ? 'border-amber-400 bg-amber-50/40 focus:border-amber-500 focus:ring-1 focus:ring-amber-300'
-                                  : 'border-gray-200 bg-white hover:bg-gray-50/80 focus:border-gray-400 focus:ring-1 focus:ring-gray-300'
-                              }`}
-                            />
-                            {currentNote.trim() && (
-                              <button
-                                type="button"
-                                onClick={() => handleNoteChange(st.id, '')}
-                                className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                                title="Hapus catatan"
-                              >
-                                <X size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <div className="teacher-journal__status-group">
-                            {['Hadir', 'Sakit', 'Izin', 'Alpa'].map((stOpt) => {
-                              const isSelected = currentStatus === stOpt;
-                              let activeClass = '';
-                              if (isSelected) {
-                                if (stOpt === 'Hadir') activeClass = 'teacher-journal__status-btn--active-hadir';
-                                if (stOpt === 'Sakit') activeClass = 'teacher-journal__status-btn--active-sakit';
-                                if (stOpt === 'Izin') activeClass = 'teacher-journal__status-btn--active-izin';
-                                if (stOpt === 'Alpa') activeClass = 'teacher-journal__status-btn--active-alpa';
-                              }
-
-                              return (
-                                <button
-                                  key={stOpt}
-                                  type="button"
-                                  onClick={() => handleStatusChange(st.id, stOpt)}
-                                  className={`teacher-journal__status-btn ${activeClass}`}
-                                >
-                                  {stOpt}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </td>
+                {/* Tabel Presensi Exception-Based */}
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50/70">
+                        <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-12">
+                          No
+                        </th>
+                        <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider w-24">
+                          NIS
+                        </th>
+                        <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[180px]">
+                          Nama Peserta Didik
+                        </th>
+                        <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider min-w-[240px]">
+                          Catatan Siswa (Opsional)
+                        </th>
+                        <th className="py-2.5 px-3 font-semibold text-gray-600 text-[11px] uppercase tracking-wider text-right w-64">
+                          Status Kehadiran (Pilih Jika Absen)
+                        </th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {students.map((st, idx) => {
+                        const currentStatus = attendance[st.id] || 'Hadir';
+                        const hasApprovedLeave = approvedLeaves.some(
+                          (l) => l.student_id === st.id
+                        );
+                        const currentNote = studentNotes[st.id] || '';
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setClassOpened(false)}
-            >
-              Batal
-            </Button>
-            {isSubstituteMode ? (
-              <Button
-                type="submit"
-                variant="primary"
-                loading={isSubmitting}
-                disabled={isSubmitting}
-              >
-                Simpan Presensi Piket
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                variant="primary"
-                loading={isSubmitting}
-              >
-                Simpan Jurnal &amp; Selesaikan Sesi
-              </Button>
-            )}
-          </div>
-        </form>
+                        return (
+                          <tr key={st.id} className="hover:bg-gray-50/50">
+                            <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">
+                              {String(idx + 1).padStart(2, '0')}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <code className="font-mono text-[11px] text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                {st.nis_nip || st.nis || '-'}
+                              </code>
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span>{st.name}</span>
+                                {hasApprovedLeave && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <FileCheck2 size={11} /> Surat Izin Resmi
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="text"
+                                  value={currentNote}
+                                  onChange={(e) => handleNoteChange(st.id, e.target.value)}
+                                  placeholder="Tulis catatan siswa (opsional)..."
+                                  maxLength={500}
+                                  className={`w-full text-xs py-1.5 px-2.5 pr-7 rounded border transition-all text-gray-800 placeholder:text-gray-400 outline-none ${
+                                    currentNote.trim()
+                                      ? 'border-amber-400 bg-amber-50/40 focus:border-amber-500 focus:ring-1 focus:ring-amber-300'
+                                      : 'border-gray-200 bg-white hover:bg-gray-50/80 focus:border-gray-400 focus:ring-1 focus:ring-gray-300'
+                                  }`}
+                                />
+                                {currentNote.trim() && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleNoteChange(st.id, '')}
+                                    className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                                    title="Hapus catatan"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="teacher-journal__status-group">
+                                {['Hadir', 'Sakit', 'Izin', 'Alpa'].map((stOpt) => {
+                                  const isSelected = currentStatus === stOpt;
+                                  let activeClass = '';
+                                  if (isSelected) {
+                                    if (stOpt === 'Hadir') activeClass = 'teacher-journal__status-btn--active-hadir';
+                                    if (stOpt === 'Sakit') activeClass = 'teacher-journal__status-btn--active-sakit';
+                                    if (stOpt === 'Izin') activeClass = 'teacher-journal__status-btn--active-izin';
+                                    if (stOpt === 'Alpa') activeClass = 'teacher-journal__status-btn--active-alpa';
+                                  }
+
+                                  return (
+                                    <button
+                                      key={stOpt}
+                                      type="button"
+                                      onClick={() => handleStatusChange(st.id, stOpt)}
+                                      className={`teacher-journal__status-btn ${activeClass}`}
+                                    >
+                                      {stOpt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex items-center justify-between pt-2">
+                <div>
+                  {(isKesiswaan() || hasRole('waka')) && (
+                    <Button
+                      variant="outline"
+                      type="button"
+                      size="sm"
+                      onClick={() => handleMarkTeacherAbsent(schedule)}
+                    >
+                      Tandai Guru Berhalangan
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={handleCloseWorkingSession}
+                  >
+                    Batal
+                  </Button>
+                  {isSubstituteMode ? (
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      loading={isSubmitting}
+                      disabled={isSubmitting}
+                    >
+                      Simpan Presensi Piket
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      loading={isSubmitting}
+                    >
+                      Simpan Jurnal &amp; Selesaikan Sesi
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );
