@@ -11,3 +11,5 @@ deploy/*.log
 deploy/backups/*.sql
 deploy/heavy_job_proof.txt
 .hermes/
+.venv/
+**/.venv/

@@ -21,9 +21,10 @@ jobs:
             set -e
             echo "🚀 Memulai proses update School Class Progress..."
 
-            # 1. Pindah ke folder proyek & pull kode terbaru
+            # 1. Pindah ke folder proyek & sinkronkan kode terbaru
             cd /var/www/SCP-Project
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             # 2. Update Backend (Laravel)
             cd /var/www/SCP-Project/scp
