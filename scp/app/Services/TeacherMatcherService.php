@@ -145,10 +145,43 @@ class TeacherMatcherService
         // Batasi 5 kandidat teratas
         $candidates = array_slice($candidates, 0, 5);
 
+        // Auto-match jika terdapat kandidat tunggal dengan kepercayaan tinggi (>= 90%)
+        // seperti core name identik, kamus alias, atau kemiripan variasi ejaan
+        $matchedTeacher = null;
+        $status = count($candidates) > 0 ? 'candidates_found' : 'not_found';
+
+        if (!empty($candidates) && $candidates[0]['similarity'] >= 90.0) {
+            $topCandidate = $candidates[0];
+            $secondCandidate = $candidates[1] ?? null;
+
+            // Pastikan tidak ambigu: kandidat kedua tidak boleh memiliki skor setara >= 90%
+            $isUnambiguous = !$secondCandidate
+                || $secondCandidate['similarity'] < 90.0
+                || ($topCandidate['similarity'] >= 98.0 && $secondCandidate['similarity'] < 95.0);
+
+            if ($isUnambiguous) {
+                // Temukan instance model User untuk matchedTeacher dari dbTeachers
+                if ($dbTeachers instanceof \Illuminate\Support\Collection) {
+                    $matchedTeacher = $dbTeachers->firstWhere('id', $topCandidate['id']);
+                } else {
+                    foreach ($dbTeachers as $t) {
+                        if ($t->id === $topCandidate['id']) {
+                            $matchedTeacher = $t;
+                            break;
+                        }
+                    }
+                }
+
+                if ($matchedTeacher) {
+                    $status = 'auto_matched';
+                }
+            }
+        }
+
         $result = [
-            'matched_teacher' => null,
+            'matched_teacher' => $matchedTeacher,
             'candidates' => $candidates,
-            'status' => count($candidates) > 0 ? 'candidates_found' : 'not_found',
+            'status' => $status,
         ];
 
         $this->memoryCache[$cleanRaw] = $result;

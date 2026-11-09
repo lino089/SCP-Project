@@ -33,6 +33,7 @@ jobs:
             php artisan optimize
 
             # Pastikan izin file storage & cache tetap aman
+            sudo chown -R ubuntu:www-data storage bootstrap/cache
             sudo chmod -R 775 storage bootstrap/cache
 
             # 3. Update & Build Frontend (React)

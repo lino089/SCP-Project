@@ -56,10 +56,12 @@ export const checkPdfImportPrerequisites = ({
     checks: {
       hasStudents,
       hasTeachers,
+      hasFetStaffId: hasTeachers,
     },
     counts: {
       studentCount,
       teacherCount,
+      fetTeacherCount: teacherCount,
     },
     message,
   };

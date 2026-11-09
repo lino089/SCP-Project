@@ -43,184 +43,204 @@ class ParseSchedulePdfJob implements ShouldQueue
             return;
         }
 
-        $import->update(['status' => 'parsing']);
+        try {
+            $import->update(['status' => 'parsing', 'error_message' => null]);
 
-        $fullPathKelas = file_exists($import->file_path_kelas)
-            ? $import->file_path_kelas
-            : (Storage::disk('local')->exists($import->file_path_kelas)
-                ? Storage::disk('local')->path($import->file_path_kelas)
-                : storage_path('app/private/' . $import->file_path_kelas));
+            $fullPathKelas = file_exists($import->file_path_kelas)
+                ? $import->file_path_kelas
+                : (Storage::disk('local')->exists($import->file_path_kelas)
+                    ? Storage::disk('local')->path($import->file_path_kelas)
+                    : storage_path('app/private/' . $import->file_path_kelas));
 
-        $fullPathRuangan = file_exists($import->file_path_ruangan)
-            ? $import->file_path_ruangan
-            : (Storage::disk('local')->exists($import->file_path_ruangan)
-                ? Storage::disk('local')->path($import->file_path_ruangan)
-                : storage_path('app/private/' . $import->file_path_ruangan));
+            $fullPathRuangan = file_exists($import->file_path_ruangan)
+                ? $import->file_path_ruangan
+                : (Storage::disk('local')->exists($import->file_path_ruangan)
+                    ? Storage::disk('local')->path($import->file_path_ruangan)
+                    : storage_path('app/private/' . $import->file_path_ruangan));
 
-        $scriptPath = base_path('script/pdf_parser.py');
+            $scriptPath = base_path('script/pdf_parser.py');
 
-        $pythonBinary = 'python';
-        $venvWindows = base_path('.venv/Scripts/python.exe');
-        $venvUnix = base_path('.venv/bin/python');
+            $pythonBinary = 'python';
+            $venvWindows = base_path('.venv/Scripts/python.exe');
+            $venvUnix = base_path('.venv/bin/python');
 
-        if (file_exists($venvWindows)) {
-            $pythonBinary = $venvWindows;
-        } elseif (file_exists($venvUnix)) {
-            $pythonBinary = $venvUnix;
-        }
-
-        $process = new Process([$pythonBinary, $scriptPath, $fullPathKelas, $fullPathRuangan]);
-        $process->setTimeout(180);
-        $process->run();
-
-        if (!$process->isSuccessful()) {
-            $import->update(['status' => 'failed']);
-            Log::error('Python Parser Error: ' . $process->getErrorOutput());
-            return;
-        }
-
-        if (!empty($process->getErrorOutput())) {
-            Log::info('Python Parser Warnings: ' . $process->getErrorOutput());
-        }
-
-        $outputString = $process->getOutput();
-        $parseData = json_decode($outputString, true);
-
-        if (!is_array($parseData)) {
-            $import->update(['status' => 'failed']);
-            Log::error('Python Parser Output is not valid JSON array.');
-            return;
-        }
-
-        // Auto-register Master Data (Rooms, Subjects, Fallback Classes)
-        $this->autoRegisterMasterData($parseData);
-
-        // Preload / Reload master data to ensure all newly registered entities are in-memory
-        $allClasses = Classes::all();
-        $allTeachers = User::where('role', 'teacher')->get();
-        $allSubjects = Subject::all();
-        $allRooms = Room::all();
-
-        // Ensure clean state if import is re-parsed
-        $import->rows()->delete();
-
-        $conflictService = new ScheduleConflictService();
-
-        // Identify all classes present in this import batch (schedules of these classes are being replaced/updated)
-        $batchClassIds = [];
-        foreach ($parseData as $row) {
-            $cls = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
-            if ($cls) {
-                $batchClassIds[$cls->id] = $cls->id;
-            }
-        }
-        $batchClassIds = array_values($batchClassIds);
-
-        // Track intra-batch slots for conflict detection: key = "day-period"
-        $batchSlots = [];
-        $teacherMatcher = new TeacherMatcherService();
-
-        foreach ($parseData as $row) {
-            $matchedClass = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
-            
-            $rawTeacher = $row['guru_mentah'] ?? $row['teacher'] ?? null;
-            $teacherResult = $teacherMatcher->match($allTeachers, $rawTeacher);
-            $matchedTeacher = $teacherResult['matched_teacher'];
-            if (!empty($teacherResult['candidates'])) {
-                $row['teacher_candidates'] = $teacherResult['candidates'];
+            if (file_exists($venvWindows)) {
+                $pythonBinary = $venvWindows;
+            } elseif (file_exists($venvUnix)) {
+                $pythonBinary = $venvUnix;
             }
 
-            $teacherForSubject = $matchedTeacher ?? (!empty($teacherResult['candidates']) ? $allTeachers->firstWhere('id', $teacherResult['candidates'][0]['id']) : null);
-            $matchedSubject = $this->findSubject($allSubjects, $row['mapel_mentah'] ?? null, $teacherForSubject);
-            $matchedRoom = $this->findRoom($allRooms, $row['ruang_final'] ?? null);
+            $process = new Process([$pythonBinary, $scriptPath, $fullPathKelas, $fullPathRuangan]);
+            $process->setTimeout(180);
+            $process->run();
 
-            $day = (int) ($row['day_of_week'] ?? 1);
-            $startPeriod = (int) ($row['period_number'] ?? 1);
-            $duration = (int) ($row['duration_periods'] ?? 1);
-            $endPeriod = $startPeriod + $duration - 1;
+            if (!$process->isSuccessful()) {
+                $errOut = $process->getErrorOutput() ?: 'Format berkas PDF tidak dapat diekstraksi.';
+                $import->update([
+                    'status' => 'failed',
+                    'error_message' => 'Gagal mengekstrak PDF FET: ' . trim($errOut),
+                ]);
+                Log::error('Python Parser Error: ' . $errOut);
+                return;
+            }
 
-            $roomSourceConflict = (bool) ($row['room_source_conflict'] ?? false);
+            if (!empty($process->getErrorOutput())) {
+                Log::info('Python Parser Warnings: ' . $process->getErrorOutput());
+            }
 
-            $hasMissingEntity = !$matchedClass || !$matchedTeacher || !$matchedSubject || !$matchedRoom;
+            $outputString = $process->getOutput();
+            $parseData = json_decode($outputString, true);
 
-            if ($hasMissingEntity || $roomSourceConflict) {
-                $matchStatus = 'unmatched';
-            } else {
-                // Anti-collision checking: intra-batch and existing schedules
-                $hasConflict = false;
-                $isSharedRoom = ScheduleConflictService::isSharedRoom($matchedRoom);
+            if (!is_array($parseData)) {
+                $import->update([
+                    'status' => 'failed',
+                    'error_message' => 'Hasil ekstraksi PDF tidak valid (bukan array jadwal JSON).',
+                ]);
+                Log::error('Python Parser Output is not valid JSON array.');
+                return;
+            }
 
-                // 1. Check intra-batch collisions
-                for ($p = $startPeriod; $p <= $endPeriod; $p++) {
-                    $slotKey = "{$day}-{$p}";
-                    if (isset($batchSlots[$slotKey])) {
-                        if (
-                            in_array($matchedTeacher->id, $batchSlots[$slotKey]['teachers'] ?? []) ||
-                            in_array($matchedClass->id, $batchSlots[$slotKey]['classes'] ?? []) ||
-                            (!$isSharedRoom && in_array($matchedRoom->id, $batchSlots[$slotKey]['rooms'] ?? []))
-                        ) {
-                            $hasConflict = true;
-                            break;
-                        }
-                    }
+            // Auto-register Master Data (Rooms, Subjects, Fallback Classes)
+            $this->autoRegisterMasterData($parseData);
+
+            // Preload / Reload master data to ensure all newly registered entities are in-memory
+            $allClasses = Classes::all();
+            $allTeachers = User::where('role', 'teacher')->get();
+            $allSubjects = Subject::all();
+            $allRooms = Room::all();
+
+            // Ensure clean state if import is re-parsed
+            $import->rows()->delete();
+
+            $conflictService = new ScheduleConflictService();
+
+            // Identify all classes present in this import batch (schedules of these classes are being replaced/updated)
+            $batchClassIds = [];
+            foreach ($parseData as $row) {
+                $cls = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
+                if ($cls) {
+                    $batchClassIds[$cls->id] = $cls->id;
+                }
+            }
+            $batchClassIds = array_values($batchClassIds);
+
+            // Preload existing schedules in-memory to prevent N+1 queries in the loop
+            $existingSchedules = Schedule::query()
+                ->where('cycle_type', $import->cycle_type)
+                ->when(!empty($batchClassIds), fn ($q) => $q->whereNotIn('class_id', $batchClassIds))
+                ->get(['id', 'teacher_id', 'class_id', 'room_id', 'cycle_type', 'day_of_week', 'period_number', 'duration_periods']);
+
+            // Track intra-batch slots for conflict detection: key = "day-period"
+            $batchSlots = [];
+            $teacherMatcher = new TeacherMatcherService();
+
+            foreach ($parseData as $row) {
+                $matchedClass = $this->findClass($allClasses, $row['kelas_mentah'] ?? null);
+                
+                $rawTeacher = $row['guru_mentah'] ?? $row['teacher'] ?? null;
+                $teacherResult = $teacherMatcher->match($allTeachers, $rawTeacher);
+                $matchedTeacher = $teacherResult['matched_teacher'];
+                if (!empty($teacherResult['candidates'])) {
+                    $row['teacher_candidates'] = $teacherResult['candidates'];
                 }
 
-                // 2. Check collisions against existing schedules on same cycle_type
-                // Note: Existing schedules belonging to classes in $batchClassIds are being replaced/updated
-                // by this import, so they are excluded to allow valid schedule updates without false-positive conflicts.
-                if (!$hasConflict) {
-                    $existingConflicts = $conflictService->findConflicts([
-                        'teacher_id' => $matchedTeacher->id,
-                        'class_id' => $matchedClass->id,
-                        'room_id' => $matchedRoom->id,
-                        'cycle_type' => $import->cycle_type,
-                        'day_of_week' => $day,
-                        'period_number' => $startPeriod,
-                        'duration_periods' => $duration,
-                    ], ignoreClassIds: $batchClassIds);
+                $teacherForSubject = $matchedTeacher ?? (!empty($teacherResult['candidates']) ? $allTeachers->firstWhere('id', $teacherResult['candidates'][0]['id']) : null);
+                $matchedSubject = $this->findSubject($allSubjects, $row['mapel_mentah'] ?? null, $teacherForSubject);
+                $matchedRoom = $this->findRoom($allRooms, $row['ruang_final'] ?? null);
 
-                    if ($existingConflicts->isNotEmpty()) {
-                        $hasConflict = true;
-                    }
-                }
+                $day = (int) ($row['day_of_week'] ?? 1);
+                $startPeriod = (int) ($row['period_number'] ?? 1);
+                $duration = (int) ($row['duration_periods'] ?? 1);
+                $endPeriod = $startPeriod + $duration - 1;
 
-                if ($hasConflict) {
-                    $matchStatus = 'conflict';
+                $roomSourceConflict = (bool) ($row['room_source_conflict'] ?? false);
+
+                $hasMissingEntity = !$matchedClass || !$matchedTeacher || !$matchedSubject || !$matchedRoom;
+
+                if ($hasMissingEntity || $roomSourceConflict) {
+                    $matchStatus = 'unmatched';
                 } else {
-                    $matchStatus = 'matched';
+                    // Anti-collision checking: intra-batch and existing schedules
+                    $hasConflict = false;
+                    $isSharedRoom = ScheduleConflictService::isSharedRoom($matchedRoom);
 
-                    // Register slot occupation in this batch
+                    // 1. Check intra-batch collisions
                     for ($p = $startPeriod; $p <= $endPeriod; $p++) {
                         $slotKey = "{$day}-{$p}";
-                        if (!isset($batchSlots[$slotKey])) {
-                            $batchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => []];
+                        if (isset($batchSlots[$slotKey])) {
+                            if (
+                                in_array($matchedTeacher->id, $batchSlots[$slotKey]['teachers'] ?? []) ||
+                                in_array($matchedClass->id, $batchSlots[$slotKey]['classes'] ?? []) ||
+                                (!$isSharedRoom && in_array($matchedRoom->id, $batchSlots[$slotKey]['rooms'] ?? []))
+                            ) {
+                                $hasConflict = true;
+                                break;
+                            }
                         }
-                        $batchSlots[$slotKey]['teachers'][] = $matchedTeacher->id;
-                        $batchSlots[$slotKey]['classes'][] = $matchedClass->id;
-                        if (!$isSharedRoom) {
-                            $batchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
+                    }
+
+                    // 2. Check collisions against existing schedules on same cycle_type using In-Memory lookup
+                    if (!$hasConflict) {
+                        $hasConflict = $conflictService->hasConflictInMemory($existingSchedules, [
+                            'teacher_id' => $matchedTeacher->id,
+                            'class_id' => $matchedClass->id,
+                            'room_id' => $matchedRoom->id,
+                            'cycle_type' => $import->cycle_type,
+                            'day_of_week' => $day,
+                            'period_number' => $startPeriod,
+                            'duration_periods' => $duration,
+                        ]);
+                    }
+
+                    if ($hasConflict) {
+                        $matchStatus = 'conflict';
+                    } else {
+                        $matchStatus = 'matched';
+
+                        // Register slot occupation in this batch
+                        for ($p = $startPeriod; $p <= $endPeriod; $p++) {
+                            $slotKey = "{$day}-{$p}";
+                            if (!isset($batchSlots[$slotKey])) {
+                                $batchSlots[$slotKey] = ['teachers' => [], 'classes' => [], 'rooms' => []];
+                            }
+                            $batchSlots[$slotKey]['teachers'][] = $matchedTeacher->id;
+                            $batchSlots[$slotKey]['classes'][] = $matchedClass->id;
+                            if (!$isSharedRoom) {
+                                $batchSlots[$slotKey]['rooms'][] = $matchedRoom->id;
+                            }
                         }
                     }
                 }
+
+                ScheduleImportRow::create([
+                    'import_id' => $import->id,
+                    'raw_data' => $row,
+                    'matched_class_id' => $matchedClass?->id,
+                    'matched_teacher_id' => $matchedTeacher?->id,
+                    'matched_room_id' => $matchedRoom?->id,
+                    'matched_subject_id' => $matchedSubject?->id,
+                    'day_of_week' => $day,
+                    'period_number' => $startPeriod,
+                    'duration_periods' => $duration,
+                    'match_status' => $matchStatus,
+                    'room_source_conflict' => $roomSourceConflict,
+                    'resolved_by_waka' => false,
+                ]);
             }
 
-            ScheduleImportRow::create([
-                'import_id' => $import->id,
-                'raw_data' => $row,
-                'matched_class_id' => $matchedClass?->id,
-                'matched_teacher_id' => $matchedTeacher?->id,
-                'matched_room_id' => $matchedRoom?->id,
-                'matched_subject_id' => $matchedSubject?->id,
-                'day_of_week' => $day,
-                'period_number' => $startPeriod,
-                'duration_periods' => $duration,
-                'match_status' => $matchStatus,
-                'room_source_conflict' => $roomSourceConflict,
-                'resolved_by_waka' => false,
+            $import->update([
+                'status' => 'preview_ready',
+                'error_message' => null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Schedule import {$this->importId} failed: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $import->update([
+                'status' => 'failed',
+                'error_message' => 'Gagal memproses berkas PDF: ' . $e->getMessage(),
             ]);
         }
-
-        $import->update(['status' => 'preview_ready']);
     }
 
     protected function findClass($classes, ?string $classRaw): ?Classes

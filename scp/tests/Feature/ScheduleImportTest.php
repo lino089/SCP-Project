@@ -775,4 +775,81 @@ class ScheduleImportTest extends TestCase
         $this->assertEquals('matched', $row1->fresh()->match_status);
         $this->assertEquals('matched', $row2->fresh()->match_status);
     }
+
+    public function test_teacher_matcher_service_auto_matches_high_confidence_teacher(): void
+    {
+        $matcher = new \App\Services\TeacherMatcherService();
+        $teachers = collect([$this->teacher]);
+
+        // Input nama dari PDF memiliki gelar tambahan "Dwi Lesmiyati, M.Pd."
+        $result = $matcher->match($teachers, 'Dwi Lesmiyati, M.Pd.');
+
+        $this->assertEquals('auto_matched', $result['status']);
+        $this->assertNotNull($result['matched_teacher']);
+        $this->assertEquals($this->teacher->id, $result['matched_teacher']->id);
+    }
+
+    public function test_schedule_conflict_service_in_memory_detects_collision(): void
+    {
+        $conflictService = new \App\Services\ScheduleConflictService();
+        $existing = collect([
+            (object) [
+                'day_of_week' => 1,
+                'period_number' => 1,
+                'duration_periods' => 2,
+                'teacher_id' => $this->teacher->id,
+                'class_id' => $this->class->id,
+                'room_id' => $this->room->id,
+            ],
+        ]);
+
+        // Same teacher, overlapping period (JP 2)
+        $hasConflict = $conflictService->hasConflictInMemory($existing, [
+            'day_of_week' => 1,
+            'period_number' => 2,
+            'duration_periods' => 2,
+            'teacher_id' => $this->teacher->id,
+            'class_id' => 999,
+            'room_id' => 999,
+        ]);
+
+        $this->assertTrue($hasConflict);
+
+        // Different day - no conflict
+        $noConflict = $conflictService->hasConflictInMemory($existing, [
+            'day_of_week' => 2,
+            'period_number' => 1,
+            'duration_periods' => 2,
+            'teacher_id' => $this->teacher->id,
+            'class_id' => 999,
+            'room_id' => 999,
+        ]);
+
+        $this->assertFalse($noConflict);
+    }
+
+    public function test_show_endpoint_returns_error_message_when_import_failed(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $import = ScheduleImport::create([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'failed',
+            'error_message' => 'Berkas PDF rusak atau tabel tidak terdeteksi.',
+        ]);
+
+        $response = $this->getJson("/api/schedule-imports/{$import->id}");
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'Berkas PDF rusak atau tabel tidak terdeteksi.',
+            'data' => [
+                'id' => $import->id,
+                'status' => 'failed',
+                'error_message' => 'Berkas PDF rusak atau tabel tidak terdeteksi.',
+            ],
+        ]);
+    }
 }

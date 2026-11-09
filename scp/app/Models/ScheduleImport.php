@@ -15,6 +15,7 @@ class ScheduleImport extends Model
         'file_path_ruangan',
         'status',
         'parser_version',
+        'error_message',
     ];
 
     public function rows(): HasMany

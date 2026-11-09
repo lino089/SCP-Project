@@ -65,6 +65,7 @@ export default function AppRouter() {
               <Route path="/waka/academic-calendar" element={<Navigate to="/web/academic-calendar" replace />} />
               <Route path="/waka/calendar" element={<Navigate to="/web/academic-calendar" replace />} />
               <Route path="/web/schedules" element={<ScheduleManagementPage />} />
+              <Route path="/kurikulum/jadwal" element={<Navigate to="/web/schedules" replace />} />
               <Route path="/kurikulum/jadwal/import" element={<ScheduleImportPage />} />
               <Route path="/kurikulum/jadwal/import/:id" element={<ScheduleImportPage />} />
               <Route path="/web/schedule-import" element={<ScheduleImportPage />} />

@@ -18,9 +18,10 @@ foreach ($worker in $existingWorkers) {
 }
 Start-Sleep -Milliseconds 500
 
-# 2. Jalankan Queue Worker menggunakan WMI Win32_Process (detached)
+# 2. Jalankan Queue Worker menggunakan WMI Win32_Process (detached dengan log output)
 $wmi = [wmiclass]"Win32_Process"
-$cmd = "`"$phpExe`" `"$artisanPath`" queue:work --sleep=2 --tries=3 --timeout=180"
+$logFile = "$workingDir\storage\logs\queue-worker.log"
+$cmd = "cmd.exe /c `"`"$phpExe`" `"$artisanPath`" queue:work --sleep=2 --tries=3 --timeout=180 >> `"$logFile`" 2>&1`""
 
 Write-Host "Menjalankan Laravel Queue Worker background..." -ForegroundColor Green
 $res = $wmi.Create($cmd, $workingDir, $null)

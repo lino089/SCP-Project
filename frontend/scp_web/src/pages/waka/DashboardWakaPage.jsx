@@ -615,7 +615,7 @@ export default function DashboardWakaPage() {
                   variant="outline"
                   size="sm"
                   fullWidth
-                  onClick={() => navigate('/kurikulum/jadwal')}
+                  onClick={() => navigate('/web/schedules')}
                 >
                   Lihat Matriks Jadwal
                 </Button>

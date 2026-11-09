@@ -104,4 +104,54 @@ class ScheduleConflictService
             ->when(!empty($ignoreClassIds), fn ($query) => $query->whereNotIn('class_id', $ignoreClassIds))
             ->get();
     }
+
+    /**
+     * Cek apakah terdapat konflik dengan koleksi jadwal yang sudah dimuat ke memori (In-Memory).
+     * Mencegah N+1 query saat memproses impor ratusan baris jadwal sekaligus.
+     *
+     * @param iterable $schedules Koleksi jadwal yang sudah dimuat ke memori
+     * @param array $data ['day_of_week', 'period_number', 'duration_periods', 'teacher_id', 'class_id', 'room_id']
+     * @return bool
+     */
+    public function hasConflictInMemory(iterable $schedules, array $data): bool
+    {
+        $duration = (int) ($data['duration_periods'] ?? 1);
+        $start = (int) $data['period_number'];
+        $end = $start + $duration - 1;
+        $day = (int) $data['day_of_week'];
+
+        $teacherId = $data['teacher_id'] ?? null;
+        $classId = $data['class_id'] ?? null;
+        $roomId = $data['room_id'] ?? null;
+
+        if ($roomId && self::isSharedRoom($roomId)) {
+            $roomId = null;
+        }
+
+        foreach ($schedules as $s) {
+            if ((int) $s->day_of_week !== $day) {
+                continue;
+            }
+
+            $sStart = (int) $s->period_number;
+            $sDuration = (int) ($s->duration_periods ?? 1);
+            $sEnd = $sStart + $sDuration - 1;
+
+            // Periksa tumpang tindih waktu (overlap interval)
+            if ($sStart <= $end && $sEnd >= $start) {
+                // Periksa tabrakan resource
+                if ($teacherId && (int) $s->teacher_id === (int) $teacherId) {
+                    return true;
+                }
+                if ($classId && (int) $s->class_id === (int) $classId) {
+                    return true;
+                }
+                if ($roomId && (int) $s->room_id === (int) $roomId) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }

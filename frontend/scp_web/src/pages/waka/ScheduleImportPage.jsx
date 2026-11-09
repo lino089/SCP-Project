@@ -105,6 +105,13 @@ export default function ScheduleImportPage() {
 
   const activeBatchId = isReviewRoute && paramId && !isNaN(Number(paramId)) ? paramId : null;
 
+  // Redirection guard: Jika rute /review dibuka tanpa parameter ID, arahkan ke halaman upload
+  useEffect(() => {
+    if (location.pathname.includes('/review') && !paramId) {
+      navigate('/web/schedule-import', { replace: true });
+    }
+  }, [location.pathname, paramId, navigate]);
+
   // Recent draft stored in session to offer non-intrusive resume
   const [draftBatchId, setDraftBatchId] = useState(() => {
     try {
@@ -139,6 +146,8 @@ export default function ScheduleImportPage() {
   // ==========================================
   const [rows, setRows] = useState([]);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewBatchStatus, setReviewBatchStatus] = useState(null); // 'uploaded' | 'parsing' | 'preview_ready' | 'failed' | 'confirmed'
+  const [reviewErrorMessage, setReviewErrorMessage] = useState('');
   const [ignoredRowIds, setIgnoredRowIds] = useState(new Set());
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unmatched' | 'conflict' | 'matched' | 'ignored'
 
@@ -296,11 +305,23 @@ export default function ScheduleImportPage() {
     if (!activeBatchId || isNaN(Number(activeBatchId))) return;
 
     let isMounted = true;
+    let pollTimeout = null;
+
     async function loadReviewData() {
       setReviewLoading(true);
       try {
         const res = await scheduleImportApi.getImportDetail(activeBatchId);
         if (isMounted && res?.data) {
+          const currentStatus = res.data.status;
+          setReviewBatchStatus(currentStatus);
+          setReviewErrorMessage(res.data.error_message || res.message || '');
+
+          // Jika job masih diproses oleh worker di background, lakukan polling otomatis
+          if (currentStatus === 'uploaded' || currentStatus === 'parsing') {
+            pollTimeout = setTimeout(loadReviewData, 2500);
+            return;
+          }
+
           if (res.data.rows && Array.isArray(res.data.rows)) {
             const mapped = res.data.rows.map(mapImportRow);
             setRows(mapped);
@@ -320,6 +341,10 @@ export default function ScheduleImportPage() {
         }
       } catch (err) {
         console.error('Gagal mengambil data preview import:', err);
+        if (isMounted) {
+          setReviewBatchStatus('failed');
+          setReviewErrorMessage(err?.response?.data?.message || err?.message || 'Gagal memuat pratinjau impor.');
+        }
       } finally {
         if (isMounted) {
           setReviewLoading(false);
@@ -331,6 +356,9 @@ export default function ScheduleImportPage() {
 
     return () => {
       isMounted = false;
+      if (pollTimeout) {
+        clearTimeout(pollTimeout);
+      }
     };
   }, [activeBatchId]);
 
@@ -450,7 +478,7 @@ export default function ScheduleImportPage() {
         setErrorMessage(
           apiErr.response?.data?.message ||
             apiErr.message ||
-            'Prasyarat Master Data belum terpenuhi. Pastikan minimal terdapat 1 guru dengan FET Staff ID.'
+            'Prasyarat Master Data belum terpenuhi. Pastikan data siswa dan guru aktif sudah terdaftar di sistem.'
         );
       } else {
         setErrorMessage(
@@ -773,7 +801,7 @@ export default function ScheduleImportPage() {
       setIsCancelModalOpen(false);
       setCancelBatchTargetId(null);
       handleResetUpload();
-      navigate('/kurikulum/jadwal');
+      navigate('/web/schedules');
     }
   };
 
@@ -914,6 +942,78 @@ export default function ScheduleImportPage() {
   // RENDER: REVIEW MODE (1 Halaman Penuh)
   // ==========================================
   if (isReviewRoute && activeBatchId) {
+    // 1. Initial Loading State
+    if (reviewLoading && !reviewBatchStatus) {
+      return (
+        <div className="schedule-import-container flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <RefreshCw size={28} className="animate-spin text-amber-500" />
+          <p className="text-sm font-medium text-gray-700">Memuat data pratinjau impor jadwal...</p>
+        </div>
+      );
+    }
+
+    // 2. Berkas Sedang Diproses Worker di Background (Mencegah Preview Kosong Sebelum Parsing Selesai)
+    if (reviewBatchStatus === 'uploaded' || reviewBatchStatus === 'parsing') {
+      return (
+        <div className="schedule-import-container">
+          <div className="p-8 bg-white border border-gray-200 rounded-xl shadow-sm text-center max-w-xl mx-auto my-12">
+            <div className="flex justify-center mb-4">
+              <RefreshCw size={36} className="animate-spin text-amber-500" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Dokumen Sedang Diekstraksi &amp; Dipetakan</h2>
+            <p className="text-xs text-gray-600 mb-6 leading-relaxed">
+              Antrean server sedang memproses dokumen PDF jadwal FET (Batch #{activeBatchId}) serta mencocokkan guru, rombel kelas, dan alokasi fisik ruangan. Halaman ini akan diperbarui secara otomatis begitu ekstraksi siap ditinjau.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Button
+                variant="danger"
+                onClick={() => handleTriggerCancel(activeBatchId)}
+              >
+                Batalkan Impor
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/web/schedules')}
+              >
+                Kembali ke Manajemen Jadwal
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. Ekstraksi Gagal
+    if (reviewBatchStatus === 'failed') {
+      return (
+        <div className="schedule-import-container">
+          <div className="p-8 bg-red-50 border border-red-200 rounded-xl shadow-sm text-center max-w-xl mx-auto my-12">
+            <div className="flex justify-center mb-4">
+              <XCircle size={40} className="text-red-500" />
+            </div>
+            <h2 className="text-lg font-bold text-red-900 mb-2">Proses Ekstraksi Berkas PDF Gagal</h2>
+            <p className="text-xs text-red-700 mb-6 leading-relaxed">
+              {reviewErrorMessage || 'Format tabel PDF tidak sesuai dengan ketentuan FET Timetable atau berkas rusak. Silakan pastikan kedua berkas PDF valid.'}
+            </p>
+            <div className="flex justify-center gap-3">
+              <Button
+                variant="primary"
+                onClick={() => navigate('/web/schedule-import')}
+              >
+                Unggah Ulang Berkas
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/web/schedules')}
+              >
+                Kembali ke Manajemen Jadwal
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="schedule-import-container">
         {/* Success Notification Alert */}
@@ -952,7 +1052,7 @@ export default function ScheduleImportPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => navigate('/kurikulum/jadwal/import')}
+              onClick={() => navigate('/web/schedule-import')}
             >
               Unggah Ulang
             </Button>
@@ -1474,56 +1574,12 @@ export default function ScheduleImportPage() {
         </p>
       </div>
 
-      {/* Non-intrusive Staging Draft Resume Banner */}
-      {draftBatchId && (
-        <aside
-          className="schedule-draft-banner"
-          role="region"
-          aria-label="Notifikasi Draf Staging Impor"
-        >
-          <div className="schedule-draft-banner-left">
-            <Info size={18} className="text-blue-600 shrink-0" />
-            <div className="text-xs text-blue-900 leading-relaxed">
-              <strong>Terdapat draf jadwal yang belum dikomit (Batch #{draftBatchId}).</strong>
-              <p className="mt-0.5 text-blue-700 m-0">
-                Anda dapat melanjutkan proses tinjauan atau mengabaikannya untuk mengunggah berkas baru.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="danger"
-              size="sm"
-              icon={Ban}
-              onClick={() => handleTriggerCancel(draftBatchId)}
-            >
-              Batalkan Draf
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDismissDraft}
-            >
-              Abaikan
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              icon={ArrowRight}
-              onClick={() => navigate(`/kurikulum/jadwal/import/${draftBatchId}`)}
-            >
-              Lanjutkan Review #{draftBatchId}
-            </Button>
-          </div>
-        </aside>
-      )}
-
       {/* Prerequisite Checklist Banner (SCP v4.5 Zero-Manual) */}
       {prerequisiteLoading ? (
         <div className="upload-prerequisite-card upload-prerequisite-card--loading">
           <RefreshCw size={16} className="animate-spin text-gray-500 shrink-0" />
           <span className="text-xs text-gray-600">
-            Memverifikasi kelayakan Master Data prasyarat (Siswa &amp; Guru ber-FET)...
+            Memverifikasi kelayakan Master Data prasyarat (Siswa &amp; Guru aktif)...
           </span>
         </div>
       ) : (
@@ -1582,29 +1638,29 @@ export default function ScheduleImportPage() {
                 )}
               </div>
 
-              {/* Item 2: Guru & FET ID */}
+              {/* Item 2: Guru Aktif Terdaftar */}
               <div className="upload-prerequisite-item">
                 <div className="flex items-center gap-2">
-                  {prerequisiteStatus.checks.hasFetStaffId ? (
+                  {prerequisiteStatus.checks.hasTeachers ? (
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
                   ) : (
                     <XCircle size={15} className="text-red-500 shrink-0" />
                   )}
                   <span className="text-xs text-gray-700">
-                    Guru &amp; Kode Staf FET:{' '}
-                    <strong className={prerequisiteStatus.checks.hasFetStaffId ? 'text-gray-900' : 'text-amber-800'}>
-                      {prerequisiteStatus.counts.fetTeacherCount} / {prerequisiteStatus.counts.teacherCount} guru
+                    Data Guru Terdaftar:{' '}
+                    <strong className={prerequisiteStatus.checks.hasTeachers ? 'text-gray-900' : 'text-amber-800'}>
+                      {prerequisiteStatus.counts.teacherCount} guru
                     </strong>
                   </span>
                 </div>
-                {!prerequisiteStatus.checks.hasFetStaffId && (
+                {!prerequisiteStatus.checks.hasTeachers && (
                   <Button
                     variant="outline"
                     size="sm"
                     icon={ExternalLink}
                     onClick={() => navigate('/web/master-data')}
                   >
-                    Lengkapi FET ID
+                    Kelola Guru
                   </Button>
                 )}
               </div>
@@ -1730,7 +1786,7 @@ export default function ScheduleImportPage() {
             </Button>
             <span className="text-xs text-gray-400">
               {!prerequisiteStatus?.isReady
-                ? 'Lengkapi prasyarat Master Data (Siswa & Guru ber-FET) terlebih dahulu.'
+                ? 'Lengkapi prasyarat Master Data (Siswa & Guru aktif) terlebih dahulu.'
                 : isFormValid
                 ? 'Kedua berkas siap diproses.'
                 : 'Pilih kedua berkas PDF untuk mengaktifkan tombol impor.'}
@@ -1789,7 +1845,7 @@ export default function ScheduleImportPage() {
                 disabled={!uploadedBatchId}
                 onClick={() => {
                   if (uploadedBatchId) {
-                    navigate(`/kurikulum/jadwal/import/${uploadedBatchId}`);
+                    navigate(`/web/schedule-import/${uploadedBatchId}`);
                   }
                 }}
               >

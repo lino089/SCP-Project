@@ -25,38 +25,42 @@ class LogSlowRequestsMiddleware
 
         $durationMs = (microtime(true) - $startTime) * 1000;
 
-        // 1. Slow Request Logging (> 1000ms) tanpa mencatat password / token
-        if ($durationMs >= $this->slowThresholdMs) {
-            Log::warning('[SLOW_REQUEST]', [
-                'method' => $request->method(),
-                'path' => '/' . ltrim($request->path(), '/'),
-                'duration_ms' => round($durationMs, 2),
-                'status' => $response->getStatusCode(),
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
-        }
+        try {
+            // 1. Slow Request Logging (> 1000ms) tanpa mencatat password / token
+            if ($durationMs >= $this->slowThresholdMs) {
+                Log::warning('[SLOW_REQUEST]', [
+                    'method' => $request->method(),
+                    'path' => '/' . ltrim($request->path(), '/'),
+                    'duration_ms' => round($durationMs, 2),
+                    'status' => $response->getStatusCode(),
+                    'user_id' => $request->user()?->id,
+                    'ip' => $request->ip(),
+                ]);
+            }
 
-        // 2. Metrik Server Error (HTTP 5xx)
-        if ($response->getStatusCode() >= 500) {
-            Log::error('[SERVER_ERROR_METRIC]', [
-                'method' => $request->method(),
-                'path' => '/' . ltrim($request->path(), '/'),
-                'status' => $response->getStatusCode(),
-                'duration_ms' => round($durationMs, 2),
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
-        }
+            // 2. Metrik Server Error (HTTP 5xx)
+            if ($response->getStatusCode() >= 500) {
+                Log::error('[SERVER_ERROR_METRIC]', [
+                    'method' => $request->method(),
+                    'path' => '/' . ltrim($request->path(), '/'),
+                    'status' => $response->getStatusCode(),
+                    'duration_ms' => round($durationMs, 2),
+                    'user_id' => $request->user()?->id,
+                    'ip' => $request->ip(),
+                ]);
+            }
 
-        // 3. Metrik Rate Limit Exceeded (HTTP 429)
-        if ($response->getStatusCode() === 429) {
-            Log::info('[RATE_LIMIT_TRIGGERED]', [
-                'method' => $request->method(),
-                'path' => '/' . ltrim($request->path(), '/'),
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
+            // 3. Metrik Rate Limit Exceeded (HTTP 429)
+            if ($response->getStatusCode() === 429) {
+                Log::info('[RATE_LIMIT_TRIGGERED]', [
+                    'method' => $request->method(),
+                    'path' => '/' . ltrim($request->path(), '/'),
+                    'user_id' => $request->user()?->id,
+                    'ip' => $request->ip(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Kegagalan pencatatan log metrik tidak boleh membatalkan response sukses ke klien
         }
 
         return $response;

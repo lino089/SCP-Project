@@ -88,8 +88,8 @@ class ScheduleImportController extends Controller
         $duplicateCount = $import->rows->where('match_status', 'duplicate')->count();
 
         return response()->json([
-            'success' => true,
-            'message' => 'Detail preview import jadwal.',
+            'success' => $import->status !== 'failed',
+            'message' => $import->status === 'failed' ? ($import->error_message ?: 'Proses ekstraksi berkas PDF gagal.') : 'Detail preview import jadwal.',
             'data' => $import,
             'meta' => [
                 'total_rows' => $totalRows,
