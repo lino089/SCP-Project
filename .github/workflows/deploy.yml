@@ -32,6 +32,7 @@ jobs:
             php artisan migrate --force
             php artisan optimize:clear
             php artisan optimize
+            php artisan queue:restart
 
             # Pastikan izin file storage & cache tetap aman
             sudo chown -R ubuntu:www-data storage bootstrap/cache
