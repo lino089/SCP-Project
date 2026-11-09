@@ -5,15 +5,10 @@
 
 .student-home {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .student-home {
-    padding: 24px 32px;
-  }
-}
 
 /* Header Profil Siswa */
 .student-home__profile-card {

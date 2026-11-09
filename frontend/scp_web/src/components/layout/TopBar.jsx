@@ -112,12 +112,12 @@ export default function TopBar({ onToggleSidebar }) {
           role="button"
           tabIndex={0}
         >
-          <span className="web-topbar__brand-name text-base sm:text-lg font-bold tracking-tight truncate max-w-[180px] sm:max-w-none cursor-pointer">
+          <span className="web-topbar__brand-name text-base sm:text-lg font-bold tracking-tight truncate cursor-pointer">
             School Class Progress
           </span>
         </div>
 
-        <div className="hidden md:flex items-center text-[13px] font-medium select-none ml-1">
+        <div className="hidden lg:flex items-center text-[13px] font-medium select-none ml-1">
           <span className="text-gray-300 mx-2 font-normal">/</span>
           <span className="text-gray-500 font-normal">{breadcrumb.category}</span>
           <span className="text-gray-300 mx-1.5 font-normal">/</span>
@@ -150,7 +150,7 @@ export default function TopBar({ onToggleSidebar }) {
           </button>
           <button
             type="button"
-            className="web-topbar__icon-btn"
+            className="web-topbar__icon-btn web-topbar__icon-btn--secondary"
             title="Pusat Bantuan &amp; FAQ"
             aria-label="Pusat bantuan"
           >
@@ -158,7 +158,7 @@ export default function TopBar({ onToggleSidebar }) {
           </button>
           <button
             type="button"
-            className="web-topbar__icon-btn"
+            className="web-topbar__icon-btn web-topbar__icon-btn--secondary"
             title="Notifikasi"
             aria-label="Notifikasi"
           >

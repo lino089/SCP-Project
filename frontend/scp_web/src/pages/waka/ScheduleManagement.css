@@ -2,18 +2,13 @@
 
 .schedule-page {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
-@media (min-width: 640px) {
-  .schedule-page {
-    padding: 24px 32px;
-  }
-}
 
 /* Toast */
 .schedule-toast {
@@ -63,7 +58,7 @@
 }
 
 .schedule-header__title {
-  font-size: 26px;
+  font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 600;
   color: #111827;
   letter-spacing: -0.02em;
@@ -80,6 +75,7 @@
 
 .schedule-header__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }

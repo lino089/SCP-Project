@@ -3,9 +3,24 @@
  * @param {number} columns - Number of table columns to fill
  * @param {number} rows - Number of skeleton rows to display (default: 5)
  */
-export default function SkeletonRow({ columns = 5, rows = 5 }) {
+export default function SkeletonRow({ columns = 5, rows = 5, variant = 'table' }) {
   const rowArray = Array.from({ length: rows });
   const colArray = Array.from({ length: columns });
+
+  // Konteks non-tabel (mis. placeholder di dalam <div>) — tidak boleh memakai <tr>
+  if (variant === 'block') {
+    return (
+      <div className="w-full animate-pulse space-y-3 px-4 py-4" aria-hidden="true">
+        {rowArray.map((_, rIdx) => (
+          <div key={`skeleton-block-${rIdx}`} className="flex gap-3">
+            {colArray.map((_, cIdx) => (
+              <div key={`skeleton-block-cell-${rIdx}-${cIdx}`} className="h-4 flex-1 rounded bg-gray-200" />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <>

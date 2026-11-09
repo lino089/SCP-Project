@@ -2,15 +2,10 @@
 
 .parent-monitoring-page {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .parent-monitoring-page {
-    padding: 24px 32px;
-  }
-}
 
 /* Child Information Header Card */
 .parent-child-card {
@@ -246,6 +241,7 @@
 
 .preview-doc-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 

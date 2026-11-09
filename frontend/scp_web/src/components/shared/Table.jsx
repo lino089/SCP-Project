@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SkeletonRow from '../feedback/SkeletonRow';
 import Pagination from './Pagination';
 import './Table.css';
@@ -65,6 +65,36 @@ export default function Table({
     }
   };
 
+  // Petunjuk scroll horizontal (hanya muncul bila tabel memang terpotong)
+  const scrollRef = useRef(null);
+  const [isScrollable, setIsScrollable] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+
+    const update = () => {
+      const hasOverflow = el.scrollWidth - el.clientWidth > 2;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+      setIsScrollable(hasOverflow && !atEnd);
+    };
+
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    let observer;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(update);
+      observer.observe(el);
+    }
+
+    return () => {
+      el.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      observer?.disconnect();
+    };
+  }, [data, columns, isLoading]);
+
   // Selection calculations
   const totalColumns = columns.length + (selectable ? 1 : 0);
   const pageKeys = displayData.map((row) => row[rowKey]);
@@ -76,7 +106,7 @@ export default function Table({
     data.length > 0 && data.every((r) => selectedRowKeys.includes(r[rowKey]));
 
   return (
-    <div className={`table-container ${className}`.trim()}>
+    <div className={`table-container ${isScrollable ? 'table-container--overflowing' : ''} ${className}`.trim()}>
       {/* Banner if all current page items are selected and there are more items across pages */}
       {selectable && isCurrentPageAllSelected && data.length > displayData.length && (
         <div className="table-selection-banner">
@@ -111,7 +141,7 @@ export default function Table({
       )}
 
       <div className="w-full overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="table-scroll-wrapper min-w-full">
+        <div className="table-scroll-wrapper min-w-full" ref={scrollRef}>
           <table className="table-element min-w-full">
             <thead className="table-thead">
               <tr>

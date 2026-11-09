@@ -1,4 +1,5 @@
 .table-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -14,6 +15,7 @@
 .table-scroll-wrapper {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
@@ -219,4 +221,28 @@
 
 .table-selection-banner__btn--primary:hover {
   color: #2563EB;
+}
+
+/* Petunjuk halus bahwa masih ada kolom di kanan (muncul hanya saat terpotong) */
+.table-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: linear-gradient(
+    to left,
+    rgba(15, 23, 42, 0.20),
+    rgba(15, 23, 42, 0.07) 55%,
+    rgba(15, 23, 42, 0)
+  );
+  border-radius: 0 8px 8px 0;
+}
+
+.table-container--overflowing::after {
+  opacity: 1;
 }

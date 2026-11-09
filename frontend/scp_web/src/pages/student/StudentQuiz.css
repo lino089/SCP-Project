@@ -2,15 +2,10 @@
 
 .student-quiz-page {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .student-quiz-page {
-    padding: 24px 32px;
-  }
-}
 
 /* Header */
 .student-quiz-header {
@@ -29,7 +24,7 @@
 }
 
 .student-quiz-title {
-  font-size: 1.5rem;
+  font-size: clamp(18px, 4.3vw, 24px);
   font-weight: 700;
   color: #0F172A;
   letter-spacing: -0.02em;

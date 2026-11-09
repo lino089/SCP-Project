@@ -2106,7 +2106,7 @@ export default function MasterDataPage() {
       {/* Table Data or States */}
       {isLoading ? (
         <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden">
-          <SkeletonRow count={6} />
+          <SkeletonRow variant="block" columns={6} />
         </div>
       ) : fetchError ? (
         <ErrorState

@@ -2,15 +2,10 @@
 
 .schedule-import-container {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .schedule-import-container {
-    padding: 24px 32px;
-  }
-}
 
 /* In-Page Breadcrumb / Path Bar */
 .schedule-import-path-bar {
@@ -60,7 +55,7 @@
 }
 
 .schedule-import-title {
-  font-size: 26px;
+  font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 600;
   color: #111827;
   letter-spacing: -0.02em;

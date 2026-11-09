@@ -1,22 +1,17 @@
 .profile-container {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   font-family: var(--font-family);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .profile-container {
-    padding: 24px 32px;
-  }
-}
 
 .profile-header {
   margin-bottom: 24px;
 }
 
 .profile-title {
-  font-size: 24px;
+  font-size: clamp(18px, 4.3vw, 24px);
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;

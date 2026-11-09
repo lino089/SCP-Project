@@ -2,15 +2,10 @@
 
 .review-import-container {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .review-import-container {
-    padding: 24px 32px;
-  }
-}
 
 .review-import-header {
   display: flex;
@@ -22,7 +17,7 @@
 }
 
 .review-import-title {
-  font-size: 26px;
+  font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 600;
   color: #111827;
   letter-spacing: -0.02em;
@@ -39,6 +34,7 @@
 
 .review-import-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }

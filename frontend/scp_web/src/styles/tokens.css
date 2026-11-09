@@ -57,9 +57,27 @@
   --shadow-dropdown: 0 4px 16px rgba(0,0,0,0.06);
   --shadow-none: none;
   
+  /* Page gutter (responsif: mobile / tablet / desktop) */
+  --page-gutter-x: 16px;
+  --page-gutter-y: 16px;
+
   /* Layout */
   --sidebar-width: 240px;
   --sidebar-collapsed: 60px;
   --topbar-height: 56px;
   --mobile-nav-height: 56px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --page-gutter-x: 24px;
+    --page-gutter-y: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-gutter-x: 32px;
+    --page-gutter-y: 24px;
+  }
 }

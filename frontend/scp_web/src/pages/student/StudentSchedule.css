@@ -5,18 +5,13 @@
 
 .student-schedule-page {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-@media (min-width: 640px) {
-  .student-schedule-page {
-    padding: 24px 32px;
-  }
-}
 
 /* Header Halaman */
 .student-schedule__header {
@@ -34,7 +29,7 @@
 }
 
 .student-schedule__title-group h1 {
-  font-size: 1.5rem;
+  font-size: clamp(18px, 4.3vw, 24px);
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
@@ -51,6 +46,7 @@
 
 .student-schedule__header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }

@@ -21,8 +21,10 @@
 
 .web-topbar__left {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .web-topbar__menu-btn {
@@ -62,16 +64,19 @@
   color: #0F172A;
   letter-spacing: -0.02em;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .web-topbar__right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .web-topbar__role-chip {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
@@ -85,7 +90,6 @@
 }
 
 .web-topbar__academic-badge {
-  display: inline-flex;
   align-items: center;
   padding: 4px 10px;
   border-radius: 6px;
@@ -209,4 +213,11 @@
 .web-topbar__dropdown-item:hover {
   background-color: #F3F4F6;
   color: #111827;
+}
+
+/* Ikon utilitas sekunder: disembunyikan di layar kecil (<640) agar TopBar muat */
+@media (max-width: 639px) {
+  .web-topbar__icon-btn--secondary {
+    display: none;
+  }
 }

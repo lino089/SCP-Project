@@ -2,17 +2,12 @@
 
 .promotion-container {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
 
-@media (min-width: 640px) {
-  .promotion-container {
-    padding: 24px 32px;
-  }
-}
 
 .promotion-header {
   display: flex;
@@ -24,7 +19,7 @@
 }
 
 .promotion-title {
-  font-size: 1.625rem;
+  font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
   color: var(--neutral-900, #0f172a);
   letter-spacing: -0.02em;
@@ -41,6 +36,7 @@
 
 .promotion-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
 }
@@ -244,9 +240,19 @@
   align-items: center;
   gap: 0.625rem;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* izinkan filter menyusut di layar sangat kecil (320px) tanpa memaksa lebar minimum */
+.promotion-filters-group > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .promotion-filter-select {
+  flex: 1 1 130px;
+  min-width: 0;
   padding: 0.45rem 0.75rem;
   font-size: 0.8125rem;
   border: 1px solid var(--neutral-300, #cbd5e1);
@@ -265,6 +271,8 @@
 /* Segmented Tabs (Semua, Kelas X, Kelas XI, Kelas XII) */
 .promotion-segmented-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   background-color: #f1f5f9;
   padding: 3px;

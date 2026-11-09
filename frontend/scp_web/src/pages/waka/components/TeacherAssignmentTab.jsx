@@ -401,7 +401,7 @@ export default function TeacherAssignmentTab({
       {/* 4. Table Matriks Data */}
       {isLoading ? (
         <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden">
-          <SkeletonRow count={8} />
+          <SkeletonRow variant="block" columns={8} />
         </div>
       ) : fetchError ? (
         <ErrorState

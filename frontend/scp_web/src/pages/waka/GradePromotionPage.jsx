@@ -400,7 +400,7 @@ export default function GradePromotionPage() {
 
         {isLoading ? (
           <div className="promotion-table-loading">
-            <SkeletonRow count={4} />
+            <SkeletonRow variant="block" columns={4} />
           </div>
         ) : fetchError ? (
           <ErrorState

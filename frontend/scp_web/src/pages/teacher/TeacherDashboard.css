@@ -9,17 +9,12 @@
 
 .teacher-dashboard {
   width: 100%;
-  padding: 20px 24px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
   background-color: #FFFFFF;
   min-height: calc(100vh - 60px);
 }
 
-@media (min-width: 768px) {
-  .teacher-dashboard {
-    padding: 24px 32px;
-  }
-}
 
 /* ==========================================================================
    1. HEADER UCAPAN SELAMAT DATANG (BORDERLESS / SEAMLESS)
@@ -385,6 +380,7 @@
 
 .teacher-dashboard__sched-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;

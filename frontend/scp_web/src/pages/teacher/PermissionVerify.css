@@ -5,15 +5,10 @@
 
 .permission-verify {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .permission-verify {
-    padding: 24px 32px;
-  }
-}
 
 /* Page Header */
 .permission-verify__header {
@@ -32,7 +27,7 @@
 }
 
 .permission-verify__title-group h1 {
-  font-size: 1.625rem;
+  font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;

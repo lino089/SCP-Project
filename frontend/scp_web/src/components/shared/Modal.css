@@ -18,6 +18,7 @@
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
   width: 100%;
   max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -102,4 +103,27 @@
   padding: 14px 20px;
   border-top: 1px solid #E5E7EB;
   background-color: #FFFFFF;
+}
+
+/* Layar kecil: overlay lebih rapat, footer modal boleh wrap */
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 12px;
+  }
+
+  .modal-card {
+    max-height: calc(100dvh - 32px);
+  }
+
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+
+  .modal-footer > * {
+    flex: 1 1 auto;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
 }

@@ -2,15 +2,10 @@
 
 .academic-calendar-container {
   width: 100%;
-  padding: 16px;
+  padding: var(--page-gutter-y) var(--page-gutter-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .academic-calendar-container {
-    padding: 24px 32px;
-  }
-}
 
 /* Header & Controls */
 .calendar-header {
