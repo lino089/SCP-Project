@@ -18,6 +18,7 @@ const ScheduleManagementPage = lazy(() => import('../pages/waka/ScheduleManageme
 const ScheduleImportPage = lazy(() => import('../pages/waka/ScheduleImportPage'));
 const MasterDataPage = lazy(() => import('../pages/waka/MasterDataPage'));
 const GradePromotionPage = lazy(() => import('../pages/waka/GradePromotionPage'));
+const AlumniPage = lazy(() => import('../pages/waka/AlumniPage'));
 const MonitoringRecapPage = lazy(() => import('../pages/waka/MonitoringRecapPage'));
 const TeacherDashboardPage = lazy(() => import('../pages/teacher/TeacherDashboardPage'));
 const TeacherCalendarPage = lazy(() => import('../pages/teacher/TeacherCalendarPage'));
@@ -78,9 +79,10 @@ export default function AppRouter() {
               <Route path="/web/grade-promotion" element={<GradePromotionPage />} />
             </Route>
 
-            {/* Shared Waka & Teacher (Kesiswaan) Monitoring Route */}
+            {/* Shared Waka & Teacher (Kesiswaan) Monitoring & Alumni Route */}
             <Route element={<RoleRoute allowedRoles={['waka', 'teacher']} />}>
               <Route path="/web/monitoring" element={<MonitoringRecapPage />} />
+              <Route path="/web/alumni" element={<AlumniPage />} />
             </Route>
 
             {/* Teacher Permission Verification & Student Attendance Recap (Kesiswaan, Wali Kelas, or Waka) */}

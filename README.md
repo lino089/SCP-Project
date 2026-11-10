@@ -36,7 +36,7 @@
 
 Tujuan utama project ini:
 - Menyediakan **Single Source of Truth** berupa REST API terpusat yang aman, efisien, dan konsisten untuk dikonsumsi oleh Web Client (Waka, Guru, Siswa, Orang Tua) maupun Mobile Client.
-- Mengotomatisasi siklus penyusunan jadwal sekolah berbasis **Siklus Putaran TeFa (Putaran 1 & Putaran 2)** serta integrasi impor otomatis dari berkas keluaran aplikasi **FET Tim Kurikulum**.
+- Mengotomatisasi siklus penyusunan jadwal sekolah berbasis **Siklus Putaran (Putaran 1 & Putaran 2)** serta integrasi impor otomatis dari berkas keluaran aplikasi **FET Tim Kurikulum**.
 - Mengakomodasi **Resolusi Jam Pelajaran Dinamis** yang menyesuaikan durasi jam belajar secara otomatis terhadap agenda rutin (Upacara Senin, Literasi Selasa, Tadarus/Pendalaman Iman Rabu–Kamis, serta KBM Pendek Jumat).
 - Meningkatkan akuntabilitas KBM melalui **Jurnal Mengajar Guru Berbasis Bukti Kamera Realtime** dan **Presensi Exception-Based** yang terintegrasi langsung dengan perizinan siswa.
 - Mengintegrasikan evaluasi pembelajaran modern melalui **Modul Kuis Berbantuan AI (*Google Gemini 3.8 Flash*)** untuk pembuatan soal otomatis, ekstraksi dokumen materi, dan koreksi semantik soal esai.

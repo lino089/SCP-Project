@@ -20,6 +20,7 @@ export const classApi = {
   createClass: (data) => api.post('/classes', data),
   updateClass: (id, data) => api.put(`/classes/${id}`, data),
   deleteClass: (id) => api.delete(`/classes/${id}`),
+  autoMapClasses: () => api.post('/classes/auto-map'),
   promoteClasses: () => api.post('/class-promotions'),
 };
 
@@ -70,6 +71,11 @@ export const studentApi = {
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
   deleteStudent: (id, data) => api.delete(`/students/${id}`, { data }),
   holdBack: (id, data) => api.post(`/students/${id}/hold-back`, data),
+  getAlumni: (params, config = {}) => {
+    const cleanParams = params ? { ...params } : {};
+    if (cleanParams.all === true) cleanParams.all = 1;
+    return api.get('/alumni', { params: cleanParams, ...config });
+  },
   downloadTemplate: () =>
     api.get('/students/import-template', {
       params: { t: Date.now() },
@@ -84,6 +90,14 @@ export const studentApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
     }),
+};
+
+export const alumniApi = {
+  getAlumni: (params, config = {}) => {
+    const cleanParams = params ? { ...params } : {};
+    if (cleanParams.all === true) cleanParams.all = 1;
+    return api.get('/alumni', { params: cleanParams, ...config });
+  },
 };
 
 export const recycleBinApi = {
@@ -114,5 +128,6 @@ export default {
   teachers: teacherApi,
   teacherAssignments: teacherAssignmentApi,
   students: studentApi,
+  alumni: alumniApi,
   recycleBin: recycleBinApi,
 };

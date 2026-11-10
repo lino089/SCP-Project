@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "ota:build": "node scripts/deploy-ota.js"
+    "ota:build": "node scripts/deploy-ota.js",
+    "ota:upload": "python scripts/upload-ota.py"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

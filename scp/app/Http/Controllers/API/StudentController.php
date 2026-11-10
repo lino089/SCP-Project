@@ -441,6 +441,7 @@ class StudentController extends Controller
             'search' => 'nullable|string|max:100',
             'class_id' => 'nullable|integer|exists:classes,id',
             'level' => 'nullable|string|max:10',
+            'status' => 'nullable|in:active,alumni,all',
             'all' => 'nullable|in:true,false,1,0',
         ]);
 
@@ -448,8 +449,16 @@ class StudentController extends Controller
         $search = $request->input('search');
         $classId = $request->input('class_id');
         $level = $request->input('level');
+        $status = $request->input('status');
 
         $query = User::where('role', 'student')->with('schoolClass:id,name,level');
+
+        // Scoping status siswa: default tidak menampilkan alumni jika status=active
+        if ($status === 'active') {
+            $query->whereNull('graduation_date')->whereNotNull('class_id');
+        } elseif ($status === 'alumni') {
+            $query->whereNotNull('graduation_date');
+        }
 
         if ($classId) {
             $query->where('class_id', $classId);
@@ -504,6 +513,149 @@ class StudentController extends Controller
                 'last_page' => $students->lastPage(),
             ],
         ], 200);
+    }
+
+    /**
+     * Menampilkan daftar alumni (siswa yang telah lulus) beserta histori kelas terakhirnya.
+     * GET /api/alumni
+     */
+    public function alumni(Request $request): JsonResponse
+    {
+        $request->validate([
+            'per_page' => 'nullable|integer|min:1|max:1000',
+            'search' => 'nullable|string|max:100',
+            'graduation_year' => 'nullable|string|max:10',
+            'major' => 'nullable|string|max:20',
+            'all' => 'nullable|in:true,false,1,0',
+        ]);
+
+        $perPage = $request->integer('per_page', 20);
+        $search = $request->input('search');
+        $gradYear = $request->input('graduation_year');
+        $major = $request->input('major');
+
+        // Siswa berstatus alumni: graduation_date not null ATAU ada record graduated di student_class_histories
+        $query = User::where('role', 'student')
+            ->where(function ($q) {
+                $q->whereNotNull('graduation_date')
+                    ->orWhereHas('classHistories', fn($hq) => $hq->where('action_type', 'graduated'));
+            })
+            ->with([
+                'classHistories' => fn($q) => $q->with(['fromClass:id,name,level', 'toClass:id,name,level'])->orderByDesc('processed_at')->orderByDesc('id'),
+            ]);
+
+        if ($gradYear && $gradYear !== 'ALL') {
+            $query->where(function ($q) use ($gradYear) {
+                $q->whereYear('graduation_date', (int) $gradYear)
+                    ->orWhereHas('classHistories', function ($hq) use ($gradYear) {
+                        $hq->where('action_type', 'graduated')
+                            ->where('academic_year', 'like', "%{$gradYear}%");
+                    });
+            });
+        }
+
+        if ($search) {
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+            $query->where(function ($q) use ($search, $like) {
+                $q->where('name', $like, '%' . $search . '%')
+                    ->orWhere('nis_nip', $like, '%' . $search . '%')
+                    ->orWhere('nisn', $like, '%' . $search . '%');
+            });
+        }
+
+        $orderRaw = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql'
+            ? 'graduation_date DESC NULLS LAST, name ASC'
+            : 'graduation_date IS NULL, graduation_date DESC, name ASC';
+
+        // Hitung tahun-tahun kelulusan yang ada untuk filter dropdown
+        $availableYears = User::where('role', 'student')
+            ->whereNotNull('graduation_date')
+            ->selectRaw('DISTINCT EXTRACT(YEAR FROM graduation_date)::integer as year')
+            ->orderByDesc('year')
+            ->pluck('year')
+            ->filter()
+            ->values();
+
+        if ($request->boolean('all')) {
+            $alumni = $query->orderByRaw($orderRaw)->get();
+            $data = $this->transformAlumniCollection($alumni, $major);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data alumni berhasil diambil.',
+                'data' => $data,
+                'meta' => [
+                    'total' => count($data),
+                    'available_years' => $availableYears,
+                ],
+            ], 200);
+        }
+
+        $paginated = $query->orderByRaw($orderRaw)->paginate($perPage);
+        $transformedItems = $this->transformAlumniCollection(collect($paginated->items()), $major);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data alumni berhasil diambil.',
+            'data' => $transformedItems,
+            'meta' => [
+                'current_page' => $paginated->currentPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+                'last_page' => $paginated->lastPage(),
+                'available_years' => $availableYears,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Helper untuk memformat koleksi alumni beserta riwayat kelas terakhirnya.
+     */
+    protected function transformAlumniCollection($collection, ?string $majorFilter = null): array
+    {
+        $result = [];
+
+        foreach ($collection as $student) {
+            $histories = $student->classHistories ?? collect();
+            $graduatedHistory = $histories->firstWhere('action_type', 'graduated');
+            $lastClass = $graduatedHistory?->fromClass ?: $histories->first()?->fromClass;
+            $lastClassName = $lastClass?->name ?? '-';
+
+            // Filter jurusan jika diberikan
+            if ($majorFilter && $majorFilter !== 'ALL') {
+                if (!str_contains(strtoupper($lastClassName), strtoupper($majorFilter))) {
+                    continue;
+                }
+            }
+
+            $gradYear = $student->graduation_date
+                ? (int) date('Y', strtotime($student->graduation_date))
+                : ($graduatedHistory ? (int) substr($graduatedHistory->academic_year, 0, 4) : null);
+
+            $result[] = [
+                'id' => $student->id,
+                'name' => $student->name,
+                'nis' => $student->nis_nip,
+                'nisn' => $student->nisn,
+                'gender' => $student->gender,
+                'email' => $student->email,
+                'phone_number' => $student->phone_number,
+                'graduation_date' => $student->graduation_date ? date('Y-m-d', strtotime($student->graduation_date)) : null,
+                'graduation_year' => $gradYear,
+                'last_class_name' => $lastClassName,
+                'last_class_level' => $lastClass?->level ?? '12',
+                'class_histories' => $histories->map(fn($h) => [
+                    'id' => $h->id,
+                    'academic_year' => $h->academic_year,
+                    'action_type' => $h->action_type,
+                    'from_class' => $h->fromClass?->name,
+                    'to_class' => $h->toClass?->name,
+                    'processed_at' => $h->processed_at?->format('Y-m-d H:i:s'),
+                ]),
+            ];
+        }
+
+        return $result;
     }
 
     /**

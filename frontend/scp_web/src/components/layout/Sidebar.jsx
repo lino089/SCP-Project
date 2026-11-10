@@ -16,6 +16,7 @@ import {
   User,
   Users,
   CheckSquare,
+  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import './Sidebar.css';
@@ -154,6 +155,16 @@ export default function Sidebar({ isOpen = false, onClose }) {
                   onClick={() => onClose?.()}
                 >
                   Kenaikan Kelas
+                </NavLink>
+
+                <NavLink
+                  to="/web/alumni"
+                  className={({ isActive }) =>
+                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
+                  }
+                  onClick={() => onClose?.()}
+                >
+                  Data Alumni
                 </NavLink>
 
                 <NavLink
@@ -304,6 +315,19 @@ export default function Sidebar({ isOpen = false, onClose }) {
             >
               <Eye size={16} strokeWidth={1.5} />
               <span>Monitoring Kesiswaan</span>
+            </NavLink>
+          )}
+
+          {isKesiswaan() && (
+            <NavLink
+              to="/web/alumni"
+              className={({ isActive }) =>
+                `web-sidebar__mainlink ${isActive ? 'web-sidebar__mainlink--active' : ''}`
+              }
+              onClick={() => onClose?.()}
+            >
+              <GraduationCap size={16} strokeWidth={1.5} />
+              <span>Data Alumni</span>
             </NavLink>
           )}
         </>

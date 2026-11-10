@@ -3,6 +3,8 @@ import {
   Pencil,
   ArrowRight,
   Search,
+  Wand2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Button,
@@ -43,6 +45,7 @@ export default function GradePromotionPage() {
   const [editingClass, setEditingClass] = useState(null);
   const [selectedNextClassId, setSelectedNextClassId] = useState('');
   const [isSavingMapping, setIsSavingMapping] = useState(false);
+  const [isAutoMapping, setIsAutoMapping] = useState(false);
 
   // Section 2: Filter States & Shortcut
   const searchInputRef = useRef(null);
@@ -126,6 +129,28 @@ export default function GradePromotionPage() {
     setEditingClass(cls);
     setSelectedNextClassId(cls.next_class_id ? String(cls.next_class_id) : '');
   };
+
+
+  // Pemetaan Rombel Paralel Otomatis (X -> XI, XI -> XII)
+  const handleAutoMapClasses = async () => {
+    setIsAutoMapping(true);
+    try {
+      const res = await classApi.autoMapClasses();
+      const resultData = res?.data;
+      alert(resultData?.message || 'Pemetaan rombel paralel otomatis berhasil diterapkan.');
+      await handleRefresh();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Gagal melakukan pemetaan otomatis rombel.');
+    } finally {
+      setIsAutoMapping(false);
+    }
+  };
+
+  // Deteksi kelas tingkat 10 & 11 yang belum memiliki rombel tujuan
+  const unmappedNonFinalClasses = useMemo(() => {
+    return classList.filter((c) => Number(c.level) < 12 && !c.next_class_id);
+  }, [classList]);
+  const hasUnmappedClasses = unmappedNonFinalClasses.length > 0;
 
   const handleSaveMapping = async () => {
     if (!editingClass) return;
@@ -329,16 +354,32 @@ export default function GradePromotionPage() {
             variant="secondary"
             onClick={handleRefresh}
             loading={isLoading}
-            disabled={isLoading || isExecuting}
+            disabled={isLoading || isExecuting || isAutoMapping}
             title="Muat Ulang Data"
           >
             Refresh
           </Button>
 
           <Button
+            variant="secondary"
+            icon={Wand2}
+            onClick={handleAutoMapClasses}
+            loading={isAutoMapping}
+            disabled={isLoading || isExecuting || isAutoMapping || classList.length === 0}
+            title="Petakan otomatis rombel X → XI dan XI → XII berdasarkan jurusan paralel"
+          >
+            Petakan Rombel Paralel Otomatis
+          </Button>
+
+          <Button
             variant="danger"
             onClick={() => setIsConfirmModalOpen(true)}
-            disabled={isLoading || isExecuting || classList.length === 0}
+            disabled={isLoading || isExecuting || isAutoMapping || classList.length === 0 || hasUnmappedClasses}
+            title={
+              hasUnmappedClasses
+                ? `Terdapat ${unmappedNonFinalClasses.length} rombel tingkat 10/11 yang belum dipetakan.`
+                : 'Eksekusi Promosi Massal'
+            }
           >
             Eksekusi Promosi Massal
           </Button>
@@ -383,6 +424,34 @@ export default function GradePromotionPage() {
                 <span className="promotion-stat-val text-blue-700">{promotionResult.deactivated_assignments}</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      
+      {/* Warning Banner: Rombel Tingkat 10 & 11 yang Belum Dipetakan */}
+      {hasUnmappedClasses && !isLoading && (
+        <div className="promotion-warning-banner">
+          <AlertTriangle className="promotion-warning-icon" size={20} />
+          <div className="promotion-warning-content">
+            <h4 className="promotion-warning-title">
+              Perhatian: Ada {unmappedNonFinalClasses.length} rombel tingkat 10 &amp; 11 belum dipetakan
+            </h4>
+            <p className="promotion-warning-desc">
+              Rombel tingkat 10 dan 11 wajib memiliki rombel tujuan sebelum promosi massal dapat dieksekusi agar siswa tidak salah diarahkan menjadi lulus. Klik tombol <strong>&ldquo;Petakan Rombel Paralel Otomatis&rdquo;</strong> di atas untuk memetakan rombel secara paralel, atau tentukan secara manual pada tabel di bawah.
+            </p>
+            <div className="promotion-unmapped-tags">
+              {unmappedNonFinalClasses.slice(0, 10).map((cls) => (
+                <span key={cls.id} className="promotion-unmapped-tag">
+                  {cls.name}
+                </span>
+              ))}
+              {unmappedNonFinalClasses.length > 10 && (
+                <span className="promotion-unmapped-tag">
+                  +{unmappedNonFinalClasses.length - 10} lainnya
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}

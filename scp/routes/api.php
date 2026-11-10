@@ -111,6 +111,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/subjects', [SubjectController::class, 'index']);
     Route::get('/teachers', [TeacherController::class, 'index']);
     Route::get('/students', [StudentController::class, 'index']);
+    Route::get('/alumni', [StudentController::class, 'alumni']);
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'index']);
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
@@ -175,6 +176,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::put('/classes/{id}', [SchoolClassController::class, 'update']);
         Route::delete('/classes/{id}', [SchoolClassController::class, 'destroy']);
         Route::post('/class-promotions', [SchoolClassController::class, 'promoteClasses']);
+        Route::post('/classes/auto-map', [SchoolClassController::class, 'autoMapClasses']);
 
         // 9.3 Master Data Rooms
         Route::post('/rooms', [RoomController::class, 'store']);

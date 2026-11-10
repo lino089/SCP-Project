@@ -169,10 +169,80 @@ class SchoolClassController extends Controller
      * Mencatat riwayat kelas siswa (student_class_histories) dan secara otomatis
      * menonaktifkan seluruh penugasan Wali Kelas & Kesiswaan aktif periode berjalan (Keputusan 6 Opsi B).
      */
+    /**
+     * Memetakan otomatis rombel tujuan kenaikan kelas berdasarkan kesesuaian paralel tingkat (Auto-Map).
+     * POST /api/classes/auto-map
+     */
+    public function autoMapClasses(Request $request): JsonResponse
+    {
+        $classes = Classes::all();
+        $updatedCount = 0;
+
+        DB::transaction(function () use ($classes, &$updatedCount) {
+            foreach ($classes as $c) {
+                $level = (int) $c->level;
+                if ($level === 10 || $level === 11) {
+                    $nextLevel = $level + 1;
+                    $nextRoman = $nextLevel === 11 ? 'XI' : 'XII';
+                    $currRoman = $level === 10 ? 'X' : 'XI';
+
+                    // 1. Exact parallel match (e.g. X AK 1 -> XI AK 1)
+                    $targetName = preg_replace('/^' . $currRoman . '\b/i', $nextRoman, $c->name);
+                    $target = $classes->first(fn($item) => (int)$item->level === $nextLevel && trim($item->name) === trim($targetName));
+
+                    // 2. Fallback: match without number (e.g. XI LPS 1 -> XII LPS)
+                    if (!$target) {
+                        $majorOnly = preg_replace('/\s+\d+$/', '', $targetName);
+                        $target = $classes->first(fn($item) => (int)$item->level === $nextLevel && trim($item->name) === trim($majorOnly));
+                    }
+
+                    if ($target && $c->next_class_id !== $target->id) {
+                        $c->update(['next_class_id' => $target->id]);
+                        $updatedCount++;
+                    }
+                } elseif ($level === 12) {
+                    if ($c->next_class_id !== null) {
+                        $c->update(['next_class_id' => null]);
+                        $updatedCount++;
+                    }
+                }
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "Pemetaan rombel paralel otomatis berhasil diterapkan untuk {$updatedCount} rombel kelas.",
+            'data' => [
+                'updated_classes_count' => $updatedCount,
+                'classes' => Classes::orderBy('level')->orderBy('name')->get(),
+            ],
+        ], 200);
+    }
+
+    /**
+     * Menjalankan promosi massal: memindahkan rombel siswa sesuai next_class_id,
+     * menahan siswa tinggal kelas, meluluskan siswa tingkat 12, dan
+     * menonaktifkan seluruh penugasan Wali Kelas & Kesiswaan aktif periode berjalan (Keputusan 6 Opsi B).
+     */
     public function promoteClasses(Request $request): JsonResponse
     {
         $actorId = $request->user()?->id;
         $academicYear = SystemConfiguration::query()->value('academic_year') ?: '2026/2027';
+
+        // Pre-flight check: Pastikan seluruh rombel non-tingkat akhir (level < 12) sudah memiliki rombel tujuan
+        $unmappedClasses = Classes::where('level', '<', 12)
+            ->whereNull('next_class_id')
+            ->whereHas('students')
+            ->pluck('name')
+            ->toArray();
+
+        if (!empty($unmappedClasses)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terdapat rombel tingkat 10 atau 11 yang belum memiliki rombel tujuan: ' . implode(', ', array_slice($unmappedClasses, 0, 5)) . (count($unmappedClasses) > 5 ? ' dan ' . (count($unmappedClasses) - 5) . ' lainnya.' : '.') . ' Silakan lengkapi pemetaan rombel atau gunakan Petakan Otomatis terlebih dahulu.',
+                'unmapped_classes' => $unmappedClasses,
+            ], 422);
+        }
 
         $result = DB::transaction(function () use ($actorId, $academicYear) {
             $students = User::where('role', 'student')->with('schoolClass')->get();
@@ -201,8 +271,13 @@ class SchoolClassController extends Controller
                 }
 
                 $currentClass = $student->schoolClass;
+                if (!$currentClass) {
+                    continue;
+                }
 
-                if ($currentClass && $currentClass->next_class_id) {
+                $isFinalGrade = ((int) $currentClass->level === 12 || (string) $currentClass->level === '12');
+
+                if ($currentClass->next_class_id) {
                     // Naik ke kelas berikutnya
                     StudentClassHistory::create([
                         'student_id' => $student->id,
@@ -214,10 +289,13 @@ class SchoolClassController extends Controller
                         'processed_at' => $now,
                     ]);
 
-                    $student->update(['class_id' => $currentClass->next_class_id]);
+                    $student->update([
+                        'class_id' => $currentClass->next_class_id,
+                        'graduation_date' => null,
+                    ]);
                     $promotedCount++;
-                } elseif ($currentClass && is_null($currentClass->next_class_id)) {
-                    // Kelas akhir (kelas 12): kelulusan
+                } elseif ($isFinalGrade && is_null($currentClass->next_class_id)) {
+                    // Kelas akhir (kelas 12): kelulusan resmi alumni
                     StudentClassHistory::create([
                         'student_id' => $student->id,
                         'from_class_id' => $currentClass->id,

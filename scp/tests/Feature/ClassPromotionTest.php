@@ -155,4 +155,45 @@ class ClassPromotionTest extends TestCase
         $response = $this->postJson('/api/class-promotions');
         $response->assertStatus(403);
     }
+
+    public function test_auto_map_classes_correctly_maps_parallel_classes(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $c12 = Classes::create(['name' => 'XII RPL 1', 'level' => 12]);
+        $c11 = Classes::create(['name' => 'XI RPL 1', 'level' => 11]);
+        $c10 = Classes::create(['name' => 'X RPL 1', 'level' => 10]);
+
+        $response = $this->postJson('/api/classes/auto-map');
+        $response->assertStatus(200)
+            ->assertJson(['success' => true]);
+
+        $c10->refresh();
+        $c11->refresh();
+        $c12->refresh();
+
+        $this->assertEquals($c11->id, $c10->next_class_id);
+        $this->assertEquals($c12->id, $c11->next_class_id);
+        $this->assertNull($c12->next_class_id);
+    }
+
+    public function test_promote_classes_fails_if_non_final_class_has_no_next_class_id(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $c10 = Classes::create(['name' => 'X RPL 1', 'level' => 10, 'next_class_id' => null]);
+        User::create([
+            'name' => 'Siswa Unmapped',
+            'nis_nip' => '9999',
+            'role' => 'student',
+            'class_id' => $c10->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $response = $this->postJson('/api/class-promotions');
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+            ]);
+    }
 }
