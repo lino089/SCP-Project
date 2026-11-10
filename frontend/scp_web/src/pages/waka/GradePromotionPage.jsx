@@ -5,6 +5,8 @@ import {
   Search,
   Wand2,
   AlertTriangle,
+  Save,
+  GraduationCap,
 } from 'lucide-react';
 import {
   Button,
@@ -218,16 +220,20 @@ export default function GradePromotionPage() {
   };
 
 
-  // Pemetaan Rombel Paralel Otomatis (X -> XI, XI -> XII)
+  // Simpan Semua Pemetaan Otomatis (X -> XI, XI -> XII, XII -> Lulus)
   const handleAutoMapClasses = async () => {
     setIsAutoMapping(true);
     try {
       const res = await classApi.autoMapClasses();
       const resultData = res?.data;
-      alert(resultData?.message || 'Pemetaan rombel paralel otomatis berhasil diterapkan.');
-      await handleRefresh();
+      if (resultData?.data?.classes) {
+        setClassList(resultData.data.classes);
+      } else {
+        await handleRefresh();
+      }
+      alert(resultData?.message || 'Seluruh pemetaan rombel berhasil disimpan secara otomatis.');
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal melakukan pemetaan otomatis rombel.');
+      alert(err.response?.data?.message || err.message || 'Gagal menyimpan pemetaan otomatis rombel.');
     } finally {
       setIsAutoMapping(false);
     }
@@ -449,13 +455,13 @@ export default function GradePromotionPage() {
 
           <Button
             variant="secondary"
-            icon={Wand2}
+            icon={Save}
             onClick={handleAutoMapClasses}
             loading={isAutoMapping}
             disabled={isLoading || isExecuting || isAutoMapping || classList.length === 0}
-            title="Petakan otomatis rombel X → XI dan XI → XII berdasarkan jurusan paralel"
+            title="Simpan otomatis seluruh pemetaan rombel paralel X → XI dan XI → XII ke database"
           >
-            Petakan Rombel Paralel Otomatis
+            Simpan Semua Pemetaan Otomatis
           </Button>
 
           <Button
@@ -552,6 +558,18 @@ export default function GradePromotionPage() {
               Tentukan kelas tujuan untuk setiap rombel saat promosi massal dijalankan. Kelas tingkat 12 otomatis diarahkan ke status kelulusan.
             </p>
           </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Save}
+            onClick={handleAutoMapClasses}
+            loading={isAutoMapping}
+            disabled={isLoading || isExecuting || isAutoMapping || classList.length === 0}
+            title="Simpan otomatis seluruh pemetaan rombel paralel X → XI dan XI → XII ke database"
+          >
+            Simpan Semua Pemetaan Otomatis
+          </Button>
         </div>
 
         {isLoading ? (
@@ -586,7 +604,7 @@ export default function GradePromotionPage() {
                     </div>
 
                     <div className="promotion-class-target">
-                      {cohort.level === 12 ? (
+                      {Number(cohort.level) === 12 ? (
                         <span className="promotion-target-badge promotion-target-badge--success">
                           Tingkat Akhir → Kelulusan
                         </span>
@@ -637,8 +655,11 @@ export default function GradePromotionPage() {
                                 </strong>
                               </td>
                               <td>
-                                {cls.level === 12 ? (
-                                  <Badge variant="success">Tingkat Akhir → Kelulusan</Badge>
+                                {Number(cls.level) === 12 || Number(cohort.level) === 12 ? (
+                                  <div className="flex items-center gap-1.5 font-semibold text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-md w-fit">
+                                    <GraduationCap size={15} className="text-emerald-600" />
+                                    <span>Lulus</span>
+                                  </div>
                                 ) : (
                                   <div className="promotion-target-cell">
                                     <select
@@ -674,8 +695,8 @@ export default function GradePromotionPage() {
                                 )}
                               </td>
                               <td style={{ textAlign: 'right' }}>
-                                {cls.level === 12 ? (
-                                  <span className="text-xs text-neutral-400 italic">Otomatis Lulus</span>
+                                {Number(cls.level) === 12 || Number(cohort.level) === 12 ? (
+                                  <span className="text-xs text-neutral-400 font-medium italic">Otomatis Lulus</span>
                                 ) : (
                                   <Button
                                     variant="secondary"
@@ -896,7 +917,7 @@ export default function GradePromotionPage() {
                       <span className="promotion-target-badge">
                         {targetClass
                           ? `KELAS ${targetClass.name}`
-                          : classItem.level === 12
+                          : Number(classItem.level) === 12
                           ? 'LULUS DARI SEKOLAH'
                           : 'BELUM DIPETAKAN'}
                       </span>
@@ -929,7 +950,7 @@ export default function GradePromotionPage() {
                           if (isHeldBack) {
                             transitionText = `${classItem.name} → ${classItem.name} (Tetap)`;
                             statusLabel = 'Tinggal Kelas';
-                          } else if (classItem.level === 12) {
+                          } else if (Number(classItem.level) === 12) {
                             transitionText = `${classItem.name} → Lulus`;
                             statusLabel = 'Lulus';
                           } else if (targetClass) {
