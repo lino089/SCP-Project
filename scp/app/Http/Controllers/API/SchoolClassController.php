@@ -129,6 +129,24 @@ class SchoolClassController extends Controller
             ],
         ]);
 
+        if (!empty($validated['next_class_id'])) {
+            $targetClass = Classes::find($validated['next_class_id']);
+            if ((int)$validated['level'] === 12) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kelas tingkat akhir (XII) tidak boleh memiliki rombel tujuan.',
+                    'errors' => ['next_class_id' => ['Kelas tingkat 12 otomatis diarahkan ke status kelulusan.']],
+                ], 422);
+            }
+            if ($targetClass && (int)$targetClass->level !== (int)$validated['level'] + 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Rombel tujuan harus berada pada tingkat ' . ((int)$validated['level'] + 1) . '.',
+                    'errors' => ['next_class_id' => ['Rombel tujuan harus bertingkat ' . ((int)$validated['level'] + 1)]],
+                ], 422);
+            }
+        }
+
         $class->update($validated);
 
         return response()->json([

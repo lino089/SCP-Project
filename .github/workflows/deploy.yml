@@ -40,9 +40,13 @@ jobs:
 
             # 3. Update & Build Frontend (React)
             cd /var/www/SCP-Project/frontend/scp_web
+            sudo rm -rf dist/ota
+            sudo chown -R ubuntu:www-data dist 2>/dev/null || true
+            sudo chmod -R 775 dist 2>/dev/null || true
             npm install --production=false
             npm run build
-            sudo chown -R www-data:www-data dist
+            sudo chown -R ubuntu:www-data dist
+            sudo chmod -R 775 dist
 
             # 4. Reload Nginx
             sudo systemctl reload nginx

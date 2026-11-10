@@ -82,6 +82,26 @@ class ClassPromotionTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_configuring_next_class_id_fails_if_target_level_is_not_next_level(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $class10 = Classes::create(['name' => 'X RPL 1', 'level' => 10]);
+        $class12 = Classes::create(['name' => 'XII RPL 1', 'level' => 12]);
+
+        // Attempt mapping level 10 directly to level 12
+        $response = $this->putJson('/api/classes/' . $class10->id, [
+            'name' => 'X RPL 1',
+            'level' => 10,
+            'next_class_id' => $class12->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+            ]);
+    }
+
     public function test_bulk_class_promotion_promotes_holds_back_and_graduates_students(): void
     {
         Sanctum::actingAs($this->waka);
