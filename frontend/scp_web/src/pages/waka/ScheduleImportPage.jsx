@@ -1713,7 +1713,7 @@ export default function ScheduleImportPage() {
           }}
           onConfirm={handleExecuteCancel}
           title="Konfirmasi Pembatalan Impor Jadwal"
-          message={`Apakah Anda yakin ingin membatalkan proses impor ini${cancelBatchTargetId ? ` (Batch #${cancelBatchTargetId})` : ''}? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali.`}
+          message="Apakah Anda yakin ingin membatalkan proses impor ini? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali."
           confirmLabel="Ya, Batalkan Impor"
           cancelLabel="Kembali / Tetap Simpan"
           confirmVariant="danger"
@@ -2104,7 +2104,7 @@ export default function ScheduleImportPage() {
                 icon={Ban}
                 onClick={() => handleTriggerCancel(uploadedBatchId)}
               >
-                Batalkan Draf #{uploadedBatchId}
+                Batalkan Draf
               </Button>
               <Button variant="secondary" icon={RefreshCw} onClick={handleResetUpload}>
                 Unggah Berkas Lain
@@ -2148,7 +2148,7 @@ export default function ScheduleImportPage() {
         }}
         onConfirm={handleExecuteCancel}
         title="Konfirmasi Pembatalan Impor Jadwal"
-        message={`Apakah Anda yakin ingin membatalkan proses impor ini${cancelBatchTargetId ? ` (Batch #${cancelBatchTargetId})` : ''}? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali.`}
+        message="Apakah Anda yakin ingin membatalkan proses impor ini? Seluruh data draf penampung sementara (staging) dan berkas PDF yang telah diunggah akan dihapus secara permanen dari server. Jadwal aktif yang sudah berjalan di sistem tidak akan terpengaruh sama sekali."
         confirmLabel="Ya, Batalkan Impor"
         cancelLabel="Kembali / Tetap Simpan"
         confirmVariant="danger"
