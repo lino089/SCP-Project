@@ -24,6 +24,11 @@ class Quiz extends Model
         'max_attempts' => 'integer',
     ];
 
+    protected $appends = [
+        'subject',
+        'school_class',
+    ];
+
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(User::class, 'teacher_id');
@@ -42,5 +47,50 @@ class Quiz extends Model
     public function submissions(): HasMany
     {
         return $this->hasMany(QuizSubmission::class, 'quiz_id');
+    }
+
+    /**
+     * Resolusi Mata Pelajaran yang diampu guru untuk kuis ini.
+     */
+    public function getSubjectAttribute(): ?Subject
+    {
+        // 1. Ambil dari jadwal mengajar KBM guru pada kelas kuis ini
+        $schedule = Schedule::where('teacher_id', $this->teacher_id)
+            ->where('class_id', $this->class_id)
+            ->with('subject:id,name')
+            ->first();
+
+        if ($schedule && $schedule->subject) {
+            return $schedule->subject;
+        }
+
+        // 2. Ambil dari profil guru (subject_id)
+        if ($this->relationLoaded('teacher') && $this->teacher && $this->teacher->subject) {
+            return $this->teacher->subject;
+        }
+
+        $teacher = User::with('subject:id,name')->find($this->teacher_id);
+        if ($teacher && $teacher->subject) {
+            return $teacher->subject;
+        }
+
+        // 3. Fallback: jadwal mengajar apapun yang diampu oleh guru ini
+        $fallback = Schedule::where('teacher_id', $this->teacher_id)
+            ->with('subject:id,name')
+            ->first();
+
+        return $fallback?->subject;
+    }
+
+    /**
+     * Accessor untuk konsistensi snake_case school_class.
+     */
+    public function getSchoolClassAttribute(): ?Classes
+    {
+        if ($this->relationLoaded('schoolClass')) {
+            return $this->getRelation('schoolClass');
+        }
+
+        return $this->class_id ? Classes::select('id', 'name', 'level')->find($this->class_id) : null;
     }
 }

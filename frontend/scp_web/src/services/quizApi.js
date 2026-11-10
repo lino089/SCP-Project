@@ -77,6 +77,14 @@ export const quizApi = {
   },
 
   /**
+   * Memperbarui metadata kuis (judul, due_date, class_id, max_attempts, status)
+   * PATCH /api/quizzes/{id}
+   */
+  async updateQuiz(id, data) {
+    return api.patch(`/quizzes/${id}`, data);
+  },
+
+  /**
    * Memperbarui status kuis: konfirmasi publikasi (published) atau rilis hasil (published_result)
    * (PATCH /api/quizzes/{id})
    */

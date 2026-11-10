@@ -17,6 +17,7 @@ import {
 import { quizApi } from '../../services/quizApi';
 import masterDataApi from '../../services/masterDataApi';
 import { todayLocalISO } from '../../utils/dateUtils';
+import { formatDate } from '../../utils/formatters';
 import {
   Button,
   Input,
@@ -44,6 +45,15 @@ export default function TeacherQuizPage() {
   const [isSubmissionDetailOpen, setIsSubmissionDetailOpen] = useState(false);
   const [isEditQuestionModalOpen, setIsEditQuestionModalOpen] = useState(false);
   const [isManualQuestionModalOpen, setIsManualQuestionModalOpen] = useState(false);
+  const [isEditQuizModalOpen, setIsEditQuizModalOpen] = useState(false);
+  const [editingQuiz, setEditingQuiz] = useState(null);
+  const [editQuizForm, setEditQuizForm] = useState({
+    title: '',
+    class_id: '',
+    due_date: '',
+    max_attempts: '2',
+  });
+  const [isSavingEditQuiz, setIsSavingEditQuiz] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
   // Selected entities
@@ -601,7 +611,67 @@ export default function TeacherQuizPage() {
     });
   };
 
-  // 6. Buka Review Submissions & Override Nilai
+  // 6. Edit Kuis (Metadata, Rombel Kelas, & Tenggat Waktu)
+  const handleOpenEditQuizModal = (quiz) => {
+    setEditingQuiz(quiz);
+    let formattedDueDate = '';
+    if (quiz.due_date) {
+      try {
+        const d = new Date(quiz.due_date);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          formattedDueDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+      } catch {
+        formattedDueDate = '';
+      }
+    }
+    setEditQuizForm({
+      title: quiz.title || '',
+      class_id: String(quiz.class_id || quiz.school_class?.id || quiz.schoolClass?.id || ''),
+      due_date: formattedDueDate,
+      max_attempts: String(quiz.max_attempts || '2'),
+    });
+    setIsEditQuizModalOpen(true);
+  };
+
+  const handleSaveEditQuizSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editQuizForm.title.trim()) {
+      showToast('Judul kuis wajib diisi.', 'error');
+      return;
+    }
+    if (!editQuizForm.due_date) {
+      showToast('Tenggat waktu pengerjaan wajib diisi.', 'error');
+      return;
+    }
+
+    setIsSavingEditQuiz(true);
+    try {
+      const payload = {
+        title: editQuizForm.title.trim(),
+        class_id: editQuizForm.class_id ? Number(editQuizForm.class_id) : undefined,
+        due_date: new Date(editQuizForm.due_date).toISOString(),
+        max_attempts: Number(editQuizForm.max_attempts) || 1,
+      };
+
+      const res = await quizApi.updateQuiz(editingQuiz.id, payload);
+      const updatedData = res?.data || res;
+
+      setQuizzes((prev) =>
+        prev.map((q) => (q.id === editingQuiz.id ? { ...q, ...updatedData } : q))
+      );
+      setIsEditQuizModalOpen(false);
+      showToast('Data kuis berhasil diperbarui.', 'success');
+      loadData();
+    } catch (err) {
+      showToast(err.message || err.response?.data?.message || 'Gagal memperbarui kuis.', 'error');
+    } finally {
+      setIsSavingEditQuiz(false);
+    }
+  };
+
+  // 7. Buka Review Submissions & Override Nilai
   const handleOpenSubmissionsModal = async (quiz) => {
     setCurrentQuiz(quiz);
     try {
@@ -692,32 +762,55 @@ export default function TeacherQuizPage() {
     {
       key: 'title',
       label: 'Judul Asesmen & Mapel',
-      renderCell: (row) => (
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold text-slate-900 leading-tight">
-            {row.title}
-          </span>
-          <span className="text-[11px] text-slate-500 mt-0.5">
-            {row.subject?.name || row.lesson_plan?.subject?.name || '-'} {row.subject?.code ? `\u2022 Kode: ${row.subject.code}` : ''}
-          </span>
-        </div>
-      ),
+      renderCell: (row) => {
+        const subjectName = row.subject?.name || row.subject_name || row.lesson_plan?.subject?.name || '-';
+        return (
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-slate-900 leading-tight">
+              {row.title}
+            </span>
+            <span className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 font-medium">
+              <span className="text-primary-700">{subjectName}</span>
+              {row.subject?.code ? <span className="text-slate-400">• Kode: {row.subject.code}</span> : null}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: 'class',
       label: 'Rombel Kelas',
-      renderCell: (row) => (
-        <Badge variant="neutral">
-          Kelas <span className="font-mono font-medium">{row.schoolClass?.name || row.class_name || '-'}</span>
-        </Badge>
-      ),
+      renderCell: (row) => {
+        const className =
+          row.school_class?.name ||
+          row.schoolClass?.name ||
+          row.class_name ||
+          classList.find((c) => String(c.id) === String(row.class_id))?.name ||
+          '-';
+        return (
+          <Badge variant="neutral">
+            Kelas <span className="font-mono font-medium">{className}</span>
+          </Badge>
+        );
+      },
     },
     {
       key: 'dueDate',
       label: 'Tenggat Waktu',
-      renderCell: (row) => (
-        <span className="font-mono text-xs text-slate-700">{row.due_date}</span>
-      ),
+      renderCell: (row) => {
+        if (!row.due_date) return <span className="font-mono text-xs text-slate-400">-</span>;
+        return (
+          <span className="text-xs text-slate-700 whitespace-nowrap font-medium">
+            {formatDate(row.due_date, {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+        );
+      },
     },
     {
       key: 'stats',
@@ -757,7 +850,18 @@ export default function TeacherQuizPage() {
       label: 'Aksi Pengelolaan',
       align: 'right',
       renderCell: (row) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+          {/* Tombol Edit Kuis (Metadata, Rombel Kelas, & Tenggat Waktu) */}
+          <Button
+            variant="outline"
+            size="sm"
+            icon={Edit3}
+            onClick={() => handleOpenEditQuizModal(row)}
+            title="Edit Pengaturan Kuis"
+          >
+            Edit Kuis
+          </Button>
+
           {row.status === 'generating' && (
             <Button
               variant="secondary"
@@ -772,10 +876,11 @@ export default function TeacherQuizPage() {
             <Button
               variant="secondary"
               size="sm"
-              icon={Edit3}
+              icon={Sparkles}
               onClick={() => handleOpenPreviewModal(row)}
+              title="Kurasi &amp; Tinjau Butir Soal"
             >
-              Review &amp; Edit
+              Review Soal
             </Button>
           )}
           {(row.status === 'published' || row.status === 'published_result') && (
@@ -1069,6 +1174,99 @@ export default function TeacherQuizPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* =========================================================================
+          MODAL EDIT KUIS: Edit Metadata, Rombel Kelas, & Tenggat Waktu
+         ========================================================================= */}
+      <Modal
+        isOpen={isEditQuizModalOpen}
+        onClose={() => setIsEditQuizModalOpen(false)}
+        title="Edit Pengaturan Kuis"
+        maxWidth="max-w-lg"
+      >
+        {editingQuiz && (
+          <form onSubmit={handleSaveEditQuizSubmit} className="quiz-modal-form">
+            {(editingQuiz.status === 'published' || editingQuiz.status === 'published_result') && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 flex items-start gap-2">
+                <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold mb-0.5">Kuis Sedang Aktif Dipublikasikan</p>
+                  <p className="text-[11px] text-blue-700 leading-relaxed">
+                    Anda dapat memperbarui judul, tenggat waktu, dan jumlah percobaan. Butir soal terkunci untuk menjaga keabsahan penilaian siswa.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <Input
+              label="Judul Kuis / Asesmen"
+              placeholder="Contoh: Kuis Logika Algoritma & Struktur Data"
+              value={editQuizForm.title}
+              onChange={(e) => setEditQuizForm({ ...editQuizForm, title: e.target.value })}
+              required
+            />
+
+            <Select
+              label="Target Rombel Kelas"
+              value={editQuizForm.class_id}
+              onChange={(e) => setEditQuizForm({ ...editQuizForm, class_id: e.target.value })}
+              options={classOptions}
+              required
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                type="datetime-local"
+                label="Tenggat Waktu Pengumpulan"
+                value={editQuizForm.due_date}
+                onChange={(e) => setEditQuizForm({ ...editQuizForm, due_date: e.target.value })}
+                required
+              />
+              <Input
+                type="number"
+                label="Maks. Percobaan Pengerjaan"
+                value={editQuizForm.max_attempts}
+                onChange={(e) => setEditQuizForm({ ...editQuizForm, max_attempts: e.target.value })}
+                min="1"
+                max="5"
+                required
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                icon={Sparkles}
+                onClick={() => {
+                  setIsEditQuizModalOpen(false);
+                  handleOpenPreviewModal(editingQuiz);
+                }}
+              >
+                {editingQuiz.status === 'draft_review' ? 'Kelola Butir Soal' : 'Lihat Pratinjau Soal'}
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setIsEditQuizModalOpen(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isSavingEditQuiz}
+                >
+                  {isSavingEditQuiz ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* =========================================================================

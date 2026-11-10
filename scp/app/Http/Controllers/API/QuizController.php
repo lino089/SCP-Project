@@ -616,10 +616,27 @@ class QuizController extends Controller
 
         $validated = $request->validate([
             'title' => ['sometimes', 'required', 'string', 'max:255'],
+            'class_id' => ['sometimes', 'required', 'integer', 'exists:classes,id'],
             'due_date' => ['sometimes', 'required', 'date'],
             'max_attempts' => ['sometimes', 'required', 'integer', 'min:1'],
             'status' => ['sometimes', 'required', 'string', Rule::in(['draft_review', 'published', 'published_result'])],
         ]);
+
+        if (isset($validated['class_id']) && $user->role === 'teacher') {
+            $scheduleClassIds = \App\Models\Schedule::where('teacher_id', $user->id)->pluck('class_id')->filter()->toArray();
+            $asgnClassIds = $user->assignments()->whereNotNull('class_id')->pluck('class_id')->toArray();
+            $allowedClassIds = array_values(array_unique(array_merge($scheduleClassIds, $asgnClassIds)));
+
+            if (!empty($allowedClassIds) && !in_array((int) $validated['class_id'], $allowedClassIds, true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Akses ditolak. Anda hanya dapat memilih kelas yang Anda ajar.',
+                    'errors' => [
+                        'class_id' => ['Kelas yang dipilih bukan merupakan kelas ajar Anda.'],
+                    ],
+                ], 422);
+            }
+        }
 
         if (isset($validated['status']) && $validated['status'] === 'published') {
             if ($quiz->questions()->count() === 0) {
