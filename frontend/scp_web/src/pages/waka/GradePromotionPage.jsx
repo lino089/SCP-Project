@@ -34,6 +34,46 @@ function extractJurusan(className) {
   return 'Umum';
 }
 
+
+/**
+ * Helper untuk menentukan rekomendasi rombel tujuan otomatis berdasarkan tingkat kelas berikutnya
+ * dan kesesuaian paralel kejuruan (misal: X RPL 1 -> XI RPL 1, XI RPL 2 -> XII RPL 2).
+ */
+export function getRecommendedTargetClass(cls, classList) {
+  if (!cls || Number(cls.level) >= 12 || !Array.isArray(classList)) return null;
+  const targetLevel = Number(cls.level) + 1;
+  const candidateClasses = classList.filter((c) => Number(c.level) === targetLevel);
+  if (candidateClasses.length === 0) return null;
+
+  // 1. Exact parallel match (X AK 1 -> XI AK 1, XI AK 1 -> XII AK 1)
+  const currRoman = Number(cls.level) === 10 ? 'X' : 'XI';
+  const nextRoman = targetLevel === 11 ? 'XI' : 'XII';
+
+  const expectedName = cls.name.replace(new RegExp(`^${currRoman}\\b`, 'i'), nextRoman);
+  const exactMatch = candidateClasses.find(
+    (c) => c.name.trim().toUpperCase() === expectedName.trim().toUpperCase()
+  );
+  if (exactMatch) return exactMatch;
+
+  // 2. Fallback: match without trailing number (e.g. XI LPS 1 / XI LPS 2 -> XII LPS)
+  const nameWithoutTrailingNumber = expectedName.replace(/\s+\d+$/, '').trim().toUpperCase();
+  const majorOnlyMatch = candidateClasses.find(
+    (c) => c.name.trim().toUpperCase() === nameWithoutTrailingNumber
+  );
+  if (majorOnlyMatch) return majorOnlyMatch;
+
+  // 3. Fallback: match by extracted major
+  const sourceMajor = extractJurusan(cls.name);
+  const sameMajorCandidates = candidateClasses.filter(
+    (c) => extractJurusan(c.name) === sourceMajor
+  );
+  if (sameMajorCandidates.length === 1) {
+    return sameMajorCandidates[0];
+  }
+
+  return candidateClasses[0] || null;
+}
+
 export default function GradePromotionPage() {
   const [classList, setClassList] = useState([]);
   const [studentList, setStudentList] = useState([]);
@@ -46,6 +86,7 @@ export default function GradePromotionPage() {
   const [selectedNextClassId, setSelectedNextClassId] = useState('');
   const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [isAutoMapping, setIsAutoMapping] = useState(false);
+  const [savingClassId, setSavingClassId] = useState(null);
 
   // Section 2: Filter States & Shortcut
   const searchInputRef = useRef(null);
@@ -104,7 +145,23 @@ export default function GradePromotionPage() {
           classApi.getClasses({ all: true }),
           studentApi.getStudents({ all: true }),
         ]);
-        if (isMounted && cRes?.data) setClassList(cRes.data);
+        if (isMounted && cRes?.data) {
+          const rawClasses = cRes.data;
+          setClassList(rawClasses);
+          // Jika seluruh rombel tingkat 10 & 11 belum memiliki pemetaan, otomatis terapkan pemetaan paralel
+          const unmappedNonFinal = rawClasses.filter((c) => Number(c.level) < 12 && !c.next_class_id);
+          const totalNonFinal = rawClasses.filter((c) => Number(c.level) < 12);
+          if (totalNonFinal.length > 0 && unmappedNonFinal.length === totalNonFinal.length) {
+            try {
+              const autoRes = await classApi.autoMapClasses();
+              if (autoRes?.data?.data?.classes && isMounted) {
+                setClassList(autoRes.data.data.classes);
+              }
+            } catch {
+              // Abaikan fallback jika auto-map gagal di background
+            }
+          }
+        }
         if (isMounted && sRes?.data) setStudentList(sRes.data);
       } catch (err) {
         if (isMounted) {
@@ -127,7 +184,37 @@ export default function GradePromotionPage() {
   // Section 1: Edit Mapping Handlers
   const handleOpenEditMapping = (cls) => {
     setEditingClass(cls);
-    setSelectedNextClassId(cls.next_class_id ? String(cls.next_class_id) : '');
+    if (cls.next_class_id) {
+      setSelectedNextClassId(String(cls.next_class_id));
+    } else {
+      const rec = getRecommendedTargetClass(cls, classList);
+      setSelectedNextClassId(rec ? String(rec.id) : '');
+    }
+  };
+
+  // Quick Change Target langsung dari dropdown tabel
+  const handleQuickChangeTarget = async (sourceClass, newNextClassId) => {
+    const nextId = newNextClassId ? Number(newNextClassId) : null;
+    setSavingClassId(sourceClass.id);
+
+    // Optimistic UI update
+    setClassList((prev) =>
+      prev.map((c) => (c.id === sourceClass.id ? { ...c, next_class_id: nextId } : c))
+    );
+
+    try {
+      const payload = {
+        name: sourceClass.name,
+        level: Number(sourceClass.level),
+        next_class_id: nextId,
+      };
+      await classApi.updateClass(sourceClass.id, payload);
+    } catch (err) {
+      alert(err?.response?.data?.message || err?.message || 'Gagal memperbarui rombel tujuan.');
+      await handleRefresh();
+    } finally {
+      setSavingClassId(null);
+    }
   };
 
 
@@ -524,7 +611,18 @@ export default function GradePromotionPage() {
                       </thead>
                       <tbody>
                         {cohort.classes.map((cls, idx) => {
-                          const target = classList.find((c) => c.id === cls.next_class_id);
+                          const nextLevel = Number(cls.level) + 1;
+                          const targetOptions = classList.filter((c) => Number(c.level) === nextLevel);
+                          const recommendedTarget = getRecommendedTargetClass(cls, classList);
+                          const currentTargetId = cls.next_class_id
+                            ? String(cls.next_class_id)
+                            : (recommendedTarget ? String(recommendedTarget.id) : '');
+                          const isSavedAsRecommended =
+                            cls.next_class_id &&
+                            recommendedTarget &&
+                            cls.next_class_id === recommendedTarget.id;
+                          const isCustom = cls.next_class_id && !isSavedAsRecommended;
+
                           return (
                             <tr key={cls.id}>
                               <td className="promotion-cell-no">
@@ -539,29 +637,56 @@ export default function GradePromotionPage() {
                                 </strong>
                               </td>
                               <td>
-                                {target ? (
-                                  <div className="flex items-center gap-1.5 font-mono text-xs text-gray-800 font-semibold">
-                                    <ArrowRight size={13} />
-                                    <span>{target.name}</span>
-                                  </div>
-                                ) : cls.level === 12 ? (
+                                {cls.level === 12 ? (
                                   <Badge variant="success">Tingkat Akhir → Kelulusan</Badge>
                                 ) : (
-                                  <span className="text-xs text-neutral-400 italic">
-                                    Belum Dipetakan
-                                  </span>
+                                  <div className="promotion-target-cell">
+                                    <select
+                                      className="promotion-target-select"
+                                      value={currentTargetId}
+                                      onChange={(e) => handleQuickChangeTarget(cls, e.target.value)}
+                                      disabled={isLoading || isExecuting || savingClassId === cls.id}
+                                    >
+                                      <option value="" disabled>
+                                        -- Pilih Rombel Tingkat {nextLevel} --
+                                      </option>
+                                      {targetOptions.map((opt) => {
+                                        const isRec = recommendedTarget && opt.id === recommendedTarget.id;
+                                        const isSameMajor = extractJurusan(opt.name) === extractJurusan(cls.name);
+                                        return (
+                                          <option key={opt.id} value={String(opt.id)}>
+                                            {opt.name} {isRec ? '★ (Rekomendasi Paralel)' : isSameMajor ? '• (Paralel Sejurusan)' : ''}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+
+                                    {savingClassId === cls.id ? (
+                                      <span className="text-[11px] text-neutral-400 italic">Menyimpan...</span>
+                                    ) : isSavedAsRecommended ? (
+                                      <Badge variant="success" size="sm">Otomatis</Badge>
+                                    ) : isCustom ? (
+                                      <Badge variant="neutral" size="sm">Kustom</Badge>
+                                    ) : (
+                                      <Badge variant="warning" size="sm">Belum Disimpan</Badge>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                               <td style={{ textAlign: 'right' }}>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  icon={Pencil}
-                                  onClick={() => handleOpenEditMapping(cls)}
-                                  disabled={isLoading || isExecuting}
-                                >
-                                  Ubah Pemetaan
-                                </Button>
+                                {cls.level === 12 ? (
+                                  <span className="text-xs text-neutral-400 italic">Otomatis Lulus</span>
+                                ) : (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={Pencil}
+                                    onClick={() => handleOpenEditMapping(cls)}
+                                    disabled={isLoading || isExecuting || savingClassId === cls.id}
+                                  >
+                                    Ubah Pemetaan
+                                  </Button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -911,24 +1036,52 @@ export default function GradePromotionPage() {
         }
       >
         <div className="flex flex-col gap-3 py-1">
-          <p className="text-xs text-neutral-600">
-            Siswa yang berada di rombel <strong>{editingClass?.name}</strong> (Tingkat {editingClass?.level}) akan dipindahkan ke kelas tujuan berikut:
-          </p>
+          {editingClass && Number(editingClass.level) < 12 ? (
+            <>
+              <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-700 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span>Tingkat Asal: <strong>Kelas {editingClass.level}</strong></span>
+                  <Badge variant="info">Target Kenaikan: Tingkat {Number(editingClass.level) + 1}</Badge>
+                </div>
+                {(() => {
+                  const rec = getRecommendedTargetClass(editingClass, classList);
+                  return rec ? (
+                    <div className="text-emerald-700 font-medium">
+                      💡 Rekomendasi Paralel: <strong>{rec.name}</strong> (berdasarkan kesesuaian rombel kejuruan)
+                    </div>
+                  ) : null;
+                })()}
+              </div>
 
-          <Select
-            label="Pilih Rombel Kelas Tujuan"
-            value={selectedNextClassId}
-            onChange={(e) => setSelectedNextClassId(e.target.value)}
-            options={[
-              { value: '', label: '-- Tingkat Akhir (Lulus dari Sekolah) --' },
-              ...classList
-                .filter((c) => c.id !== editingClass?.id)
-                .map((c) => ({
-                  value: String(c.id),
-                  label: `${c.name} (Tingkat ${c.level})`,
-                })),
-            ]}
-          />
+              <p className="text-xs text-neutral-600">
+                Pilih rombel tujuan tingkat {Number(editingClass.level) + 1} untuk siswa dari rombel <strong>{editingClass.name}</strong>:
+              </p>
+
+              <Select
+                label={`Pilih Rombel Tingkat ${Number(editingClass.level) + 1}`}
+                value={selectedNextClassId}
+                onChange={(e) => setSelectedNextClassId(e.target.value)}
+                options={[
+                  { value: '', label: `-- Pilih Rombel Tingkat ${Number(editingClass.level) + 1} --`, disabled: true },
+                  ...classList
+                    .filter((c) => Number(c.level) === Number(editingClass.level) + 1)
+                    .map((c) => {
+                      const rec = getRecommendedTargetClass(editingClass, classList);
+                      const isRec = rec && c.id === rec.id;
+                      const isSameMajor = extractJurusan(c.name) === extractJurusan(editingClass.name);
+                      return {
+                        value: String(c.id),
+                        label: `${c.name} (Tingkat ${c.level}) ${isRec ? '★ Rekomendasi Paralel' : isSameMajor ? '• Paralel Sejurusan' : ''}`,
+                      };
+                    }),
+                ]}
+              />
+            </>
+          ) : (
+            <p className="text-xs text-neutral-600">
+              Kelas tingkat 12 merupakan tingkat akhir. Siswa otomatis diarahkan ke status kelulusan (alumni).
+            </p>
+          )}
         </div>
       </Modal>
 
