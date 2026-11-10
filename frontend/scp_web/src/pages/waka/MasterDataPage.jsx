@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Pencil,
@@ -12,6 +13,8 @@ import {
   XSquare,
   Eye,
   Clock,
+  GraduationCap,
+  ArrowRight,
 } from 'lucide-react';
 import {
   Button,
@@ -46,6 +49,7 @@ import { unwrap } from '../../utils/responseHelper';
 import './MasterData.css';
 
 export default function MasterDataPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('kelas');
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState('ALL');
@@ -241,6 +245,7 @@ export default function MasterDataPage() {
         const params = {
           page,
           per_page: 25,
+          status: 'active',
         };
         if (search) params.search = search;
         if (level && level !== 'ALL') params.level = level;
@@ -398,7 +403,7 @@ export default function MasterDataPage() {
 
     try {
       const res = await studentApi.importStudents(formData);
-      setStudentImportSuccess(res.data || {});
+      setStudentImportSuccess({ ...(res.data || {}), message: res.message });
       // Refresh both studentList and classList (since classes may be auto-created!)
       await fetchStudents(1, '', 'ALL');
       const cRes = await classApi.getClasses({ per_page: 100 }).catch(() => null);
@@ -1434,6 +1439,20 @@ export default function MasterDataPage() {
             ),
           },
           {
+            key: 'students_count',
+            label: 'Jumlah Siswa',
+            renderCell: (r) => {
+              const count = Number(r.students_count ?? 0);
+              return (
+                <span className={`inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded font-semibold ${
+                  count > 0 ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-neutral-100 text-neutral-400'
+                }`}>
+                  {count} Siswa
+                </span>
+              );
+            },
+          },
+          {
             key: 'next_class',
             label: 'Kelas Kenaikan',
             renderCell: (r) => {
@@ -1910,6 +1929,26 @@ export default function MasterDataPage() {
         />
       ) : (
         <>
+          {/* Alumni Notice Banner for Siswa Tab */}
+          {activeTab === 'siswa' && (
+            <div className="p-3.5 mb-4 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between text-xs text-sky-900">
+              <div className="flex items-center gap-2">
+                <GraduationCap size={18} className="text-sky-600 shrink-0" />
+                <span>
+                  Tabel ini hanya menampilkan peserta didik aktif. Siswa yang telah lulus secara otomatis dipindahkan ke menu Arsip Siswa.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/web/alumni')}
+                className="flex items-center gap-1 font-semibold text-sky-700 hover:text-sky-800 hover:underline shrink-0 ml-3"
+              >
+                <span>Buka Arsip Siswa</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
+
           {/* Toolbar (Search & Filter) */}
           <div className="master-data__toolbar">
         <div className="master-data__search">
@@ -2659,15 +2698,23 @@ export default function MasterDataPage() {
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
               <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
                 <CheckCircle2 size={18} className="text-emerald-600" />
-                <span>Siswa berhasil diimpor dan kelas baru telah otomatis didaftarkan.</span>
+                <span>{studentImportSuccess.message || 'Siswa berhasil diimpor dan kelas baru telah otomatis didaftarkan.'}</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+              <div className={`grid gap-2 pt-1 text-xs ${Number(studentImportSuccess.students_skipped || 0) > 0 ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
                 <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
-                  <div className="text-[11px] text-gray-500">Siswa Diimpor</div>
+                  <div className="text-[11px] text-gray-500">Siswa Baru</div>
                   <div className="text-base font-bold text-emerald-700">
                     {studentImportSuccess.students_imported ?? 0}
                   </div>
                 </div>
+                {Number(studentImportSuccess.students_skipped || 0) > 0 && (
+                  <div className="bg-white p-2.5 rounded border border-amber-200 text-center">
+                    <div className="text-[11px] text-amber-700 font-medium">Siswa Dilewati</div>
+                    <div className="text-base font-bold text-amber-600">
+                      {studentImportSuccess.students_skipped}
+                    </div>
+                  </div>
+                )}
                 <div className="bg-white p-2.5 rounded border border-emerald-100 text-center">
                   <div className="text-[11px] text-gray-500">Kelas Baru Dibuat</div>
                   <div className="text-base font-bold text-blue-700">

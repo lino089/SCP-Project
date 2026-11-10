@@ -529,7 +529,7 @@ class StudentImportTest extends TestCase
         }
     }
 
-    public function test_import_fails_and_rollbacks_on_database_nis_collision(): void
+    public function test_import_skips_existing_students_and_only_inserts_new_students(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -543,31 +543,77 @@ class StudentImportTest extends TestCase
                 'nisn' => '0089001001',
             ],
             [
-                'nis' => '1001', // Collides with DB
-                'name' => 'Siswa Tabrakan',
-                'class_name' => 'X RPL 1',
+                'nis' => '1001', // Already exists in DB
+                'name' => 'Siswa Lama Sudah Terdaftar',
+                'class_name' => 'XI RPL 1',
                 'gender' => 'P',
                 'nisn' => '0089001002',
             ],
         ]);
 
-        $file = new UploadedFile($filePath, 'siswa_collision_nis.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $file = new UploadedFile($filePath, 'siswa_mixed_new_and_existing.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
         $response = $this->postJson('/api/students/import', [
             'file' => $file,
         ]);
 
-        $response->assertStatus(422)
+        $response->assertStatus(201)
             ->assertJson([
-                'success' => false,
-                'message' => 'Validasi berkas gagal pada beberapa baris.',
+                'success' => true,
+                'message' => 'Impor data siswa selesai. 1 siswa baru ditambahkan, 1 siswa lama dilewati.',
+                'data' => [
+                    'students_imported' => 1,
+                    'parents_imported' => 1,
+                    'students_skipped' => 1,
+                ],
             ]);
 
-        $this->assertEquals(3, $response->json('errors.0.row'));
-        $this->assertEquals('nis', $response->json('errors.0.attribute'));
+        // Siswa baru berhasil terdaftar
+        $newStudent = User::where('nis_nip', '9001')->first();
+        $this->assertNotNull($newStudent);
+        $this->assertEquals('Siswa Baru', $newStudent->name);
 
-        // Rollback: Siswa Baru should NOT exist
-        $this->assertNull(User::where('nis_nip', '9001')->first());
+        // Siswa lama tetap utuh dan tidak terduplikasi
+        $this->assertEquals(1, User::where('nis_nip', '1001')->count());
+
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+    }
+
+    public function test_import_all_existing_students_returns_success_with_zero_imported(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // $this->student has nis_nip = '1001'
+        $filePath = $this->createTempExcel([
+            [
+                'nis' => '1001', // In DB
+                'name' => 'Siswa Eksis',
+                'class_name' => 'XI RPL 1',
+                'gender' => 'L',
+                'nisn' => '0081001001',
+            ],
+        ]);
+
+        $file = new UploadedFile($filePath, 'siswa_all_existing.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->postJson('/api/students/import', [
+            'file' => $file,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'classes_created' => 0,
+                    'students_imported' => 0,
+                    'parents_imported' => 0,
+                    'students_skipped' => 1,
+                ],
+            ]);
+
+        $this->assertStringContainsString('Seluruh data siswa dalam berkas sudah terdaftar di sistem', $response->json('message'));
 
         if (file_exists($filePath)) {
             @unlink($filePath);

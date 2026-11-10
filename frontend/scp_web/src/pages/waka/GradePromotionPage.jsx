@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
+  Info,
   Pencil,
   ArrowRight,
   Search,
@@ -616,6 +617,24 @@ export default function GradePromotionPage() {
                     </div>
                   </div>
 
+                  {Number(cohort.level) === 10 && (
+                    <div className="promotion-cohort-note">
+                      <Info size={14} className="promotion-cohort-note-icon" />
+                      <span>
+                        Setelah promosi massal selesai dijalankan, rombel Kelas X akan kosong dan siap diisi oleh peserta didik baru (PPDB) melalui menu <strong>Import Siswa</strong>. Rombel baru untuk angkatan tahun ajaran baru juga dapat ditambahkan langsung saat import atau via Master Data Kelas.
+                      </span>
+                    </div>
+                  )}
+
+                  {Number(cohort.level) === 12 && (
+                    <div className="promotion-cohort-note promotion-cohort-note--graduated">
+                      <GraduationCap size={14} className="promotion-cohort-note-icon" />
+                      <span>
+                        Siswa pada rombel Kelas XII merupakan tingkat akhir dan otomatis diarahkan ke status kelulusan pada menu <strong>Arsip Siswa</strong>.
+                      </span>
+                    </div>
+                  )}
+
                   <div className="promotion-table-responsive">
                     <table className="promotion-custom-table">
                       <thead>
@@ -925,6 +944,7 @@ export default function GradePromotionPage() {
                   </div>
 
                   {/* Tabel Siswa dalam Grup Rombel */}
+
                   <div className="promotion-table-responsive">
                     <table className="promotion-custom-table">
                       <thead>

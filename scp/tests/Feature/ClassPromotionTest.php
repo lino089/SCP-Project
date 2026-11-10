@@ -216,4 +216,154 @@ class ClassPromotionTest extends TestCase
                 'success' => false,
             ]);
     }
+
+    public function test_student_index_excludes_graduated_students_by_default(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $class10 = Classes::create(['name' => 'X RPL 1', 'level' => 10]);
+
+        $activeStudent = User::create([
+            'name' => 'Siswa Aktif',
+            'nis_nip' => '1111',
+            'role' => 'student',
+            'class_id' => $class10->id,
+            'graduation_date' => null,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $alumniStudent = User::create([
+            'name' => 'Siswa Lulus',
+            'nis_nip' => '2222',
+            'role' => 'student',
+            'class_id' => null,
+            'graduation_date' => '2026-06-20',
+            'password' => Hash::make('password123'),
+        ]);
+
+        // Default query GET /api/students harus hanya mengembalikan siswa aktif
+        $resDefault = $this->getJson('/api/students');
+        $resDefault->assertStatus(200);
+        $this->assertEquals(1, $resDefault->json('meta.total'));
+        $this->assertEquals('Siswa Aktif', $resDefault->json('data.0.name'));
+
+        // Query dengan status=all mengembalikan seluruhnya (aktif + alumni)
+        $resAll = $this->getJson('/api/students?status=all');
+        $resAll->assertStatus(200);
+        $this->assertEquals(2, $resAll->json('meta.total'));
+
+        // Summary master data memisahkan students aktif dan alumni
+        $resSummary = $this->getJson('/api/master-data/summary');
+        $resSummary->assertStatus(200);
+        $this->assertEquals(1, $resSummary->json('data.students'));
+        $this->assertEquals(1, $resSummary->json('data.alumni'));
+    }
+
+    public function test_post_promotion_graduated_students_are_automatically_isolated_as_alumni(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $class12 = Classes::create(['name' => 'XII RPL 1', 'level' => 12]);
+        $class11 = Classes::create(['name' => 'XI RPL 1', 'level' => 11]);
+        $class10 = Classes::create(['name' => 'X RPL 1', 'level' => 10, 'next_class_id' => $class11->id]);
+
+        $senior = User::create([
+            'name' => 'Siswa Senior XII',
+            'nis_nip' => '3001',
+            'role' => 'student',
+            'class_id' => $class12->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $junior = User::create([
+            'name' => 'Siswa Junior X',
+            'nis_nip' => '3002',
+            'role' => 'student',
+            'class_id' => $class10->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        // Jalankan promosi massal
+        $response = $this->postJson('/api/class-promotions');
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'graduated' => 1,
+                    'promoted' => 1,
+                ],
+            ]);
+
+        // Default list siswa aktif hanya memuat siswa junior yang naik kelas
+        $resActive = $this->getJson('/api/students');
+        $resActive->assertStatus(200);
+        $this->assertEquals(1, $resActive->json('meta.total'));
+        $this->assertEquals('Siswa Junior X', $resActive->json('data.0.name'));
+        $this->assertEquals($class11->id, $resActive->json('data.0.class_id'));
+
+        // Query alumni memuat siswa senior yang lulus
+        $resAlumni = $this->getJson('/api/students?status=alumni');
+        $resAlumni->assertStatus(200);
+        $this->assertEquals(1, $resAlumni->json('meta.total'));
+        $this->assertEquals('Siswa Senior XII', $resAlumni->json('data.0.name'));
+        $this->assertNull($resAlumni->json('data.0.class_id'));
+        $this->assertNotNull($resAlumni->json('data.0.graduation_date'));
+    }
+
+    public function test_auto_map_creates_target_parallel_classes_if_missing(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        // XI LPS 1 and XI LPS 2 exist, but XII LPS 1 & XII LPS 2 do not exist yet
+        $c11_1 = Classes::create(['name' => 'XI LPS 1', 'level' => 11]);
+        $c11_2 = Classes::create(['name' => 'XI LPS 2', 'level' => 11]);
+
+        $response = $this->postJson('/api/classes/auto-map');
+        $response->assertStatus(200)
+            ->assertJson(['success' => true]);
+
+        $c12_1 = Classes::where('name', 'XII LPS 1')->first();
+        $c12_2 = Classes::where('name', 'XII LPS 2')->first();
+
+        $this->assertNotNull($c12_1);
+        $this->assertNotNull($c12_2);
+        $this->assertEquals('12', $c12_1->level);
+        $this->assertEquals('12', $c12_2->level);
+
+        $c11_1->refresh();
+        $c11_2->refresh();
+        $this->assertEquals($c12_1->id, $c11_1->next_class_id);
+        $this->assertEquals($c12_2->id, $c11_2->next_class_id);
+    }
+
+    public function test_promote_classes_archives_empty_classes_post_promotion(): void
+    {
+        Sanctum::actingAs($this->waka);
+
+        $c11 = Classes::create(['name' => 'XI RPL 1', 'level' => 11]);
+        $c10 = Classes::create(['name' => 'X RPL 1', 'level' => 10, 'next_class_id' => $c11->id]);
+
+        $student = User::create([
+            'name' => 'Siswa X',
+            'nis_nip' => '5001',
+            'role' => 'student',
+            'class_id' => $c10->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $response = $this->postJson('/api/class-promotions');
+        $response->assertStatus(200);
+
+        // Siswa X naik ke XI RPL 1
+        $student->refresh();
+        $this->assertEquals($c11->id, $student->class_id);
+
+        // X RPL 1 sekarang kosong dan harus diarsipkan (soft-deleted)
+        $this->assertNull(Classes::find($c10->id));
+        $this->assertNotNull(Classes::withTrashed()->find($c10->id));
+        $this->assertNotNull(Classes::withTrashed()->find($c10->id)->deleted_at);
+
+        // XI RPL 1 tetap aktif
+        $this->assertNotNull(Classes::find($c11->id));
+    }
 }

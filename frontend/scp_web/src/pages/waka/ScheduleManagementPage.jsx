@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'rea
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  AlertTriangle,
   Trash2,
   Save,
   CheckCircle2,
@@ -647,43 +646,6 @@ export default function ScheduleManagementPage() {
           </Button>
         </div>
       </div>
-
-      {/* Pre-condition Gate Alert Banner */}
-      {!isMasterDataLoading && !prerequisiteCheck.isReady && (
-        <div className="schedule-precondition-card" role="alert">
-          <div className="schedule-precondition-left">
-            <AlertTriangle size={20} className="shrink-0 text-amber-700" />
-            <div>
-              <strong>Prasyarat Master Data Belum Lengkap</strong>
-              <p className="mt-0.5 text-xs text-amber-800">
-                {prerequisiteCheck.missingEntities.length === 1 &&
-                prerequisiteCheck.missingEntities[0] === 'Master Ruangan Belajar' ? (
-                  <>
-                    Penyusunan jadwal manual dinonaktifkan sementara karena <em>Master Ruangan Belajar</em>{' '}
-                    belum tersedia. Data ruangan akan otomatis terisi saat mengimpor Jadwal Ruangan, atau
-                    dapat ditambahkan di Master Data.
-                  </>
-                ) : (
-                  <>
-                    Penyusunan jadwal dinonaktifkan sementara karena entitas master data berikut belum
-                    tersedia: <em>{prerequisiteCheck.missingEntities.join(', ')}</em>.
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {prerequisiteCheck.missingEntities.includes('Master Ruangan Belajar') && (
-              <Button variant="primary" size="sm" onClick={() => navigate('/kurikulum/jadwal/import')}>
-                Impor Jadwal Ruangan &rarr;
-              </Button>
-            )}
-            <Button variant="secondary" size="sm" onClick={() => navigate('/kurikulum/master-data')}>
-              Lengkapi di Master Data &rarr;
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Conflict Summary Alert Banner */}
       {conflictScheduleIds.size > 0 && (

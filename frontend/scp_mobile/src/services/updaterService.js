@@ -83,11 +83,6 @@ class UpdaterService {
       // Request manifest dengan no-cache query agar tidak tertahan CDN/browser cache
       const response = await axios.get(`${manifestUrl}?t=${Date.now()}`, {
         timeout: 8000,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-          Accept: 'application/json',
-        },
       });
 
       const manifest = response.data;
@@ -259,11 +254,16 @@ class UpdaterService {
    * Mengembalikan: > 0 jika a > b, < 0 jika a < b, 0 jika a == b
    */
   compareSemver(a, b) {
-    const parse = (v) =>
-      String(v || '0')
+    const parse = (v) => {
+      const parts = String(v || '0')
         .replace(/^v/, '')
         .split('.')
         .map((num) => parseInt(num, 10) || 0);
+      while (parts.length < 3) {
+        parts.push(0);
+      }
+      return parts;
+    };
 
     const [a1, a2, a3] = parse(a);
     const [b1, b2, b3] = parse(b);

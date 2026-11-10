@@ -29,7 +29,8 @@ class MasterDataSummaryController extends Controller
                 'rooms' => Room::count(),
                 'subjects' => Subject::count(),
                 'teachers' => User::where('role', 'teacher')->count(),
-                'students' => User::where('role', 'student')->count(),
+                'students' => User::where('role', 'student')->whereNull('graduation_date')->whereNotNull('class_id')->count(),
+                'alumni' => User::where('role', 'student')->whereNotNull('graduation_date')->count(),
                 'schedules' => Schedule::count(),
             ],
         ], 200);

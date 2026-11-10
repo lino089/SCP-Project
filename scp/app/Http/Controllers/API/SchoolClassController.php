@@ -30,7 +30,8 @@ class SchoolClassController extends Controller
         $perPage = $request->integer('per_page', 15);
         $search = $request->input('search');
 
-        $query = Classes::query()->with('nextClass:id,name,level');
+        $query = Classes::query()->with('nextClass:id,name,level')
+            ->withCount(['students' => fn($q) => $q->whereNull('graduation_date')]);
 
         $user = $request->user();
         if ($request->boolean('my_taught_only') && $user && $user->role === 'teacher') {
@@ -97,7 +98,16 @@ class SchoolClassController extends Controller
             'next_class_id' => 'nullable|integer|exists:classes,id',
         ]);
 
-        $class = Classes::create($validated);
+        $existing = Classes::withTrashed()->where('name', $validated['name'])->first();
+        if ($existing) {
+            if ($existing->trashed()) {
+                $existing->restore();
+            }
+            $existing->update($validated);
+            $class = $existing;
+        } else {
+            $class = Classes::create($validated);
+        }
 
         return response()->json([
             'success' => true,
@@ -204,14 +214,22 @@ class SchoolClassController extends Controller
                     $nextRoman = $nextLevel === 11 ? 'XI' : 'XII';
                     $currRoman = $level === 10 ? 'X' : 'XI';
 
-                    // 1. Exact parallel match (e.g. X AK 1 -> XI AK 1)
+                    // 1. Exact parallel match (e.g. X AK 1 -> XI AK 1, XI LPS 1 -> XII LPS 1)
                     $targetName = preg_replace('/^' . $currRoman . '\b/i', $nextRoman, $c->name);
-                    $target = $classes->first(fn($item) => (int)$item->level === $nextLevel && trim($item->name) === trim($targetName));
+                    $target = Classes::withTrashed()
+                        ->where('level', (string) $nextLevel)
+                        ->where('name', $targetName)
+                        ->first();
 
-                    // 2. Fallback: match without number (e.g. XI LPS 1 -> XII LPS)
                     if (!$target) {
-                        $majorOnly = preg_replace('/\s+\d+$/', '', $targetName);
-                        $target = $classes->first(fn($item) => (int)$item->level === $nextLevel && trim($item->name) === trim($majorOnly));
+                        // Otomatis buatkan rombel paralel baru di tingkat berikutnya
+                        $target = Classes::create([
+                            'name' => $targetName,
+                            'level' => (string) $nextLevel,
+                            'next_class_id' => null,
+                        ]);
+                    } elseif ($target->trashed()) {
+                        $target->restore();
                     }
 
                     if ($target && $c->next_class_id !== $target->id) {
@@ -343,12 +361,28 @@ class SchoolClassController extends Controller
                     'updated_at' => $now,
                 ]);
 
+            // Arsipkan rombel kosong yang tidak lagi memiliki siswa aktif
+            $emptyClasses = Classes::whereDoesntHave('students', function ($q) {
+                $q->whereNull('graduation_date');
+            })->get();
+
+            $archivedClassesCount = 0;
+            foreach ($emptyClasses as $ec) {
+                $ec->update(['next_class_id' => null]);
+                $ec->delete();
+                $archivedClassesCount++;
+            }
+
+            // Reset next_class_id untuk seluruh rombel aktif yang tersisa agar siap untuk siklus baru
+            Classes::query()->update(['next_class_id' => null]);
+
             return [
                 'total_students' => $students->count(),
                 'promoted' => $promotedCount,
                 'held_back' => $heldBackCount,
                 'graduated' => $graduatedCount,
                 'deactivated_assignments' => $deactivatedAssignmentsCount,
+                'archived_empty_classes' => $archivedClassesCount,
             ];
         });
 

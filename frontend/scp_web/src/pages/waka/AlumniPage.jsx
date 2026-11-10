@@ -106,18 +106,20 @@ export default function AlumniPage() {
       }
 
       const res = await alumniApi.getAlumni(params);
-      const resData = res?.data;
+      const payload = (res && res.success !== undefined) ? res : (res?.data || {});
 
-      if (resData?.success) {
-        setAlumniList(resData.data || []);
-        if (resData.meta) {
-          setMeta(resData.meta);
+      if (payload?.success) {
+        setAlumniList(Array.isArray(payload.data) ? payload.data : []);
+        if (payload.meta) {
+          setMeta(payload.meta);
         }
+      } else if (Array.isArray(payload)) {
+        setAlumniList(payload);
       } else {
         setAlumniList([]);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Gagal memuat basis data alumni.';
+      const msg = err.response?.data?.message || err.message || 'Gagal memuat basis data arsip siswa.';
       setLoadError(msg);
       setAlumniList([]);
     } finally {
@@ -173,10 +175,11 @@ export default function AlumniPage() {
       if (selectedMajor && selectedMajor !== 'ALL') exportParams.major = selectedMajor;
 
       const res = await alumniApi.getAlumni(exportParams);
-      const dataToExport = res?.data?.data || alumniList;
+      const payload = (res && res.success !== undefined) ? res : (res?.data || {});
+      const dataToExport = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : alumniList);
 
       if (!dataToExport || dataToExport.length === 0) {
-        alert('Tidak ada data alumni untuk diekspor.');
+        alert('Tidak ada data arsip siswa untuk diekspor.');
         return;
       }
 
@@ -213,15 +216,15 @@ export default function AlumniPage() {
       worksheet['!cols'] = colWidths;
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Alumni');
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Arsip Siswa');
 
       const yearSuffix = selectedYear !== 'ALL' ? `_${selectedYear}` : '';
       const dateStr = new Date().toISOString().split('T')[0];
-      const fileName = `Data_Alumni_SCP${yearSuffix}_${dateStr}.xlsx`;
+      const fileName = `Arsip_Siswa_SCP${yearSuffix}_${dateStr}.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal mengekspor data alumni ke Excel.');
+      alert(err.response?.data?.message || err.message || 'Gagal mengekspor data arsip siswa ke Excel.');
     } finally {
       setIsExporting(false);
     }
@@ -234,10 +237,15 @@ export default function AlumniPage() {
         <div className="alumni-title-group">
           <h1 className="alumni-title">
             <GraduationCap size={28} className="text-neutral-900" />
-            <span>Pengelolaan &amp; Basis Data Alumni</span>
+            <span>Arsip Siswa &amp; Kelulusan</span>
+            {meta?.total !== undefined && (
+              <span className="alumni-badge-count">
+                {meta.total.toLocaleString('id-ID')} Siswa
+              </span>
+            )}
           </h1>
           <p className="alumni-subtitle">
-            Daftar siswa lulusan institusi, arsip riwayat kelas terakhir, tahun kelulusan/angkatan, dan rekam jejak akademik alumni.
+            Daftar siswa lulusan institusi, arsip riwayat kelas terakhir, tahun kelulusan/angkatan, dan rekam jejak akademik siswa.
           </p>
         </div>
 
@@ -248,7 +256,7 @@ export default function AlumniPage() {
             onClick={() => fetchAlumniData(currentPage)}
             loading={isLoading}
             disabled={isLoading || isExporting}
-            title="Muat Ulang Data Alumni"
+            title="Muat Ulang Arsip Siswa"
           >
             Refresh
           </Button>
@@ -258,55 +266,12 @@ export default function AlumniPage() {
             icon={FileSpreadsheet}
             onClick={handleExportExcel}
             loading={isExporting}
-            disabled={isLoading || isExporting || (metrics.total === 0 && alumniList.length === 0)}
-            title="Unduh seluruh data alumni terfilter ke format spreadsheet Excel (.xlsx)"
+            disabled={isLoading || isExporting || ((meta?.total ?? alumniList.length) === 0)}
+            title="Unduh seluruh arsip siswa terfilter ke format spreadsheet Excel (.xlsx)"
           >
-            Unduh Data Excel (.xlsx)
+            Unduh Berkas Excel (.xlsx)
           </Button>
         </div>
-      </div>
-
-      {/* Overview Stat Cards */}
-      <div className="alumni-stats-grid">
-        <StatCard
-          label="Total Alumni Terdaftar"
-          value={metrics.total.toLocaleString('id-ID')}
-          unit="Lulusan"
-          description="Siswa lulus yang tersimpan di arsip"
-          variant="success"
-          accentPosition="left"
-        />
-
-        <StatCard
-          label="Angkatan Kelulusan"
-          value={metrics.years.toLocaleString('id-ID')}
-          unit="Tahun"
-          description="Jumlah angkatan lulusan tercatat"
-          variant="info"
-          accentPosition="left"
-        />
-
-        <StatCard
-          label="Sampel Halaman Ini"
-          value={alumniList.length.toLocaleString('id-ID')}
-          unit="Siswa"
-          description={`${metrics.males} Laki-laki • ${metrics.females} Perempuan`}
-          variant="default"
-          accentPosition="left"
-        />
-
-        <StatCard
-          label="Status Filter"
-          value={isFilterActive ? 'Terfilter' : 'Semua'}
-          unit=""
-          description={
-            isFilterActive
-              ? `${selectedYear !== 'ALL' ? `Thn ${selectedYear}` : ''} ${selectedMajor !== 'ALL' ? `Jur ${selectedMajor}` : ''}`
-              : 'Menampilkan seluruh angkatan'
-          }
-          variant={isFilterActive ? 'warning' : 'default'}
-          accentPosition="left"
-        />
       </div>
 
       {/* Main Table Section */}
@@ -383,17 +348,17 @@ export default function AlumniPage() {
           </div>
         ) : loadError ? (
           <ErrorState
-            title="Gagal Memuat Data Alumni"
+            title="Gagal Memuat Arsip Siswa"
             message={loadError}
             onRetry={() => fetchAlumniData(currentPage)}
           />
         ) : alumniList.length === 0 ? (
           <EmptyState
-            title="Belum Ada Data Alumni"
+            title="Belum Ada Arsip Siswa"
             message={
               isFilterActive
-                ? 'Tidak ditemukan data alumni yang sesuai dengan parameter filter atau pencarian Anda.'
-                : 'Belum ada siswa yang dinyatakan lulus atau berstatus alumni di sistem. Siswa tingkat 12 akan otomatis masuk ke daftar alumni setelah proses Kenaikan Kelas & Kelulusan dijalankan.'
+                ? 'Tidak ditemukan arsip siswa yang sesuai dengan parameter filter atau pencarian Anda.'
+                : 'Belum ada siswa yang dinyatakan lulus di sistem. Siswa tingkat 12 akan otomatis masuk ke daftar arsip siswa setelah proses Kenaikan Kelas & Kelulusan dijalankan.'
             }
           />
         ) : (
@@ -595,8 +560,8 @@ export default function AlumniPage() {
       {isExporting && (
         <LoadingOverlay
           fixed
-          message="Menyiapkan Berkas Excel Data Alumni..."
-          subtext="Sedang merapikan seluruh baris dan kolom data alumni institusi."
+          message="Menyiapkan Berkas Excel Arsip Siswa..."
+          subtext="Sedang merapikan seluruh baris dan kolom data arsip siswa lulusan."
         />
       )}
     </div>

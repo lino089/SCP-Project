@@ -230,6 +230,7 @@ class StudentController extends Controller
         $errors = [];
         $seenNis = [];
         $validRows = [];
+        $skippedRows = [];
 
         // Preload active NIS to prevent N+1 queries on large datasets
         $existingNis = User::whereNull('deleted_at')->pluck('nis_nip')->flip()->toArray();
@@ -242,7 +243,34 @@ class StudentController extends Controller
             $rawGender = $item['gender'];
             $studentNumber = $item['student_number'];
 
-            // 1. Validasi Kelas
+            // 1. Validasi NIS
+            if ($rawNis === '') {
+                $errors[] = [
+                    'row' => $item['file_row'],
+                    'attribute' => 'nis',
+                    'message' => "Kolom NIS pada {$rowDesc} wajib diisi.",
+                ];
+            } elseif (isset($existingNis[$rawNis]) || isset($existingNis['P-' . $rawNis])) {
+                // 2. Skip jika siswa atau akun wali murid sudah terdaftar di sistem
+                $skippedRows[] = [
+                    'row' => $item['file_row'],
+                    'nis' => $rawNis,
+                    'name' => $rawName,
+                    'reason' => "NIS '{$rawNis}' sudah terdaftar di sistem.",
+                ];
+                continue;
+            } elseif (isset($seenNis[$rawNis])) {
+                // 3. Cek duplikasi NIS siswa baru di dalam berkas ini
+                $errors[] = [
+                    'row' => $item['file_row'],
+                    'attribute' => 'nis',
+                    'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di {$seenNis[$rawNis]}).",
+                ];
+            } else {
+                $seenNis[$rawNis] = $rowDesc;
+            }
+
+            // 4. Validasi Kelas
             if (empty($rawClassName)) {
                 $errors[] = [
                     'row' => $item['file_row'],
@@ -251,36 +279,7 @@ class StudentController extends Controller
                 ];
             }
 
-            // 2. Validasi NIS
-            if ($rawNis === '') {
-                $errors[] = [
-                    'row' => $item['file_row'],
-                    'attribute' => 'nis',
-                    'message' => "Kolom NIS pada {$rowDesc} wajib diisi.",
-                ];
-            } elseif (isset($seenNis[$rawNis])) {
-                $errors[] = [
-                    'row' => $item['file_row'],
-                    'attribute' => 'nis',
-                    'message' => "NIS '{$rawNis}' duplikat di dalam berkas ini (pertama kali muncul di {$seenNis[$rawNis]}).",
-                ];
-            } elseif (isset($existingNis[$rawNis])) {
-                $errors[] = [
-                    'row' => $item['file_row'],
-                    'attribute' => 'nis',
-                    'message' => "NIS '{$rawNis}' sudah terdaftar di sistem.",
-                ];
-            } elseif (isset($existingNis['P-' . $rawNis])) {
-                $errors[] = [
-                    'row' => $item['file_row'],
-                    'attribute' => 'nis',
-                    'message' => "Akun orang tua untuk NIS '{$rawNis}' sudah terdaftar di sistem.",
-                ];
-            } else {
-                $seenNis[$rawNis] = $rowDesc;
-            }
-
-            // 3. Validasi Nama Siswa
+            // 5. Validasi Nama Siswa
             if ($rawName === '') {
                 $errors[] = [
                     'row' => $item['file_row'],
@@ -295,7 +294,7 @@ class StudentController extends Controller
                 ];
             }
 
-            // 4. Validasi Jenis Kelamin
+            // 6. Validasi Jenis Kelamin
             if ($rawGender === '') {
                 $errors[] = [
                     'row' => $item['file_row'],
@@ -310,7 +309,7 @@ class StudentController extends Controller
                 ];
             }
 
-            // 5. Validasi Nomor Absen
+            // 7. Validasi Nomor Absen
             if ($studentNumber !== null && $studentNumber <= 0) {
                 $errors[] = [
                     'row' => $item['file_row'],
@@ -319,14 +318,16 @@ class StudentController extends Controller
                 ];
             }
 
-            $validRows[] = [
-                'nis' => $rawNis,
-                'name' => $rawName,
-                'class_name' => trim(preg_replace('/\s+/', ' ', (string) $rawClassName)),
-                'gender' => $rawGender,
-                'student_number' => $studentNumber,
-                'nisn' => $item['nisn'],
-            ];
+            if ($rawNis !== '') {
+                $validRows[] = [
+                    'nis' => $rawNis,
+                    'name' => $rawName,
+                    'class_name' => trim(preg_replace('/\s+/', ' ', (string) $rawClassName)),
+                    'gender' => $rawGender,
+                    'student_number' => $studentNumber,
+                    'nisn' => $item['nisn'],
+                ];
+            }
         }
 
         if (!empty($errors)) {
@@ -337,7 +338,23 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $summary = DB::transaction(function () use ($validRows) {
+        // Jika seluruh baris sudah terdaftar di sistem dan tidak ada data baru yang perlu diimpor
+        if (empty($validRows) && !empty($skippedRows)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Seluruh data siswa dalam berkas sudah terdaftar di sistem (' . count($skippedRows) . ' siswa dilewati). Tidak ada data baru yang perlu ditambahkan.',
+                'data' => [
+                    'classes_created' => 0,
+                    'classes_existing' => 0,
+                    'students_imported' => 0,
+                    'parents_imported' => 0,
+                    'students_skipped' => count($skippedRows),
+                ],
+            ], 200);
+        }
+
+        $skippedCount = count($skippedRows);
+        $summary = DB::transaction(function () use ($validRows, $skippedCount) {
             $classMap = [];
             $classesCreated = 0;
             $classesExisting = 0;
@@ -352,31 +369,39 @@ class StudentController extends Controller
                     $classMap[$className] = $existingClass->id;
                     $classesExisting++;
                 } else {
-                    // Deteksi level kelas (XII -> 12, XI -> 11, X -> 10)
-                    if (preg_match('/^XII(\s|-|_|$)/i', $className)) {
-                        $level = '12';
-                    } elseif (preg_match('/^XI(\s|-|_|$)/i', $className)) {
-                        $level = '11';
-                    } elseif (preg_match('/^X(\s|-|_|$)/i', $className)) {
-                        $level = '10';
-                    } elseif (preg_match('/^12(\s|-|_|$)/', $className)) {
-                        $level = '12';
-                    } elseif (preg_match('/^11(\s|-|_|$)/', $className)) {
-                        $level = '11';
-                    } elseif (preg_match('/^10(\s|-|_|$)/', $className)) {
-                        $level = '10';
+                    $trashedClass = Classes::onlyTrashed()->where('name', $className)->first();
+                    if ($trashedClass) {
+                        $trashedClass->restore();
+                        $trashedClass->update(['next_class_id' => null]);
+                        $classMap[$className] = $trashedClass->id;
+                        $classesExisting++;
                     } else {
-                        $level = '10'; // Fallback default
+                        // Deteksi level kelas (XII -> 12, XI -> 11, X -> 10)
+                        if (preg_match('/^XII(\s|-|_|$)/i', $className)) {
+                            $level = '12';
+                        } elseif (preg_match('/^XI(\s|-|_|$)/i', $className)) {
+                            $level = '11';
+                        } elseif (preg_match('/^X(\s|-|_|$)/i', $className)) {
+                            $level = '10';
+                        } elseif (preg_match('/^12(\s|-|_|$)/', $className)) {
+                            $level = '12';
+                        } elseif (preg_match('/^11(\s|-|_|$)/', $className)) {
+                            $level = '11';
+                        } elseif (preg_match('/^10(\s|-|_|$)/', $className)) {
+                            $level = '10';
+                        } else {
+                            $level = '10'; // Fallback default
+                        }
+
+                        $newClass = Classes::create([
+                            'name' => $className,
+                            'level' => $level,
+                            'next_class_id' => null,
+                        ]);
+
+                        $classMap[$className] = $newClass->id;
+                        $classesCreated++;
                     }
-
-                    $newClass = Classes::create([
-                        'name' => $className,
-                        'level' => $level,
-                        'next_class_id' => null,
-                    ]);
-
-                    $classMap[$className] = $newClass->id;
-                    $classesCreated++;
                 }
             }
 
@@ -421,12 +446,17 @@ class StudentController extends Controller
                 'classes_existing' => $classesExisting,
                 'students_imported' => $studentsImported,
                 'parents_imported' => $parentsImported,
+                'students_skipped' => $skippedCount,
             ];
         });
 
+        $message = $summary['students_skipped'] > 0
+            ? "Impor data siswa selesai. {$summary['students_imported']} siswa baru ditambahkan, {$summary['students_skipped']} siswa lama dilewati."
+            : 'Data siswa dan kelas berhasil diimpor.';
+
         return response()->json([
             'success' => true,
-            'message' => 'Data siswa dan kelas berhasil diimpor.',
+            'message' => $message,
             'data' => $summary,
         ], 201);
     }
@@ -449,11 +479,11 @@ class StudentController extends Controller
         $search = $request->input('search');
         $classId = $request->input('class_id');
         $level = $request->input('level');
-        $status = $request->input('status');
+        $status = $request->input('status', 'active');
 
         $query = User::where('role', 'student')->with('schoolClass:id,name,level');
 
-        // Scoping status siswa: default tidak menampilkan alumni jika status=active
+        // Scoping status siswa: default hanya menampilkan siswa aktif (bukan alumni)
         if ($status === 'active') {
             $query->whereNull('graduation_date')->whereNotNull('class_id');
         } elseif ($status === 'alumni') {
@@ -551,6 +581,15 @@ class StudentController extends Controller
                         $hq->where('action_type', 'graduated')
                             ->where('academic_year', 'like', "%{$gradYear}%");
                     });
+            });
+        }
+
+        if ($major && $major !== 'ALL') {
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+            $query->whereHas('classHistories', function ($hq) use ($major, $like) {
+                $hq->whereHas('fromClass', function ($cq) use ($major, $like) {
+                    $cq->where('name', $like, '%' . $major . '%');
+                });
             });
         }
 

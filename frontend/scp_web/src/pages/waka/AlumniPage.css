@@ -409,3 +409,16 @@
   border-top: 1px solid var(--neutral-200, #e2e8f0);
   background-color: #ffffff;
 }
+
+.alumni-badge-count {
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  background-color: var(--success-50, #f0fdf4);
+  color: var(--success-700, #15803d);
+  border: 1px solid var(--success-200, #bbf7d0);
+  letter-spacing: 0.02em;
+  margin-left: 0.5rem;
+}

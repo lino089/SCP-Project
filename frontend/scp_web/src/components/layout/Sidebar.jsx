@@ -164,7 +164,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
                   }
                   onClick={() => onClose?.()}
                 >
-                  Data Alumni
+                  Arsip Siswa
                 </NavLink>
 
                 <NavLink
@@ -327,7 +327,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
               onClick={() => onClose?.()}
             >
               <GraduationCap size={16} strokeWidth={1.5} />
-              <span>Data Alumni</span>
+              <span>Arsip Siswa</span>
             </NavLink>
           )}
         </>
