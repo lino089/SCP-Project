@@ -29,16 +29,19 @@ import {
   Table,
   FileUpload,
   StatCard,
+  useToast,
+  useConfirm,
 } from '../../components/shared';
 import './StudentPermission.css';
 
 export default function StudentPermissionPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
-  const [toastMessage, setToastMessage] = useState('');
 
   // Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -203,8 +206,7 @@ export default function StudentPermissionPage() {
         setLeaveRequests((prev) => [res.data, ...prev]);
         setIsCreateModalOpen(false);
         resetForm();
-        setToastMessage('Permohonan perizinan berhasil dikirim dan menunggu verifikasi.');
-        setTimeout(() => setToastMessage(''), 4000);
+        toast.success('Permohonan perizinan berhasil dikirim dan menunggu verifikasi.');
       }
     } catch (err) {
       setFormError(err.message || err.response?.data?.message || 'Gagal mengirim permohonan perizinan.');
@@ -279,8 +281,7 @@ export default function StudentPermissionPage() {
         setIsEditModalOpen(false);
         setEditingItem(null);
         resetForm();
-        setToastMessage('Permohonan perizinan berhasil diperbarui.');
-        setTimeout(() => setToastMessage(''), 4000);
+        toast.success('Permohonan perizinan berhasil diperbarui.');
       }
     } catch (err) {
       setFormError(err.message || err.response?.data?.message || 'Gagal memperbarui permohonan perizinan.');
@@ -291,18 +292,20 @@ export default function StudentPermissionPage() {
 
   // Handle Batalkan Izin (DELETE jika pending)
   const handleDelete = async (id) => {
-    const confirm = window.confirm(
-      'Apakah Anda yakin ingin membatalkan permohonan izin ini? Berkas lampiran dan data pengajuan akan dihapus.'
-    );
-    if (!confirm) return;
+    const ok = await confirm({
+      title: 'Batalkan Permohonan Izin?',
+      message: 'Apakah Anda yakin ingin membatalkan permohonan izin ini? Berkas lampiran dan data pengajuan akan dihapus permanen.',
+      confirmLabel: 'Ya, Batalkan',
+      confirmVariant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await leaveApi.deleteLeaveRequest(id);
       setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
-      setToastMessage('Permohonan izin berhasil dibatalkan.');
-      setTimeout(() => setToastMessage(''), 4000);
+      toast.success('Permohonan izin berhasil dibatalkan.');
     } catch (err) {
-      alert(err.message || err.response?.data?.message || 'Gagal membatalkan permohonan izin.');
+      toast.error(err.message || err.response?.data?.message || 'Gagal membatalkan permohonan izin.');
     }
   };
 
@@ -453,13 +456,7 @@ export default function StudentPermissionPage() {
         </div>
       </div>
 
-      {/* Success Toast */}
-      {toastMessage && (
-        <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-xs text-emerald-800">
-          <span className="status-dot status-dot--success" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+
 
       {/* Error Alert with Retry */}
       {fetchError && (
@@ -497,6 +494,7 @@ export default function StudentPermissionPage() {
         <Table
           columns={columns}
           data={leaveRequests}
+          pageSize={10}
           isLoading={isLoading}
           emptyMessage="Belum ada riwayat perizinan yang diajukan."
         />

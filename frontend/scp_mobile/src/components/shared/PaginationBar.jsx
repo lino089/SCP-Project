@@ -11,12 +11,12 @@ export default function PaginationBar({
   totalItems = 0,
   perPage = 10,
   onPageChange,
-  perPageOptions = [5, 10, 25, 50],
+  perPageOptions = [10, 25, 50, 100],
   onPerPageChange,
   disabled = false,
   className = '',
 }) {
-  if (totalItems <= 0 && totalPages <= 1) return null;
+  if (totalItems <= 0 && totalPages <= 1 && !onPerPageChange) return null;
 
   const startRecord = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
   const endRecord = Math.min(totalItems, currentPage * perPage);
@@ -24,6 +24,13 @@ export default function PaginationBar({
   const handleSelect = (page) => {
     if (disabled || page < 1 || page > totalPages || page === currentPage) return;
     onPageChange?.(page);
+  };
+
+  const handlePerPageSelect = (e) => {
+    const val = Number(e.target.value);
+    if (disabled || val === perPage) return;
+    onPerPageChange?.(val);
+    onPageChange?.(1);
   };
 
   return (
@@ -42,7 +49,7 @@ export default function PaginationBar({
             <span className="pagination-bar__perpage">
               <select
                 value={perPage}
-                onChange={(e) => onPerPageChange(Number(e.target.value))}
+                onChange={handlePerPageSelect}
                 disabled={disabled}
                 aria-label="Jumlah baris per halaman"
               >

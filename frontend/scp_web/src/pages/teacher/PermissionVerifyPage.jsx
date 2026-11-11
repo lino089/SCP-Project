@@ -18,6 +18,7 @@ import {
   Modal,
   Tabs,
   Table,
+  useToast,
 } from '../../components/shared';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
@@ -26,6 +27,7 @@ import './PermissionVerify.css';
 export default function PermissionVerifyPage() {
   const navigate = useNavigate();
   const { user, isKesiswaan, isWaliKelas } = useAuth();
+  const { toast } = useToast();
 
   // Wewenang verifikasi per baris izin: Guru Kesiswaan atau Wali Kelas untuk kelas binaannya (Waka dilarang)
   const canVerifyRow = useCallback((row) => {
@@ -51,8 +53,7 @@ export default function PermissionVerifyPage() {
   const [isLoadingStudents, setIsLoadingStudents] = useState(() => isAuthorized);
   const [studentFetchError, setStudentFetchError] = useState(null);
 
-  // Toast Notifikasi & Processing State
-  const [toastMessage, setToastMessage] = useState('');
+  // Processing State
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   const handleOpenDocPreview = useCallback((row) => {
@@ -127,7 +128,7 @@ export default function PermissionVerifyPage() {
   const handleUpdateStudentStatus = async (id, newStatus, targetRow = null) => {
     const row = targetRow || permissionList.find((p) => p.id === id);
     if (row && !canVerifyRow(row)) {
-      alert('Akses ditolak. Anda hanya berhak memverifikasi izin siswa dari kelas yang Anda ampu.');
+      toast.warning('Akses ditolak. Anda hanya berhak memverifikasi izin siswa dari kelas yang Anda ampu.');
       return;
     }
     setIsProcessingAction(true);
@@ -139,14 +140,13 @@ export default function PermissionVerifyPage() {
       if (previewDoc?.id === id) {
         handleCloseDocPreview();
       }
-      setToastMessage(
+      toast.success(
         newStatus === 'approved'
           ? 'Permohonan izin siswa berhasil disetujui (Approved).'
           : 'Permohonan izin siswa telah ditolak (Rejected).'
       );
-      setTimeout(() => setToastMessage(''), 3500);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal memproses verifikasi izin siswa.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal memproses verifikasi izin siswa.');
     } finally {
       setIsProcessingAction(false);
     }
@@ -340,13 +340,7 @@ export default function PermissionVerifyPage() {
         </div>
       )}
 
-      {/* Toast Notifikasi */}
-      {toastMessage && (
-        <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-xs text-emerald-800 animate-fade-in">
-          <span className="status-dot status-dot--success" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+
 
       {studentFetchError && (
         <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-800">
@@ -389,6 +383,7 @@ export default function PermissionVerifyPage() {
         <Table
           columns={studentColumns}
           data={filteredStudentData}
+          pageSize={10}
           isLoading={isLoadingStudents}
           emptyMessage="Tidak ada data perizinan siswa pada kategori status ini."
         />

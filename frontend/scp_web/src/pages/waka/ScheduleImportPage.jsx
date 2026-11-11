@@ -1298,6 +1298,7 @@ export default function ScheduleImportPage() {
           <Table
             columns={columns}
             data={displayedRows}
+            pageSize={25}
             isLoading={reviewLoading}
             emptyMessage="Tidak ada baris jadwal yang sesuai dengan filter yang dipilih."
           />

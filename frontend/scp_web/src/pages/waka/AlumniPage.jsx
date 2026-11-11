@@ -19,6 +19,7 @@ import {
   Modal,
   Pagination,
   StatCard,
+  useToast,
 } from '../../components/shared';
 import { SkeletonRow, EmptyState, ErrorState, LoadingOverlay } from '../../components/feedback';
 import { alumniApi } from '../../services/masterDataApi';
@@ -39,6 +40,7 @@ function extractJurusan(className) {
 const COMMON_MAJORS = ['ALL', 'RPL', 'TKJ', 'DKV', 'AK', 'MP', 'BR', 'BD', 'LPS'];
 
 export default function AlumniPage() {
+  const { toast } = useToast();
   const searchInputRef = useRef(null);
 
   // Data states
@@ -93,7 +95,7 @@ export default function AlumniPage() {
     try {
       const params = {
         page,
-        per_page: 25,
+        per_page: perPage,
       };
 
       if (debouncedSearch) {
@@ -126,7 +128,7 @@ export default function AlumniPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, selectedYear, selectedMajor]);
+  }, [debouncedSearch, selectedYear, selectedMajor, perPage]);
 
   // Fetch when page or filter changes
   useEffect(() => {
@@ -180,7 +182,7 @@ export default function AlumniPage() {
       const dataToExport = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : alumniList);
 
       if (!dataToExport || dataToExport.length === 0) {
-        alert('Tidak ada data arsip siswa untuk diekspor.');
+        toast.warning('Tidak ada data arsip siswa untuk diekspor.');
         return;
       }
 
@@ -224,8 +226,9 @@ export default function AlumniPage() {
       const fileName = `Arsip_Siswa_SCP${yearSuffix}_${dateStr}.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
+      toast.success('Data arsip siswa berhasil diekspor ke Excel.');
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal mengekspor data arsip siswa ke Excel.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal mengekspor data arsip siswa ke Excel.');
     } finally {
       setIsExporting(false);
     }
@@ -465,8 +468,13 @@ export default function AlumniPage() {
               currentPage={currentPage}
               totalPages={meta.last_page || 1}
               totalItems={meta.total}
-              perPage={meta.per_page || 25}
+              perPage={perPage}
+              perPageOptions={[10, 25, 50, 100]}
               onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newSize) => {
+                setPerPage(newSize);
+                setCurrentPage(1);
+              }}
               disabled={isLoading}
             />
           </div>

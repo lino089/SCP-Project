@@ -320,7 +320,7 @@ export default function WakaDashboardPage() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/web/monitoring')}
+              onClick={() => navigate('/web/monitoring?status=unfilled')}
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-warning-fg)] underline"
             >
               Periksa di Monitoring KBM <ArrowRight size={12} />

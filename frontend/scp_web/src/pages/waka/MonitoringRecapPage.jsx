@@ -26,6 +26,7 @@ import {
   Input,
   StatCard,
   SearchInput,
+  useToast,
 } from '../../components/shared';
 import { EmptyState } from '../../components/feedback';
 import { getStorageUrl, getFallbackStorageUrl } from '../../utils/formatters';
@@ -36,6 +37,7 @@ import './MonitoringRecap.css';
 
 export default function MonitoringRecapPage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
 
   const [activeTab, setActiveTab] = useState('presensi'); // 'presensi' | 'jurnal'
@@ -308,7 +310,7 @@ export default function MonitoringRecapPage() {
   // Ekspor Data Presensi ke Format Excel (.xlsx)
   const handleExportExcel = () => {
     if (filteredAttendances.length === 0) {
-      alert('Tidak ada data presensi untuk diekspor pada filter ini.');
+      toast.warning('Tidak ada data presensi untuk diekspor pada filter ini.');
       return;
     }
 
@@ -362,13 +364,14 @@ export default function MonitoringRecapPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+    toast.success('Data presensi berhasil diekspor ke Excel.');
   };
 
   // Ekspor Data Jurnal Mengajar ke Format Excel (.xlsx)
   const handleExportJournalExcel = () => {
     const sourceData = displayJournals;
     if (sourceData.length === 0) {
-      alert('Tidak ada data jurnal mengajar untuk diekspor pada filter ini.');
+      toast.warning('Tidak ada data jurnal mengajar untuk diekspor pada filter ini.');
       return;
     }
 
@@ -429,6 +432,7 @@ export default function MonitoringRecapPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+    toast.success('Data jurnal mengajar berhasil diekspor ke Excel.');
   };
 
   // Opsi Dropdown Kelas
@@ -922,6 +926,7 @@ export default function MonitoringRecapPage() {
             <Table
               columns={attendanceColumns}
               data={filteredAttendances}
+              pageSize={25}
               isLoading={isLoading}
               emptyComponent={
                 <div className="py-12 px-4">
@@ -1134,6 +1139,7 @@ export default function MonitoringRecapPage() {
             <Table
               columns={journalColumns}
               data={displayJournals}
+              pageSize={25}
               isLoading={isLoading}
               emptyComponent={
                 <div className="py-12 px-4">

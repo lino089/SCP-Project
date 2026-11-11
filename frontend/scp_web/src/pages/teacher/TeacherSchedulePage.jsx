@@ -30,6 +30,7 @@ import {
   Button,
   Select,
   SearchInput,
+  useToast,
 } from '../../components/shared';
 import {
   ScheduleTimetableMatrix,
@@ -42,6 +43,7 @@ import './TeacherSchedule.css';
 export default function TeacherSchedulePage() {
   const navigate = useNavigate();
   const { user, isWaliKelas } = useAuth();
+  const { toast } = useToast();
 
   // Konteks Penugasan: Jadwal Mengajar Pribadi vs Jadwal Kelas Binaan Wali Kelas
   const homeroomAssignment = useMemo(() => {
@@ -325,7 +327,9 @@ export default function TeacherSchedulePage() {
   // Navigasi ke halaman form Jurnal & Presensi
   const handleOpenJournal = (item) => {
     if (item.is_teaching_exempted || item.journal_status === 'exempted') {
-      alert(`Jadwal kelas ${item.school_class?.name || item.class_name || ''} dibebaskan dari KBM karena terdapat agenda sekolah: ${item.exemption_reason || 'Kegiatan Khusus'}.`);
+      toast.info(
+        `Jadwal kelas ${item.school_class?.name || item.class_name || ''} dibebaskan dari KBM karena terdapat agenda sekolah: ${item.exemption_reason || 'Kegiatan Khusus'}.`
+      );
       return;
     }
 

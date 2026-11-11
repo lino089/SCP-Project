@@ -537,7 +537,7 @@ export default function TeacherLeavePage() {
             />
           </div>
         ) : (
-          <Table columns={columns} data={filteredLeaves} />
+          <Table columns={columns} data={filteredLeaves} pageSize={10} />
         )}
       </div>
 

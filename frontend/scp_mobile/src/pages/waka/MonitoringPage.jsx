@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Users,
   RotateCw,
   X,
   Eye,
+  AlertTriangle,
+  Filter,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import journalApi from '../../services/journalApi';
@@ -19,6 +22,7 @@ import {
   DataTable,
   PaginationBar,
   SegmentedTabs,
+  Badge,
 } from '../../components/shared';
 import { EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
@@ -27,13 +31,15 @@ import { todayLocalISO } from '../../utils/dateUtils';
 
 export default function MonitoringPage() {
   const { hasRole, isKesiswaan } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Active Tab
   const [activeTab, setActiveTab] = useState('jurnal'); // 'jurnal' | 'presensi'
 
-  // Date Filter
+  // Date Filter & Criteria
   const [selectedDate, setSelectedDate] = useState(() => todayLocalISO());
   const [selectedClassId, setSelectedClassId] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState(() => searchParams.get('status') || 'ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Pagination tabel (client-side)
@@ -69,6 +75,14 @@ export default function MonitoringPage() {
     setToastType(type);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Sync search param status if changed externally
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam && statusParam !== filterStatus) {
+      setFilterStatus(statusParam);
+    }
+  }, [searchParams]);
 
   // Fetch classes for dropdown
   useEffect(() => {
@@ -119,23 +133,17 @@ export default function MonitoringPage() {
           ]);
 
           if (isMounted && jRes.status === 'fulfilled') {
-            const list = Array.isArray(jRes.value)
-              ? jRes.value
-              : Array.isArray(jRes.value?.data)
-              ? jRes.value.data
-              : [];
-            setJournals(list);
+            setJournals(unwrapList(jRes.value));
           }
 
           if (isMounted && recapRes.status === 'fulfilled') {
-            setDailyRecap(recapRes.value?.data || recapRes.value || null);
+            setDailyRecap(unwrap(recapRes.value));
           }
         } else {
           const params = { date: selectedDate };
           if (selectedClassId !== 'ALL') params.class_id = selectedClassId;
           const aRes = await leaveApi.getAttendances(params);
-          const list = Array.isArray(aRes) ? aRes : Array.isArray(aRes?.data) ? aRes.data : [];
-          if (isMounted) setAttendances(list);
+          if (isMounted) setAttendances(unwrapList(aRes));
         }
         if (isMounted) setLoadError(null);
       } catch (err) {
@@ -155,12 +163,20 @@ export default function MonitoringPage() {
     fetchMonitoringData();
   };
 
-  // Handle Mark Teacher Absent
-  const handleMarkTeacherAbsent = async (journalId) => {
+  // Handle Mark Teacher Absent (Jam Kosong)
+  const handleMarkTeacherAbsent = async (item) => {
     if (!window.confirm('Tandai sesi ini sebagai Guru Berhalangan Hadir (Jam Kosong)?')) return;
-    setMarkingAbsentId(journalId);
+    const actionKey = item.journal_id || item.schedule_id || item.id;
+    setMarkingAbsentId(actionKey);
     try {
-      await journalApi.markTeacherAbsent(journalId);
+      if (item.journal_id) {
+        await journalApi.markTeacherAbsent(item.journal_id);
+      } else {
+        await journalApi.markTeacherAbsent(null, {
+          schedule_id: item.schedule_id || item.id,
+          date: item.date || selectedDate,
+        });
+      }
       showToast('Sesi KBM berhasil ditandai sebagai Guru Berhalangan Hadir.');
       handleRefresh();
     } catch (err) {
@@ -170,29 +186,58 @@ export default function MonitoringPage() {
     }
   };
 
-  // Filtered Journals
+  // Filtered Journals (Adaptif: Mengutamakan Daily Recap Items untuk tanggal harian)
   const filteredJournals = useMemo(() => {
-    if (!searchQuery.trim()) return journals;
-    const q = searchQuery.toLowerCase();
-    return journals.filter((j) => {
-      const cls = j.schedule?.school_class?.name?.toLowerCase() || '';
-      const teacher = j.schedule?.teacher?.name?.toLowerCase() || '';
-      const subject = j.schedule?.subject?.name?.toLowerCase() || '';
-      const topic = j.topic_description?.toLowerCase() || '';
-      return cls.includes(q) || teacher.includes(q) || subject.includes(q) || topic.includes(q);
+    // Gunakan dailyRecap.items jika tersedia untuk tanggal yang dipilih
+    const source = selectedDate && dailyRecap?.items ? dailyRecap.items : journals;
+
+    return source.filter((item) => {
+      // 1. Filter Rombel
+      if (selectedClassId !== 'ALL') {
+        const itemClassId = item.class_id || item.schedule?.class_id;
+        if (String(itemClassId) !== String(selectedClassId)) return false;
+      }
+
+      // 2. Filter Status KBM
+      if (filterStatus !== 'ALL') {
+        if (filterStatus === 'unfilled' && item.status !== 'unfilled') return false;
+        if (filterStatus === 'completed' && item.status !== 'completed') return false;
+        if (filterStatus === 'teacher_absent' && item.status !== 'teacher_absent') return false;
+        if (filterStatus === 'exempted' && item.status !== 'exempted') return false;
+        if (filterStatus === 'ongoing' && item.status !== 'ongoing') return false;
+      }
+
+      // 3. Filter Pencarian Teks
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const cls = (item.class_name || item.schedule?.school_class?.name || '').toLowerCase();
+        const teacher = (item.teacher_name || item.schedule?.teacher?.name || '').toLowerCase();
+        const subject = (item.subject_name || item.schedule?.subject?.name || '').toLowerCase();
+        const topic = (item.topic_description || item.exemption_reason || '').toLowerCase();
+        if (!cls.includes(q) && !teacher.includes(q) && !subject.includes(q) && !topic.includes(q)) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [journals, searchQuery]);
+  }, [selectedDate, dailyRecap, journals, selectedClassId, filterStatus, searchQuery]);
 
   // Filtered Attendances
   const filteredAttendances = useMemo(() => {
-    if (!searchQuery.trim()) return attendances;
-    const q = searchQuery.toLowerCase();
     return attendances.filter((a) => {
-      const name = a.student?.name?.toLowerCase() || '';
-      const cls = a.school_class?.name?.toLowerCase() || '';
+      if (selectedClassId !== 'ALL') {
+        const itemClassId = a.class_id || a.student?.class_id || a.school_class_id;
+        if (String(itemClassId) !== String(selectedClassId)) return false;
+      }
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const name = (a.student?.name || '').toLowerCase();
+      const cls = (a.school_class?.name || '').toLowerCase();
       return name.includes(q) || cls.includes(q);
     });
-  }, [attendances, searchQuery]);
+  }, [attendances, selectedClassId, searchQuery]);
 
   const activeList = activeTab === 'jurnal' ? filteredJournals : filteredAttendances;
   const totalItems = activeList.length;
@@ -201,7 +246,13 @@ export default function MonitoringPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, selectedDate, selectedClassId, searchQuery, perPage]);
+  }, [activeTab, selectedDate, selectedClassId, filterStatus, searchQuery, perPage]);
+
+  // Metrik Daily Recap
+  const totalSesi = dailyRecap?.total_mandatory ?? dailyRecap?.effective_mandatory ?? dailyRecap?.items?.length ?? 0;
+  const belumDiisiCount = dailyRecap?.unfilled_count ?? 0;
+  const selesaiCount = dailyRecap?.completed_count ?? 0;
+  const jamKosongCount = dailyRecap?.absent_count ?? 0;
 
   return (
     <div className="space-y-4">
@@ -268,31 +319,69 @@ export default function MonitoringPage() {
 
       {/* Daily Recap Summary Cards (when in 'jurnal' tab) */}
       {activeTab === 'jurnal' && dailyRecap && (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="surface-card p-2.5 text-center shadow-[var(--shadow-card)]">
-            <p className="text-[11px] text-[var(--color-text-secondary)] font-semibold">Total Sesi</p>
+        <div className="grid grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterStatus('ALL')}
+            className={`surface-card p-2 text-center transition-all rounded-[10px] ${
+              filterStatus === 'ALL'
+                ? 'border-[var(--color-brand-primary,#2563eb)] ring-2 ring-[var(--color-brand-primary,#2563eb)]/30'
+                : 'border border-[var(--color-border-subtle)]'
+            }`}
+          >
+            <p className="text-[10px] text-[var(--color-text-secondary)] font-semibold truncate">Total Sesi</p>
             <p className="text-sm font-bold text-[var(--color-text-primary)] mt-0.5">
-              {dailyRecap.total_sessions || dailyRecap.total_schedules || 0}
+              {totalSesi}
             </p>
-          </div>
-          <div className="surface-card p-2.5 text-center shadow-[var(--shadow-card)]">
-            <p className="text-[11px] text-[var(--color-success-fg)] font-semibold">Selesai</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterStatus(filterStatus === 'unfilled' ? 'ALL' : 'unfilled')}
+            className={`surface-card p-2 text-center transition-all rounded-[10px] ${
+              filterStatus === 'unfilled'
+                ? 'border-amber-500 ring-2 ring-amber-500/30'
+                : 'border border-[var(--color-border-subtle)]'
+            }`}
+          >
+            <p className="text-[10px] text-amber-500 font-semibold truncate">Belum Diisi</p>
+            <p className="text-sm font-bold text-amber-500 mt-0.5">
+              {belumDiisiCount}
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterStatus(filterStatus === 'completed' ? 'ALL' : 'completed')}
+            className={`surface-card p-2 text-center transition-all rounded-[10px] ${
+              filterStatus === 'completed'
+                ? 'border-emerald-500 ring-2 ring-emerald-500/30'
+                : 'border border-[var(--color-border-subtle)]'
+            }`}
+          >
+            <p className="text-[10px] text-[var(--color-success-fg)] font-semibold truncate">Selesai</p>
             <p className="text-sm font-bold text-[var(--color-success-fg)] mt-0.5">
-              {dailyRecap.completed_count || 0}
+              {selesaiCount}
             </p>
-          </div>
-          <div className="surface-card p-2.5 text-center shadow-[var(--shadow-card)]">
-            <p className="text-[11px] text-[var(--color-danger-fg)] font-semibold">Jam Kosong</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterStatus(filterStatus === 'teacher_absent' ? 'ALL' : 'teacher_absent')}
+            className={`surface-card p-2 text-center transition-all rounded-[10px] ${
+              filterStatus === 'teacher_absent'
+                ? 'border-rose-500 ring-2 ring-rose-500/30'
+                : 'border border-[var(--color-border-subtle)]'
+            }`}
+          >
+            <p className="text-[10px] text-[var(--color-danger-fg)] font-semibold truncate">Jam Kosong</p>
             <p className="text-sm font-bold text-[var(--color-danger-fg)] mt-0.5">
-              {dailyRecap.teacher_absent_count || 0}
+              {jamKosongCount}
             </p>
-          </div>
+          </button>
         </div>
       )}
 
-      {/* Filter Rombel & Search Input */}
+      {/* Filter Rombel & Filter Status & Search Input */}
       <div className="space-y-2">
-        {activeTab === 'presensi' && (
+        <div className="grid grid-cols-2 gap-2">
           <Select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
@@ -305,6 +394,52 @@ export default function MonitoringPage() {
               </option>
             ))}
           </Select>
+
+          {activeTab === 'jurnal' ? (
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="text-xs"
+            >
+              <option value="ALL">Semua Status</option>
+              <option value="unfilled">Belum Diisi</option>
+              <option value="completed">Selesai</option>
+              <option value="teacher_absent">Jam Kosong</option>
+              <option value="exempted">Dikecualikan</option>
+              <option value="ongoing">Berjalan</option>
+            </Select>
+          ) : (
+            <div className="flex items-center justify-end text-xs text-[var(--color-text-secondary)] font-medium px-2">
+              Total Presensi: {totalItems}
+            </div>
+          )}
+        </div>
+
+        {filterStatus !== 'ALL' && activeTab === 'jurnal' && (
+          <div className="flex items-center gap-1.5 px-1">
+            <span className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+              <Filter size={11} /> Filter aktif:
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--color-surface-subtle)] border border-[var(--color-border-light)] text-[var(--color-text-primary)]">
+              {filterStatus === 'unfilled'
+                ? 'Belum Diisi'
+                : filterStatus === 'completed'
+                ? 'Selesai'
+                : filterStatus === 'teacher_absent'
+                ? 'Jam Kosong'
+                : filterStatus === 'exempted'
+                ? 'Dikecualikan'
+                : filterStatus}
+              <button
+                type="button"
+                onClick={() => setFilterStatus('ALL')}
+                className="hover:text-[var(--color-danger-fg)] ml-0.5"
+                title="Hapus filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          </div>
         )}
 
         <SearchInput
@@ -318,13 +453,12 @@ export default function MonitoringPage() {
         />
       </div>
 
-      {/* Tab Content 1: Jurnal KBM */}
       {/* Tabel Jurnal KBM / Rekap Presensi */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="section-label">
             {activeTab === 'jurnal'
-              ? `Daftar Jurnal KBM (${totalItems})`
+              ? `Daftar Sesi KBM (${totalItems})`
               : `Rekapitulasi Presensi (${totalItems})`}
           </span>
         </div>
@@ -353,8 +487,14 @@ export default function MonitoringPage() {
             empty={
               activeTab === 'jurnal' ? (
                 <EmptyState
-                  title="Tidak Ada Jurnal"
-                  message={`Belum ada sesi KBM yang tercatat pada tanggal ${formatDateIndo(selectedDate)}.`}
+                  title={filterStatus !== 'ALL' ? 'Tidak Ada Sesi yang Cocok' : 'Tidak Ada Sesi KBM'}
+                  message={
+                    filterStatus === 'unfilled'
+                      ? 'Semua sesi KBM telah diisi jurnalnya.'
+                      : filterStatus !== 'ALL'
+                      ? `Tidak ditemukan sesi KBM dengan status "${filterStatus}" untuk kriteria ini.`
+                      : `Belum ada sesi KBM yang tercatat pada tanggal ${formatDateIndo(selectedDate)}.`
+                  }
                 />
               ) : (
                 <EmptyState
@@ -368,34 +508,64 @@ export default function MonitoringPage() {
 
               if (activeTab === 'jurnal') {
                 const j = item;
-                const isCompleted = j.status === 'completed';
-                const isTeacherAbsent = j.status === 'teacher_absent';
+                const status = j.status;
+                const isCompleted = status === 'completed';
+                const isTeacherAbsent = status === 'teacher_absent';
+                const isExempted = status === 'exempted';
+                const isUnfilled = status === 'unfilled';
                 const photoUrl = j.photo_url || j.photo_path;
-                const statusLabel = isCompleted
-                  ? 'Selesai'
-                  : j.status === 'ongoing'
-                  ? 'Berjalan'
-                  : isTeacherAbsent
-                  ? 'Guru berhalangan'
-                  : j.status;
+
+                const jp = j.period_number ?? j.schedule?.period_number ?? 1;
+                const subjectName = j.subject_name || j.schedule?.subject?.name || 'Mata Pelajaran';
+                const className = j.class_name || j.schedule?.school_class?.name || 'Rombel';
+                const teacherName = j.teacher_name || j.schedule?.teacher?.name || 'Guru Pengampu';
+
+                let statusLabel = 'Berjalan';
+                let badgeVariant = 'neutral';
+
+                if (isCompleted) {
+                  statusLabel = 'Selesai';
+                  badgeVariant = 'success';
+                } else if (isTeacherAbsent) {
+                  statusLabel = 'Jam Kosong';
+                  badgeVariant = 'danger';
+                } else if (isExempted) {
+                  statusLabel = 'Dikecualikan';
+                  badgeVariant = 'warning';
+                } else if (isUnfilled) {
+                  statusLabel = 'Belum Diisi';
+                  badgeVariant = 'warning';
+                }
 
                 return (
-                  <tr key={j.id}>
+                  <tr key={j.id || `sched-${j.schedule_id}-${index}`}>
                     <td className="data-table__no">
-                      <span className="data-table__mono">{j.schedule?.period_number || 1}</span>
+                      <span className="data-table__mono">{jp}</span>
                     </td>
                     <td>
-                      <span className="data-table__cell-title">
-                        {j.schedule?.subject?.name || 'Mata Pelajaran'}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="data-table__cell-title">{subjectName}</span>
+                        <Badge variant={badgeVariant} size="sm">
+                          {statusLabel}
+                        </Badge>
+                      </div>
                       <span className="data-table__cell-sub">
-                        {j.schedule?.school_class?.name || 'Rombel'} ·{' '}
-                        {j.schedule?.teacher?.name || 'Guru Pengampu'}
+                        {className} · {teacherName}
+                        {j.substitute_teacher_name && (
+                          <span className="text-amber-500 font-medium"> (Pengganti: {j.substitute_teacher_name})</span>
+                        )}
                       </span>
-                      <span className="data-table__cell-meta">
-                        {statusLabel}
-                        {j.topic_description ? ` · ${j.topic_description}` : ''}
-                      </span>
+                      {j.topic_description ? (
+                        <span className="data-table__cell-meta">{j.topic_description}</span>
+                      ) : isExempted ? (
+                        <span className="data-table__cell-meta text-amber-500">
+                          Agenda: {j.exemption_reason || 'Kegiatan Sekolah'}
+                        </span>
+                      ) : isUnfilled ? (
+                        <span className="data-table__cell-meta text-amber-500/80 italic">
+                          Jurnal belum diisi oleh guru pengampu
+                        </span>
+                      ) : null}
                     </td>
                     <td>
                       <div className="data-table__actions">
@@ -405,21 +575,20 @@ export default function MonitoringPage() {
                             className="data-table__action"
                             onClick={() => {
                               setPreviewPhotoUrl(getStorageUrl(photoUrl));
-                              setPreviewPhotoTitle(
-                                `${j.schedule?.school_class?.name} - ${j.schedule?.subject?.name}`
-                              );
+                              setPreviewPhotoTitle(`${className} - ${subjectName}`);
                             }}
                             aria-label="Lihat foto bukti KBM"
                           >
                             <Eye size={13} />
                           </button>
                         )}
-                        {canMarkAbsent && !isCompleted && !isTeacherAbsent && (
+                        {canMarkAbsent && !isCompleted && !isTeacherAbsent && !isExempted && (
                           <button
                             type="button"
-                            disabled={markingAbsentId === j.id}
-                            onClick={() => handleMarkTeacherAbsent(j.id)}
+                            disabled={markingAbsentId === (j.journal_id || j.schedule_id || j.id)}
+                            onClick={() => handleMarkTeacherAbsent(j)}
                             className="data-table__action data-table__action--danger"
+                            title="Tandai Jam Kosong"
                             aria-label="Tandai jam kosong"
                           >
                             <AlertTriangle size={13} />

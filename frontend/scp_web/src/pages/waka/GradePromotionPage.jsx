@@ -15,6 +15,7 @@ import {
   Modal,
   Badge,
   ConfirmDialog,
+  useToast,
 } from '../../components/shared';
 import { SkeletonRow, EmptyState, ErrorState, LoadingOverlay } from '../../components/feedback';
 import { classApi, studentApi } from '../../services/masterDataApi';
@@ -78,6 +79,7 @@ export function getRecommendedTargetClass(cls, classList) {
 }
 
 export default function GradePromotionPage() {
+  const { toast } = useToast();
   const [classList, setClassList] = useState([]);
   const [studentList, setStudentList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -212,8 +214,9 @@ export default function GradePromotionPage() {
         next_class_id: nextId,
       };
       await classApi.updateClass(sourceClass.id, payload);
+      toast.success(`Rombel tujuan ${sourceClass.name} berhasil diperbarui.`);
     } catch (err) {
-      alert(err?.response?.data?.message || err?.message || 'Gagal memperbarui rombel tujuan.');
+      toast.error(err?.response?.data?.message || err?.message || 'Gagal memperbarui rombel tujuan.');
       await handleRefresh();
     } finally {
       setSavingClassId(null);
@@ -232,9 +235,9 @@ export default function GradePromotionPage() {
       } else {
         await handleRefresh();
       }
-      alert(resultData?.message || 'Seluruh pemetaan rombel berhasil disimpan secara otomatis.');
+      toast.success(resultData?.message || 'Seluruh pemetaan rombel berhasil disimpan secara otomatis.');
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal menyimpan pemetaan otomatis rombel.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal menyimpan pemetaan otomatis rombel.');
     } finally {
       setIsAutoMapping(false);
     }
@@ -285,8 +288,13 @@ export default function GradePromotionPage() {
       setStudentList((prev) =>
         prev.map((s) => (s.id === studentId ? { ...s, is_held_back: newStatus } : s))
       );
+      toast.success(
+        newStatus
+          ? `Siswa ${student.name || ''} ditandai Tinggal Kelas.`
+          : `Status Tinggal Kelas untuk ${student.name || ''} dibatalkan (Naik Kelas).`
+      );
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal mengubah status tinggal kelas siswa.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal mengubah status tinggal kelas siswa.');
     } finally {
       setHoldingBackStudentId(null);
     }
@@ -304,6 +312,7 @@ export default function GradePromotionPage() {
 
       setPromotionResult(resultData);
       setIsConfirmModalOpen(false);
+      toast.success('Proses kenaikan kelas massal berhasil dieksekusi!');
       // Reload updated student list
       await handleRefresh();
     } catch (err) {
@@ -311,7 +320,7 @@ export default function GradePromotionPage() {
         err.response?.data?.message ||
         err.message ||
         'Gagal mengeksekusi kenaikan kelas massal. Silakan periksa koneksi server.';
-      alert(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsExecuting(false);
     }

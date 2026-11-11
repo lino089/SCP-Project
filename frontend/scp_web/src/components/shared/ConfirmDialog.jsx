@@ -9,6 +9,7 @@ import './ConfirmDialog.css';
 export default function ConfirmDialog({
   isOpen = false,
   onClose,
+  onCancel,
   onConfirm,
   title = 'Konfirmasi Tindakan',
   message = 'Apakah Anda yakin ingin melanjutkan tindakan ini?',
@@ -18,11 +19,12 @@ export default function ConfirmDialog({
   loading = false,
   children = null,
 }) {
+  const handleCancel = onClose || onCancel;
   const Icon = confirmVariant === 'danger' ? AlertCircle : HelpCircle;
 
   const footer = (
     <>
-      <Button variant="secondary" onClick={onClose} disabled={loading}>
+      <Button variant="secondary" onClick={handleCancel} disabled={loading}>
         {cancelLabel}
       </Button>
       <Button variant={confirmVariant} onClick={onConfirm} loading={loading}>
@@ -34,7 +36,7 @@ export default function ConfirmDialog({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleCancel}
       title={title}
       size="sm"
       footer={footer}

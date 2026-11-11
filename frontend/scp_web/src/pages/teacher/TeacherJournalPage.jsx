@@ -32,7 +32,7 @@ import { getStorageUrl } from '../../utils/formatters';
 import { unwrapList } from '../../utils/responseHelper';
 import { todayLocalISO, getJakartaDayInfo, getJakartaTimeString } from '../../utils/dateUtils';
 import { calculateSessionStatus } from '../../utils/sessionStatusHelper';
-import { Button, Badge } from '../../components/shared';
+import { Button, Badge, useToast, useConfirm } from '../../components/shared';
 import { ForbiddenState, EmptyState } from '../../components/feedback';
 import './TeacherJournal.css';
 
@@ -40,6 +40,8 @@ export default function TeacherJournalPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   // Jadwal yang dikirimkan via route state saat navigasi dari Kalender/Dashboard
   const passedSchedule = location.state?.schedule;
@@ -542,22 +544,25 @@ export default function TeacherJournalPage() {
   const handleMarkTeacherAbsent = async (targetSchedule) => {
     const s = targetSchedule || schedule;
     if (!s) return;
-    const confirm = window.confirm(
-      'Apakah Anda yakin ingin menandai sesi ini sebagai Guru Berhalangan Hadir (Jam Kosong)?'
-    );
-    if (!confirm) return;
+    const ok = await confirm({
+      title: 'Konfirmasi Guru Berhalangan Hadir',
+      message: 'Apakah Anda yakin ingin menandai sesi KBM ini sebagai Guru Berhalangan Hadir (Jam Kosong)? Status ini akan dicatat pada rekap kehadiran.',
+      confirmLabel: 'Ya, Tandai Jam Kosong',
+      confirmVariant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await journalApi.markTeacherAbsent(s.journal_id, {
         schedule_id: s.id,
       });
-      alert('Jadwal berhasil ditandai sebagai Guru Berhalangan Hadir (teacher_absent).');
+      toast.success('Jadwal berhasil ditandai sebagai Guru Berhalangan Hadir (teacher_absent).');
       loadTodaySchedules();
       setClassOpened(false);
       setSubmitted(false);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Gagal menandai status jam kosong.';
-      alert(msg);
+      toast.error(msg);
     }
   };
 

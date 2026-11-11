@@ -752,6 +752,7 @@ export default function DashboardWakaPage() {
             <Table
               columns={historyColumns}
               data={historyList}
+              pageSize={10}
               isLoading={isLoading}
               emptyMessage="Belum ada riwayat perubahan putaran jadwal."
             />

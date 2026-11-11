@@ -18,13 +18,14 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { leaveApi } from '../../services/leaveApi';
 import { getStorageUrl, formatDate } from '../../utils/formatters';
-import { Badge, Button, Modal, Table, SearchInput } from '../../components/shared';
+import { Badge, Button, Modal, Table, SearchInput, useToast } from '../../components/shared';
 import { EmptyState, ErrorState } from '../../components/feedback';
 import ForbiddenState from '../../components/feedback/ForbiddenState';
 import './TeacherLeaveApproval.css';
 
 export default function TeacherLeaveApprovalPage() {
   const { user, isKesiswaan } = useAuth();
+  const { toast } = useToast();
 
   // Wewenang Akses Halaman: Khusus Anggota Tim Kesiswaan
   const canAccess = useMemo(() => {
@@ -51,7 +52,6 @@ export default function TeacherLeaveApprovalPage() {
     item: null,
   });
   const [isProcessingAction, setIsProcessingAction] = useState(false);
-  const [successToast, setSuccessToast] = useState('');
 
   // Fetch daftar antrean verifikasi izin guru
   const fetchLeaveQueue = useCallback(async () => {
@@ -103,14 +103,13 @@ export default function TeacherLeaveApprovalPage() {
     setIsProcessingAction(true);
     try {
       await leaveApi.approveTeacherLeaveRequest(item.id);
-      setSuccessToast(
+      toast.success(
         `Permohonan izin ${item.teacher?.name || 'guru'} berhasil disetujui. Sesi KBM pengganti telah dibebankan ke Jurnal Mengajar Anda.`
       );
       setActionModal({ isOpen: false, type: null, item: null });
       fetchLeaveQueue();
-      setTimeout(() => setSuccessToast(''), 6000);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal menyetujui izin mengajar guru.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal menyetujui izin mengajar guru.');
     } finally {
       setIsProcessingAction(false);
     }
@@ -124,12 +123,11 @@ export default function TeacherLeaveApprovalPage() {
     setIsProcessingAction(true);
     try {
       await leaveApi.rejectTeacherLeaveRequest(item.id);
-      setSuccessToast(`Permohonan izin ${item.teacher?.name || 'guru'} telah ditolak.`);
+      toast.success(`Permohonan izin ${item.teacher?.name || 'guru'} telah ditolak.`);
       setActionModal({ isOpen: false, type: null, item: null });
       fetchLeaveQueue();
-      setTimeout(() => setSuccessToast(''), 5000);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Gagal menolak izin mengajar guru.');
+      toast.error(err.response?.data?.message || err.message || 'Gagal menolak izin mengajar guru.');
     } finally {
       setIsProcessingAction(false);
     }
@@ -381,13 +379,7 @@ export default function TeacherLeaveApprovalPage() {
         </div>
       </div>
 
-      {/* Banner Notifikasi Keberhasilan */}
-      {successToast && (
-        <div className="teacher-approval-banner teacher-approval-banner--success">
-          <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
-          <span className="font-medium text-emerald-900">{successToast}</span>
-        </div>
-      )}
+
 
       {/* Banner Penjelasan Pembebanan Jurnal */}
       <div className="teacher-approval-banner teacher-approval-banner--info">
@@ -537,7 +529,7 @@ export default function TeacherLeaveApprovalPage() {
             />
           </div>
         ) : (
-          <Table columns={columns} data={filteredLeaves} />
+          <Table columns={columns} data={filteredLeaves} pageSize={10} />
         )}
       </div>
 

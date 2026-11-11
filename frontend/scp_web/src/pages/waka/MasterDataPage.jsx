@@ -28,6 +28,7 @@ import {
   ConfirmDialog,
   FileUpload,
   PasswordModal,
+  useToast,
 } from '../../components/shared';
 import { SkeletonRow, EmptyState, ErrorState } from '../../components/feedback';
 import { authApi } from '../../services/api';
@@ -50,6 +51,7 @@ import './MasterData.css';
 
 export default function MasterDataPage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('kelas');
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState('ALL');
@@ -337,8 +339,9 @@ export default function MasterDataPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Template Excel guru berhasil diunduh.');
     } catch (err) {
-      alert('Gagal mengunduh template Excel guru: ' + (err.message || 'Terjadi kesalahan'));
+      toast.error('Gagal mengunduh template Excel guru: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setTeacherDownloadingTemplate(false);
     }
@@ -356,8 +359,9 @@ export default function MasterDataPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Template Excel siswa berhasil diunduh.');
     } catch (err) {
-      alert('Gagal mengunduh template Excel siswa: ' + (err.message || 'Terjadi kesalahan'));
+      toast.error('Gagal mengunduh template Excel siswa: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setStudentDownloadingTemplate(false);
     }
@@ -905,8 +909,9 @@ export default function MasterDataPage() {
         return next;
       });
       refreshSummary();
+      toast.success('Data berhasil dipulihkan dari Recycle Bin.');
     } catch (err) {
-      alert(err?.response?.data?.message || err?.message || 'Gagal memulihkan data.');
+      toast.error(err?.response?.data?.message || err?.message || 'Gagal memulihkan data.');
     } finally {
       setIsRestoring(false);
     }
@@ -947,8 +952,9 @@ export default function MasterDataPage() {
           ? { ...prev, assignments: [...(prev.assignments || []), newAssignment] }
           : prev
       );
+      toast.success('Penugasan guru berhasil ditambahkan.');
     } catch (err) {
-      alert(err.message || err.response?.data?.message || 'Gagal menambahkan penugasan guru.');
+      toast.error(err.message || err.response?.data?.message || 'Gagal menambahkan penugasan guru.');
     }
   };
 
@@ -1329,7 +1335,7 @@ export default function MasterDataPage() {
           setPendingPasswordAction(null);
           refreshSummary();
           handleRefresh();
-          alert(res.message || 'Seluruh Master Data berhasil di-reset.');
+          toast.success(res.message || 'Seluruh Master Data berhasil di-reset.');
         } catch (apiErr) {
           if (apiErr.status === 409) {
             setPasswordModalError(
