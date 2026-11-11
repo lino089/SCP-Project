@@ -181,14 +181,25 @@ class UpdaterService {
   }
 
   /**
-   * Terapkan bundle sekarang dan reload aplikasi langsung
+   * Terapkan bundle sekarang dan reload aplikasi langsung.
+   * Menggunakan CapacitorUpdater.reload() yang otomatis menerapkan next bundle terantre.
    */
   async reloadImmediately(bundleId) {
     if (!this.isNative) {
       window.location.reload();
       return;
     }
-    await CapacitorUpdater.set({ id: bundleId });
+    // Jika bundleId spesifik diberikan (ID internal acak Capgo, bukan nomor versi semver)
+    if (bundleId && typeof bundleId === 'string' && !bundleId.includes('.')) {
+      try {
+        await CapacitorUpdater.set({ id: bundleId });
+        return;
+      } catch (err) {
+        console.warn('[UpdaterService] set({ id }) fallback ke reload():', err);
+      }
+    }
+    // Panggil reload() resmi Capgo untuk langsung menerapkan bundle yang sudah di-queue via next()
+    await CapacitorUpdater.reload();
   }
 
   /**

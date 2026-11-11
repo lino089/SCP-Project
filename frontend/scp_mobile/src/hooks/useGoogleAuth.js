@@ -81,7 +81,8 @@ export function useGoogleAuth(legacyOptions = {}) {
         const response = await SocialLogin.login({
           provider: 'google',
           options: {
-            scopes: ['email', 'profile'],
+            style: 'bottom',
+            filterByAuthorizedAccounts: false,
           },
         });
 
@@ -94,11 +95,40 @@ export function useGoogleAuth(legacyOptions = {}) {
         throw new Error('Gunakan renderGoogleButton untuk platform web.');
       }
     } catch (err) {
-      if (err?.code === 'USER_CANCELLED' || err?.message?.toLowerCase().includes('cancel')) {
+      const errMsg = String(err?.message || err || '');
+      if (
+        err?.code === 'USER_CANCELLED' ||
+        errMsg.toLowerCase().includes('cancel') ||
+        errMsg.toLowerCase().includes('batal')
+      ) {
         const cancelErr = new Error('Login Google dibatalkan oleh pengguna.');
         cancelErr.code = 'USER_CANCELLED';
         throw cancelErr;
       }
+
+      if (
+        errMsg.includes('28444') ||
+        errMsg.includes('Developer console is not set up correctly') ||
+        errMsg.includes('10:')
+      ) {
+        const devErr = new Error(
+          'Konfigurasi Google Cloud belum lengkap (SHA-1 atau Package ID belum cocok). Silakan periksa kredensial Android di Google Cloud Console.'
+        );
+        devErr.code = 'DEV_CONSOLE_MISCONFIGURED';
+        throw devErr;
+      }
+
+      if (
+        errMsg.includes('NoCredentialException') ||
+        errMsg.includes('No credentials available')
+      ) {
+        const noCredErr = new Error(
+          'Tidak ada akun Google yang tersedia pada perangkat ini. Silakan tambahkan akun Google terlebih dahulu.'
+        );
+        noCredErr.code = 'NO_CREDENTIALS';
+        throw noCredErr;
+      }
+
       console.error('[useGoogleAuth] signInWithGoogle error:', err);
       throw err;
     } finally {
@@ -146,7 +176,7 @@ export function useGoogleAuth(legacyOptions = {}) {
             ? 'Lanjutkan dengan Google'
             : 'Tautkan Akun Google';
 
-        btn.innerHTML = `
+        const defaultButtonHtml = `
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -156,20 +186,38 @@ export function useGoogleAuth(legacyOptions = {}) {
           <span class="truncate">${labelText}</span>
         `;
 
+        btn.innerHTML = defaultButtonHtml;
+
         btn.onclick = async (e) => {
           e.preventDefault();
+          if (btn.disabled) return;
+
           btn.disabled = true;
           btn.style.opacity = '0.7';
+          btn.innerHTML = `
+            <svg class="w-4 h-4 shrink-0 animate-spin text-gray-600" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span class="truncate">Menghubungkan ke Google…</span>
+          `;
+
           try {
             const idToken = await signInWithGoogle();
             if (idToken) {
               onSuccess?.(idToken);
             }
           } catch (err) {
-            if (err?.code !== 'USER_CANCELLED' && !err?.message?.toLowerCase().includes('cancel')) {
+            const isCancelled =
+              err?.code === 'USER_CANCELLED' ||
+              String(err?.message || '').toLowerCase().includes('cancel') ||
+              String(err?.message || '').toLowerCase().includes('batal');
+
+            if (!isCancelled) {
               onError?.(err);
             }
           } finally {
+            btn.innerHTML = defaultButtonHtml;
             btn.disabled = false;
             btn.style.opacity = '1';
           }

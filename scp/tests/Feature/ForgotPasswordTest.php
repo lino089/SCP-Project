@@ -250,4 +250,86 @@ class ForgotPasswordTest extends TestCase
                 'success' => true,
             ]);
     }
+
+    /**
+     * Test 5: Pemulihan Kata Sandi Menggunakan Saluran WhatsApp OTP
+     */
+    public function test_forgot_password_via_whatsapp_channel(): void
+    {
+        $userWa = User::create([
+            'name' => 'Rina Wahyuni',
+            'role' => 'teacher',
+            'nis_nip' => '199002022015022002',
+            'phone_number' => '081298765432',
+            'phone_verified_at' => now(),
+            'password' => Hash::make('PasswordLama123!'),
+            'is_active' => true,
+        ]);
+
+        // 1. Check Identity mendeteksi nomor WhatsApp
+        $resCheck = $this->postJson('/api/auth/forgot-password/check-identity', [
+            'identifier' => '081298765432',
+        ]);
+        $resCheck->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'has_channel' => true,
+                    'has_phone' => true,
+                    'available_channels' => ['whatsapp'],
+                    'default_channel' => 'whatsapp',
+                ],
+            ]);
+
+        // 2. Request OTP via WhatsApp
+        $resSend = $this->postJson('/api/auth/forgot-password/send-otp', [
+            'identifier' => '199002022015022002',
+            'channel' => 'whatsapp',
+        ]);
+        $resSend->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'channel' => 'whatsapp',
+                ],
+            ]);
+
+        $otp = PasswordResetOtp::where('user_id', $userWa->id)
+            ->where('channel', 'whatsapp')
+            ->first();
+        $this->assertNotNull($otp);
+
+        // 3. Verifikasi OTP WhatsApp
+        // Set fixed code
+        $code = '654321';
+        $otp->update(['code_hash' => hash('sha256', $code)]);
+
+        $resVerify = $this->postJson('/api/auth/forgot-password/verify-otp', [
+            'identifier' => '081298765432',
+            'code' => $code,
+        ]);
+        $resVerify->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => ['reset_token'],
+            ]);
+
+        $resetToken = $resVerify->json('data.reset_token');
+
+        // 4. Reset password dengan token
+        $resReset = $this->postJson('/api/auth/forgot-password/reset-password', [
+            'identifier' => '081298765432',
+            'reset_token' => $resetToken,
+            'new_password' => 'PasswordBaruWa123!',
+            'new_password_confirmation' => 'PasswordBaruWa123!',
+        ]);
+        $resReset->assertStatus(200);
+
+        // 5. Cek login dengan password baru
+        $resLogin = $this->postJson('/api/login', [
+            'username' => '081298765432',
+            'password' => 'PasswordBaruWa123!',
+            'device_name' => 'Test Phone',
+        ]);
+        $resLogin->assertStatus(200);
+    }
 }

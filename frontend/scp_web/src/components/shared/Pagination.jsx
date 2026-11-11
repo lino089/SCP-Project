@@ -10,10 +10,12 @@ export default function Pagination({
   totalItems = 0,
   perPage = 10,
   onPageChange,
+  perPageOptions = [10, 25, 50, 100],
+  onPerPageChange,
   disabled = false,
   className = '',
 }) {
-  if (totalItems <= 0 && totalPages <= 1) return null;
+  if (totalItems <= 0 && totalPages <= 1 && !onPerPageChange) return null;
 
   const startRecord = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
   const endRecord = Math.min(totalItems, currentPage * perPage);
@@ -21,6 +23,13 @@ export default function Pagination({
   const handleSelect = (page) => {
     if (disabled || page < 1 || page > totalPages || page === currentPage) return;
     onPageChange?.(page);
+  };
+
+  const handlePerPageSelect = (e) => {
+    const val = Number(e.target.value);
+    if (disabled || val === perPage) return;
+    onPerPageChange?.(val);
+    onPageChange?.(1);
   };
 
   const getPageNumbers = () => {
@@ -41,13 +50,34 @@ export default function Pagination({
 
   return (
     <div className={`pagination-container ${className}`.trim()}>
-      <span className="pagination-info">
-        Menampilkan{' '}
-        <span className="font-mono text-gray-900 font-medium">
-          {String(startRecord).padStart(2, '0')}-{String(endRecord).padStart(2, '0')}
-        </span>{' '}
-        dari <span className="font-mono text-gray-900 font-medium">{totalItems}</span> data
-      </span>
+      <div className="pagination-left">
+        <span className="pagination-info">
+          Menampilkan{' '}
+          <span className="font-mono text-gray-900 font-medium">
+            {totalItems === 0 ? '0' : `${String(startRecord).padStart(2, '0')}-${String(endRecord).padStart(2, '0')}`}
+          </span>{' '}
+          dari <span className="font-mono text-gray-900 font-medium">{totalItems}</span> data
+        </span>
+
+        {onPerPageChange && (
+          <div className="pagination-per-page">
+            <span className="pagination-per-page__label">Tampilkan:</span>
+            <select
+              value={perPage}
+              onChange={handlePerPageSelect}
+              disabled={disabled}
+              className="pagination-per-page__select"
+              aria-label="Pilih jumlah baris per halaman"
+            >
+              {perPageOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt} data / hal
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {totalPages > 1 && (
         <div className="pagination-controls">

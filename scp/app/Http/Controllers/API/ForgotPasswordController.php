@@ -50,47 +50,70 @@ class ForgotPasswordController extends Controller
 
         $hasEmail = !empty($user->email);
         $maskedEmail = PasswordResetOtpService::maskEmail($user->email);
+        $hasPhone = !empty($user->phone_number);
+        $maskedPhone = PasswordResetOtpService::maskPhoneNumber($user->phone_number);
+        $isPhoneVerified = !empty($user->phone_verified_at);
 
-        if (!$hasEmail) {
+        $channels = [];
+        if ($hasPhone) {
+            $channels[] = 'whatsapp';
+        }
+        if ($hasEmail) {
+            $channels[] = 'email';
+        }
+
+        if (empty($channels)) {
             return response()->json([
                 'success' => true,
-                'message' => 'Akun terdaftar, namun belum memiliki alamat email yang tertaut.',
+                'message' => 'Akun terdaftar, namun belum memiliki email maupun nomor WhatsApp yang tertaut.',
                 'data' => [
                     'identifier' => $identifier,
                     'user_name' => $user->name,
                     'role' => $user->role,
+                    'has_channel' => false,
                     'has_email' => false,
                     'masked_email' => null,
-                    'guidance' => 'Akun Anda belum memiliki alamat email yang tertaut di sistem untuk pengiriman kode OTP. Silakan hubungi pihak Waka Kurikulum atau Administrator sekolah di ruang kurikulum untuk mereset kata sandi Anda secara manual.',
+                    'has_phone' => false,
+                    'masked_phone' => null,
+                    'is_phone_verified' => false,
+                    'available_channels' => [],
+                    'guidance' => 'Akun Anda belum memiliki alamat email maupun nomor WhatsApp yang tertaut di sistem untuk pengiriman kode OTP. Silakan hubungi pihak Waka Kurikulum atau Administrator sekolah di ruang kurikulum untuk mereset kata sandi Anda secara manual.',
                 ],
             ], 200);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Identitas akun terverifikasi. Email pemulihan tersedia.',
+            'message' => 'Identitas akun terverifikasi. Saluran pemulihan tersedia.',
             'data' => [
                 'identifier' => $identifier,
                 'user_name' => $user->name,
                 'role' => $user->role,
-                'has_email' => true,
+                'has_channel' => true,
+                'has_email' => $hasEmail,
                 'masked_email' => $maskedEmail,
+                'has_phone' => $hasPhone,
+                'masked_phone' => $maskedPhone,
+                'is_phone_verified' => $isPhoneVerified,
+                'available_channels' => $channels,
+                'default_channel' => in_array('whatsapp', $channels) ? 'whatsapp' : 'email',
             ],
         ], 200);
     }
 
     /**
-     * Mengirimkan kode OTP 6-digit ke alamat email akun
+     * Mengirimkan kode OTP 6-digit ke alamat email atau nomor WhatsApp akun
      * POST /api/auth/forgot-password/send-otp
      */
     public function sendOtp(Request $request): JsonResponse
     {
         $request->validate([
             'identifier' => 'required|string',
-            'channel' => 'nullable|string|in:email',
+            'channel' => 'nullable|string|in:email,whatsapp',
         ]);
 
         $identifier = trim((string) $request->input('identifier'));
+        $channel = $request->input('channel');
         $user = $this->otpService->findUserByIdentifier($identifier);
 
         if (!$user) {
@@ -107,7 +130,14 @@ class ForgotPasswordController extends Controller
             ], 403);
         }
 
-        $result = $this->otpService->sendEmailOtp($user, $identifier);
+        // Tentukan channel default jika tidak disediakan
+        if (!$channel) {
+            $channel = !empty($user->phone_number) ? 'whatsapp' : 'email';
+        }
+
+        $result = $channel === 'whatsapp'
+            ? $this->otpService->sendWhatsAppOtp($user, $identifier)
+            : $this->otpService->sendEmailOtp($user, $identifier);
 
         if (!$result['success']) {
             if ($result['status'] === 'cooldown_active') {
@@ -118,7 +148,7 @@ class ForgotPasswordController extends Controller
                 ], 429);
             }
 
-            if ($result['status'] === 'no_email') {
+            if ($result['status'] === 'no_email' || $result['status'] === 'no_phone') {
                 return response()->json([
                     'success' => false,
                     'message' => $result['message'],
@@ -135,6 +165,7 @@ class ForgotPasswordController extends Controller
             'success' => true,
             'message' => $result['message'],
             'data' => [
+                'channel' => $result['channel'] ?? $channel,
                 'target_masked' => $result['target_masked'],
                 'expires_in_seconds' => $result['expires_in_seconds'],
                 'cooldown_seconds' => $result['cooldown_seconds'],

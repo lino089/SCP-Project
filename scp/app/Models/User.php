@@ -31,6 +31,7 @@ use Laravel\Sanctum\HasApiTokens;
     'google_email',
     'google_linked_at',
     'phone_number',
+    'phone_verified_at',
     'graduation_date',
     'is_held_back',
     'subject_id',
@@ -58,6 +59,7 @@ class User extends Authenticatable
             'student_number' => 'integer',
             'is_held_back' => 'boolean',
             'is_active' => 'boolean',
+            'phone_verified_at' => 'datetime',
             'google_linked_at' => 'datetime',
             'archived_at' => 'datetime',
         ];

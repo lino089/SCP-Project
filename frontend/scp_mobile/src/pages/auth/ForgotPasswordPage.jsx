@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  Phone,
 } from 'lucide-react';
 import { Button, Input, Badge } from '../../components/shared';
 import forgotPasswordApi from '../../services/forgotPasswordApi';
@@ -34,6 +35,7 @@ export default function ForgotPasswordPage() {
   // Form Inputs
   const [identifier, setIdentifier] = useState('');
   const [accountInfo, setAccountInfo] = useState(null);
+  const [selectedChannel, setSelectedChannel] = useState('whatsapp'); // 'whatsapp' | 'email'
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [resetToken, setResetToken] = useState(null);
   const [newPassword, setNewPassword] = useState('');
@@ -85,7 +87,7 @@ export default function ForgotPasswordPage() {
   const handleCheckIdentity = async (e) => {
     e?.preventDefault();
     if (!identifier.trim()) {
-      setErrorMessage('ID Pengguna, NIS, NIP, atau Email wajib diisi.');
+      setErrorMessage('ID | Email | No.WA wajib diisi.');
       return;
     }
 
@@ -97,7 +99,10 @@ export default function ForgotPasswordPage() {
       const data = res?.data || res;
       if (data) {
         setAccountInfo(data);
-        if (data.has_email) {
+        const hasChannel = data.has_channel ?? (data.has_email || data.has_phone);
+        if (hasChannel) {
+          const defaultCh = data.default_channel || (data.has_phone ? 'whatsapp' : 'email');
+          setSelectedChannel(defaultCh);
           setCurrentStep(STEPS.CONFIRM_SEND);
         } else {
           setCurrentStep(STEPS.NO_EMAIL);
@@ -106,7 +111,7 @@ export default function ForgotPasswordPage() {
     } catch (err) {
       setErrorMessage(
         err.message ||
-          'ID Pengguna tidak ditemukan. Silakan periksa kembali NIS, NIP, atau email Anda.'
+          'ID Pengguna tidak ditemukan. Silakan periksa kembali NIS, NIP, email, atau no. WhatsApp Anda.'
       );
     } finally {
       setIsLoading(false);
@@ -114,12 +119,12 @@ export default function ForgotPasswordPage() {
   };
 
   // Handler Step 2: Send OTP
-  const handleSendOtp = async () => {
+  const handleSendOtp = async (channelToUse = selectedChannel) => {
     setIsLoading(true);
     setErrorMessage('');
 
     try {
-      const res = await forgotPasswordApi.sendOtp(identifier.trim(), 'email');
+      const res = await forgotPasswordApi.sendOtp(identifier.trim(), channelToUse);
       const cooldownSec = res?.data?.cooldown_seconds || 60;
       setCooldown(cooldownSec);
       setCurrentStep(STEPS.INPUT_OTP);
@@ -132,7 +137,7 @@ export default function ForgotPasswordPage() {
         setCooldown(err.data?.cooldown_remaining || 60);
       }
       setErrorMessage(
-        err.message || 'Gagal mengirim kode verifikasi ke email. Coba lagi nanti.'
+        err.message || 'Gagal mengirim kode verifikasi OTP. Coba lagi nanti.'
       );
     } finally {
       setIsLoading(false);
@@ -322,8 +327,8 @@ export default function ForgotPasswordPage() {
 
               <Input
                 id="forgot-identifier"
-                label="ID Pengguna / NIS / NIP / Email"
-                placeholder="Contoh: 10245 atau budi@smkn1bantul.sch.id"
+                label="ID | Email | No.WA"
+                placeholder="NIS, NIP, Email, atau No. WhatsApp"
                 value={identifier}
                 onChange={(e) => {
                   setIdentifier(e.target.value);
@@ -347,7 +352,7 @@ export default function ForgotPasswordPage() {
             </form>
           )}
 
-          {/* STEP 2.5: Akun Tidak Memiliki Email */}
+          {/* STEP 2.5: Akun Tidak Memiliki Saluran Pemulihan */}
           {currentStep === STEPS.NO_EMAIL && accountInfo && (
             <div className="space-y-4">
               <div className="w-12 h-12 rounded-full bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] text-[var(--color-warning-fg)] flex items-center justify-center mx-auto">
@@ -356,10 +361,10 @@ export default function ForgotPasswordPage() {
 
               <div className="text-center space-y-1">
                 <h2 className="text-base font-bold text-[var(--color-text-primary)]">
-                  Email Pemulihan Belum Tertaut
+                  Saluran Pemulihan Belum Tertaut
                 </h2>
                 <p className="text-xs text-[var(--color-text-secondary)]">
-                  Akun atas nama <strong className="text-[var(--color-text-primary)]">{accountInfo.user_name}</strong> terdaftar, namun belum memiliki alamat email tertaut untuk pengiriman kode OTP.
+                  Akun atas nama <strong className="text-[var(--color-text-primary)]">{accountInfo.user_name}</strong> terdaftar, namun belum memiliki nomor WhatsApp maupun email yang tertaut untuk menerima kode OTP.
                 </p>
               </div>
 
@@ -394,18 +399,73 @@ export default function ForgotPasswordPage() {
                   Kirim Kode OTP
                 </h1>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
-                  Akun ditemukan. Kode OTP 6-digit akan dikirimkan ke alamat email pemulihan terdaftar.
+                  Akun ditemukan. Pilih saluran pengiriman kode OTP verifikasi untuk pemulihan kata sandi.
                 </p>
               </div>
 
-              <div className="p-3.5 bg-[var(--color-bg-app)] border border-[var(--color-border-subtle)] rounded-[10px] space-y-2">
-                <div className="flex justify-between items-center text-xs">
+              <div className="p-3.5 bg-[var(--color-bg-app)] border border-[var(--color-border-subtle)] rounded-[10px] space-y-3">
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-[var(--color-border-subtle)]">
                   <span className="text-[var(--color-text-secondary)]">Nama Pemilik Akun</span>
                   <span className="font-semibold text-[var(--color-text-primary)]">{accountInfo.user_name}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[var(--color-text-secondary)]">Tujuan Email</span>
-                  <span className="font-mono font-medium text-[var(--color-text-primary)]">{accountInfo.masked_email}</span>
+
+                <div className="space-y-2">
+                  <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider block">
+                    Pilih Saluran Verifikasi:
+                  </span>
+
+                  {accountInfo.has_phone && (
+                    <label
+                      className={`flex items-center justify-between p-3 rounded-[10px] border cursor-pointer transition ${
+                        selectedChannel === 'whatsapp'
+                          ? 'border-[var(--color-action)] bg-[var(--color-action-soft)]/20'
+                          : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="radio"
+                          name="mobileOtpChannel"
+                          value="whatsapp"
+                          checked={selectedChannel === 'whatsapp'}
+                          onChange={() => setSelectedChannel('whatsapp')}
+                          className="accent-[var(--color-action)]"
+                        />
+                        <Phone size={16} className="text-emerald-500 shrink-0" />
+                        <div>
+                          <div className="text-xs font-semibold text-[var(--color-text-primary)]">WhatsApp OTP</div>
+                          <div className="font-mono text-[11px] text-[var(--color-text-secondary)]">{accountInfo.masked_phone}</div>
+                        </div>
+                      </div>
+                      <Badge variant="success" size="sm">Rekomendasi</Badge>
+                    </label>
+                  )}
+
+                  {accountInfo.has_email && (
+                    <label
+                      className={`flex items-center justify-between p-3 rounded-[10px] border cursor-pointer transition ${
+                        selectedChannel === 'email'
+                          ? 'border-[var(--color-action)] bg-[var(--color-action-soft)]/20'
+                          : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="radio"
+                          name="mobileOtpChannel"
+                          value="email"
+                          checked={selectedChannel === 'email'}
+                          onChange={() => setSelectedChannel('email')}
+                          className="accent-[var(--color-action)]"
+                        />
+                        <Mail size={16} className="text-blue-500 shrink-0" />
+                        <div>
+                          <div className="text-xs font-semibold text-[var(--color-text-primary)]">Email Resmi</div>
+                          <div className="font-mono text-[11px] text-[var(--color-text-secondary)]">{accountInfo.masked_email}</div>
+                        </div>
+                      </div>
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -415,9 +475,11 @@ export default function ForgotPasswordPage() {
                 size="lg"
                 fullWidth
                 loading={isLoading}
-                onClick={handleSendOtp}
+                onClick={() => handleSendOtp(selectedChannel)}
+                className="flex items-center justify-center gap-2"
               >
-                Kirim Kode OTP ke Email
+                {selectedChannel === 'whatsapp' ? <Phone size={16} /> : <Mail size={16} />}
+                <span>Kirim Kode OTP ke {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
               </Button>
 
               <button
@@ -441,7 +503,10 @@ export default function ForgotPasswordPage() {
                   Verifikasi Kode OTP
                 </h1>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
-                  Masukkan 6 digit kode angka yang telah dikirim ke email pemulihan Anda.
+                  Masukkan 6 digit kode angka yang telah dikirim ke {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'email'} pemulihan:
+                  <strong className="block font-mono text-[var(--color-text-primary)] mt-0.5">
+                    {selectedChannel === 'whatsapp' ? accountInfo?.masked_phone : accountInfo?.masked_email}
+                  </strong>
                 </p>
               </div>
 
@@ -489,7 +554,7 @@ export default function ForgotPasswordPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={handleSendOtp}
+                    onClick={() => handleSendOtp(selectedChannel)}
                     disabled={isLoading}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] underline min-h-[36px]"
                   >

@@ -7,6 +7,7 @@ use App\Mail\VerifyEmailOtpMail;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\GoogleAuthService;
+use App\Services\PhoneAuthOtpService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,8 @@ class ProfileController extends Controller
 {
     public function __construct(
         protected WhatsAppService $whatsAppService,
-        protected GoogleAuthService $googleAuthService
+        protected GoogleAuthService $googleAuthService,
+        protected PhoneAuthOtpService $phoneAuthService
     ) {}
 
     /**
@@ -150,70 +152,32 @@ class ProfileController extends Controller
     public function requestPhoneOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone_number' => ['required', 'string', 'regex:/^(\+62|62|0)8[0-9]{7,11}$/'],
+            'phone_number' => ['required', 'string', 'min:9', 'max:20'],
         ], [
-            'phone_number.regex' => 'Format nomor WhatsApp tidak valid. Gunakan nomor Indonesia (misal: 08123456789 atau 628123456789).',
+            'phone_number.required' => 'Nomor WhatsApp wajib diisi.',
+            'phone_number.min' => 'Nomor WhatsApp minimal 9 digit.',
         ]);
 
         $user = $request->user();
-        $normalizedPhone = WhatsAppService::normalizeNumber($request->phone_number);
-        $dbPhone = User::normalizePhoneNumber($request->phone_number);
+        $result = $this->phoneAuthService->sendLinkingOtp(
+            $user,
+            $request->input('phone_number'),
+            $request->ip(),
+            $request->userAgent()
+        );
 
-        // Cek apakah nomor sudah digunakan user lain
-        if (User::where('phone_number', $dbPhone)->where('id', '!=', $user->id)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor WhatsApp sudah digunakan oleh pengguna lain.',
-                'errors' => [
-                    'phone_number' => ['Nomor WhatsApp sudah digunakan oleh pengguna lain.'],
-                ],
-            ], 422);
+        if (! $result['success']) {
+            $status = $result['status'] ?? 'error';
+            $httpCode = match ($status) {
+                'cooldown' => 429,
+                'invalid_number' => 422,
+                default => 500,
+            };
+
+            return response()->json($result, $httpCode);
         }
 
-        // Cooldown 1 menit per user
-        $recent = OtpCode::where('user_id', $user->id)
-            ->where('purpose', 'phone')
-            ->where('created_at', '>=', now()->subMinute())
-            ->first();
-
-        if ($recent) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Harap tunggu 1 menit sebelum meminta kode verifikasi WhatsApp baru.',
-            ], 429);
-        }
-
-        // Hapus kode OTP phone lama untuk user ini
-        OtpCode::where('user_id', $user->id)->where('purpose', 'phone')->delete();
-
-        $code = sprintf('%06d', random_int(100000, 999999));
-
-        OtpCode::create([
-            'user_id' => $user->id,
-            'target' => $normalizedPhone,
-            'code' => $code,
-            'purpose' => 'phone',
-            'expires_at' => now()->addMinutes(10),
-        ]);
-
-        $message = "[SCP SMKN 1 Bantul] Kode verifikasi WhatsApp Anda adalah: {$code}. Kode ini berlaku selama 10 menit. Jangan bagikan kode ini kepada siapa pun.";
-        $sent = $this->whatsAppService->sendMessage($normalizedPhone, $message);
-
-        if (! $sent['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengirim pesan WhatsApp. Pastikan nomor aktif atau coba lagi nanti.',
-            ], 500);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Kode verifikasi berhasil dikirim ke nomor WhatsApp Anda.',
-            'data' => [
-                'target' => $normalizedPhone,
-                'expires_in_minutes' => 10,
-            ],
-        ], 200);
+        return response()->json($result, 200);
     }
 
     /**
@@ -223,48 +187,82 @@ class ProfileController extends Controller
     public function verifyPhoneOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone_number' => 'required|string',
             'code' => 'required|string|size:6',
+            'session_token' => 'nullable|string',
+            'phone_number' => 'nullable|string',
+        ], [
+            'code.required' => 'Kode verifikasi 6 digit wajib diisi.',
+            'code.size' => 'Kode verifikasi harus tepat 6 digit.',
         ]);
 
         $user = $request->user();
-        $normalizedPhone = WhatsAppService::normalizeNumber($request->phone_number);
-        $dbPhone = User::normalizePhoneNumber($request->phone_number);
+        $sessionToken = $request->input('session_token');
 
-        $otp = OtpCode::where('user_id', $user->id)
-            ->where('purpose', 'phone')
-            ->where('target', $normalizedPhone)
-            ->where('code', $request->code)
-            ->first();
+        // Jika session_token tidak disertakan dari UI lama, cari session_token berdasarkan phone_number & user_id
+        if (! $sessionToken && $request->filled('phone_number')) {
+            $normalizedPhone = User::normalizePhoneNumber($request->input('phone_number'));
+            $latestOtp = \App\Models\PhoneAuthOtp::where('user_id', $user->id)
+                ->where('phone_number', $normalizedPhone)
+                ->where('purpose', 'link_phone')
+                ->latest()
+                ->first();
 
-        if (! $otp || $otp->isExpired()) {
+            if ($latestOtp) {
+                $sessionToken = $latestOtp->session_token;
+            }
+        }
+
+        if (! $sessionToken) {
             return response()->json([
                 'success' => false,
-                'message' => 'Kode verifikasi tidak valid atau telah kedaluwarsa.',
+                'message' => 'Sesi verifikasi tidak ditemukan. Silakan minta kode OTP baru.',
             ], 422);
         }
 
-        // Cek ulang ketersediaan nomor
-        if (User::where('phone_number', $dbPhone)->where('id', '!=', $user->id)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Nomor WhatsApp sudah digunakan oleh pengguna lain.',
-            ], 422);
+        $result = $this->phoneAuthService->verifyAndLinkPhone(
+            $user,
+            $sessionToken,
+            $request->input('code')
+        );
+
+        if (! $result['success']) {
+            $status = $result['status'] ?? 'error';
+            $httpCode = match ($status) {
+                'expired_or_invalid' => 422,
+                'max_attempts_exceeded' => 429,
+                'wrong_code' => 422,
+                default => 500,
+            };
+
+            return response()->json($result, $httpCode);
         }
 
-        $user->update([
-            'phone_number' => $normalizedPhone,
+        return response()->json($result, 200);
+    }
+
+    /**
+     * Melepas penautan nomor WhatsApp dengan konfirmasi kata sandi
+     * POST /api/me/phone/unlink
+     */
+    public function unlinkPhone(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+        ], [
+            'current_password.required' => 'Kata sandi saat ini wajib diisi untuk melepas nomor WhatsApp.',
         ]);
 
-        $otp->delete();
+        $user = $request->user();
+        $result = $this->phoneAuthService->unlinkPhone(
+            $user,
+            $request->input('current_password')
+        );
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Nomor WhatsApp berhasil diverifikasi dan ditautkan ke akun Anda.',
-            'data' => [
-                'user' => $user->fresh(),
-            ],
-        ], 200);
+        if (! $result['success']) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result, 200);
     }
 
     /**

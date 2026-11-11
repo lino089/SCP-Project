@@ -119,6 +119,13 @@ export const authApi = {
   verifyEmailOtp: (data) => api.post('/me/email/verify', data),
   requestPhoneOtp: (phone) => api.post('/me/phone', { phone_number: phone }),
   verifyPhoneOtp: (data) => api.post('/me/phone/verify', data),
+  unlinkPhone: (currentPassword) => api.post('/me/phone/unlink', { current_password: currentPassword }),
+  requestPhoneLoginOtp: (phoneNumber, deviceName) =>
+    api.post('/auth/phone/login-request', { phone_number: phoneNumber, device_name: deviceName }),
+  verifyPhoneLoginOtp: (sessionToken, code, deviceName) =>
+    api.post('/auth/phone/login-verify', { session_token: sessionToken, code, device_name: deviceName }),
+  selectAccountPhoneLogin: (selectionToken, userId, deviceName) =>
+    api.post('/auth/phone/login-select', { selection_token: selectionToken, user_id: userId, device_name: deviceName }),
   linkGoogle: (idToken) => api.post('/me/google-link', { id_token: idToken }),
   unlinkGoogle: (password) => api.post('/me/google-unlink', { password }),
 };

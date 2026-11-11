@@ -15,8 +15,11 @@ export default function Table({
   currentPage = null,
   totalPages = null,
   totalItems = null,
+  perPage = null,
+  perPageOptions = [10, 25, 50, 100],
   onPageChange = null,
-  pagination = null, // { currentPage, totalPages, totalItems, perPage, onPageChange }
+  onPerPageChange = null,
+  pagination = null, // { currentPage, totalPages, totalItems, perPage, onPageChange, perPageOptions, onPerPageChange }
   emptyMessage = 'Tidak ada data ditemukan.',
   emptyComponent = null,
   className = '',
@@ -31,10 +34,23 @@ export default function Table({
 }) {
   // Resolve pagination props whether passed individually or via pagination object
   const effOnPageChange = pagination?.onPageChange ?? onPageChange;
+  const effOnPerPageChange = pagination?.onPerPageChange ?? onPerPageChange;
+  const effPerPageOptions = pagination?.perPageOptions ?? perPageOptions ?? [10, 25, 50, 100];
   const isServerPaged = effOnPageChange !== null && (pagination?.totalPages ?? totalPages) !== null;
-  const isClientPaged = (pagination?.perPage ?? pageSize) && !isServerPaged;
+  const isClientPaged = Boolean((pagination?.perPage ?? perPage ?? pageSize) && !isServerPaged);
 
+  const initialPageSize = Number(pagination?.perPage ?? perPage ?? pageSize ?? 10);
+  const [internalPageSize, setInternalPageSize] = useState(initialPageSize);
   const [internalPage, setInternalPage] = useState(1);
+
+  // Sync internalPageSize if external pageSize/perPage prop changes
+  useEffect(() => {
+    const extSize = pagination?.perPage ?? perPage ?? pageSize;
+    if (extSize && Number(extSize) !== internalPageSize) {
+      setInternalPageSize(Number(extSize));
+    }
+  }, [pageSize, perPage, pagination?.perPage]);
+
   const activePage = isServerPaged
     ? (pagination?.currentPage ?? currentPage ?? 1)
     : internalPage;
@@ -43,7 +59,10 @@ export default function Table({
     ? (pagination?.totalItems ?? totalItems ?? data.length)
     : data.length;
 
-  const effectivePageSize = pagination?.perPage ?? pageSize ?? totalRecords ?? 10;
+  const effectivePageSize = isServerPaged
+    ? Number(pagination?.perPage ?? perPage ?? pageSize ?? 10)
+    : internalPageSize;
+
   const computedTotalPages = isServerPaged
     ? (pagination?.totalPages ?? totalPages ?? 1)
     : Math.max(1, Math.ceil(totalRecords / effectivePageSize));
@@ -62,6 +81,18 @@ export default function Table({
       effOnPageChange?.(page);
     } else {
       setInternalPage(page);
+    }
+  };
+
+  const handlePerPageSelect = (newSize) => {
+    const val = Number(newSize);
+    if (isServerPaged) {
+      effOnPerPageChange?.(val);
+      effOnPageChange?.(1);
+    } else {
+      setInternalPageSize(val);
+      setInternalPage(1);
+      effOnPerPageChange?.(val);
     }
   };
 
@@ -234,6 +265,8 @@ export default function Table({
           totalItems={totalRecords}
           perPage={effectivePageSize}
           onPageChange={handlePageSelect}
+          perPageOptions={effPerPageOptions}
+          onPerPageChange={(isServerPaged && !effOnPerPageChange) ? undefined : handlePerPageSelect}
         />
       )}
     </div>

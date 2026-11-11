@@ -60,6 +60,7 @@ export default function MasterDataPage() {
   const [subjectList, setSubjectList] = useState([]);
   const [teacherList, setTeacherList] = useState([]);
   const [studentList, setStudentList] = useState([]);
+  const [studentPerPage, setStudentPerPage] = useState(25);
   const [studentPagination, setStudentPagination] = useState({
     currentPage: 1,
     lastPage: 1,
@@ -238,13 +239,13 @@ export default function MasterDataPage() {
 
   // Fetch paginated students with server-side filtering & sorting
   const fetchStudents = useCallback(
-    async (page = 1, search = debouncedSearchQuery, level = levelFilter) => {
+    async (page = 1, search = debouncedSearchQuery, level = levelFilter, perPage = studentPerPage) => {
       setIsLoading(true);
       setFetchError(null);
       try {
         const params = {
           page,
-          per_page: 25,
+          per_page: perPage,
           status: 'active',
         };
         if (search) params.search = search;
@@ -262,7 +263,7 @@ export default function MasterDataPage() {
               currentPage: sRes.meta.current_page || 1,
               lastPage: sRes.meta.last_page || 1,
               total: sRes.meta.total || 0,
-              perPage: sRes.meta.per_page || 25,
+              perPage: sRes.meta.per_page || perPage,
             });
             setTabCounts((prev) => ({ ...prev, siswa: sRes.meta.total || 0 }));
           }
@@ -275,20 +276,28 @@ export default function MasterDataPage() {
         setIsLoading(false);
       }
     },
-    [debouncedSearchQuery, levelFilter, classList.length]
+    [debouncedSearchQuery, levelFilter, studentPerPage, classList.length]
   );
 
   // Load students whenever activeTab is siswa or filters change
   useEffect(() => {
     if (activeTab === 'siswa') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchStudents(1, debouncedSearchQuery, levelFilter);
+      fetchStudents(1, debouncedSearchQuery, levelFilter, studentPerPage);
     }
-  }, [activeTab, debouncedSearchQuery, levelFilter, fetchStudents]);
+  }, [activeTab, debouncedSearchQuery, levelFilter, fetchStudents, studentPerPage]);
 
   const handleStudentPageChange = useCallback(
     (page) => {
-      fetchStudents(page, debouncedSearchQuery, levelFilter);
+      fetchStudents(page, debouncedSearchQuery, levelFilter, studentPerPage);
+    },
+    [fetchStudents, debouncedSearchQuery, levelFilter, studentPerPage]
+  );
+
+  const handleStudentPerPageChange = useCallback(
+    (newPerPage) => {
+      setStudentPerPage(newPerPage);
+      fetchStudents(1, debouncedSearchQuery, levelFilter, newPerPage);
     },
     [fetchStudents, debouncedSearchQuery, levelFilter]
   );
@@ -309,11 +318,11 @@ export default function MasterDataPage() {
   const handleRefresh = useCallback(async () => {
     refreshSummary();
     if (activeTab === 'siswa') {
-      await fetchStudents(studentPagination.currentPage, debouncedSearchQuery, levelFilter);
+      await fetchStudents(studentPagination.currentPage, debouncedSearchQuery, levelFilter, studentPerPage);
     } else {
       await loadTabData(activeTab, true);
     }
-  }, [activeTab, loadTabData, refreshSummary, fetchStudents, studentPagination.currentPage, debouncedSearchQuery, levelFilter]);
+  }, [activeTab, loadTabData, refreshSummary, fetchStudents, studentPagination.currentPage, debouncedSearchQuery, levelFilter, studentPerPage]);
 
   // Template Download Handlers
   const handleDownloadTeacherTemplate = async () => {
@@ -1444,9 +1453,13 @@ export default function MasterDataPage() {
             renderCell: (r) => {
               const count = Number(r.students_count ?? 0);
               return (
-                <span className={`inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded font-semibold ${
-                  count > 0 ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-neutral-100 text-neutral-400'
-                }`}>
+                <span
+                  className={`inline-flex items-center gap-1 font-mono text-xs px-2.5 py-0.5 rounded font-semibold transition-colors ${
+                    count > 0
+                      ? 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/60 master-data-student-badge--active'
+                      : 'bg-neutral-100 text-neutral-400 border border-neutral-200 dark:bg-[#232327] dark:text-[#7C7C86] dark:border-[#2E2E33] master-data-student-badge--empty'
+                  }`}
+                >
                   {count} Siswa
                 </span>
               );
@@ -1931,9 +1944,9 @@ export default function MasterDataPage() {
         <>
           {/* Alumni Notice Banner for Siswa Tab */}
           {activeTab === 'siswa' && (
-            <div className="p-3.5 mb-4 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between text-xs text-sky-900">
+            <div className="p-3.5 mb-4 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between text-xs text-sky-900 dark:bg-sky-950/30 dark:border-sky-800/50 dark:text-sky-200">
               <div className="flex items-center gap-2">
-                <GraduationCap size={18} className="text-sky-600 shrink-0" />
+                <GraduationCap size={18} className="text-sky-600 dark:text-sky-400 shrink-0" />
                 <span>
                   Tabel ini hanya menampilkan peserta didik aktif. Siswa yang telah lulus secara otomatis dipindahkan ke menu Arsip Siswa.
                 </span>
@@ -1941,7 +1954,7 @@ export default function MasterDataPage() {
               <button
                 type="button"
                 onClick={() => navigate('/web/alumni')}
-                className="flex items-center gap-1 font-semibold text-sky-700 hover:text-sky-800 hover:underline shrink-0 ml-3"
+                className="flex items-center gap-1 font-semibold text-sky-700 hover:text-sky-800 hover:underline shrink-0 ml-3 dark:text-sky-300 dark:hover:text-sky-200"
               >
                 <span>Buka Arsip Siswa</span>
                 <ArrowRight size={13} />
@@ -2171,11 +2184,14 @@ export default function MasterDataPage() {
           <Table
             columns={columns}
             data={filteredData}
-            pageSize={25}
+            pageSize={activeTab === 'siswa' ? studentPerPage : 25}
+            perPage={activeTab === 'siswa' ? studentPerPage : undefined}
             currentPage={activeTab === 'siswa' ? studentPagination.currentPage : undefined}
             totalPages={activeTab === 'siswa' ? studentPagination.lastPage : undefined}
             totalItems={activeTab === 'siswa' ? studentPagination.total : undefined}
             onPageChange={activeTab === 'siswa' ? handleStudentPageChange : undefined}
+            onPerPageChange={activeTab === 'siswa' ? handleStudentPerPageChange : undefined}
+            perPageOptions={[10, 25, 50, 100]}
             selectable={activeTab === 'guru' || activeTab === 'siswa'}
             selectedRowKeys={currentSelectedIds}
             onSelectRow={handleSelectRow}

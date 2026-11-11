@@ -60,6 +60,7 @@ export default function AlumniPage() {
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedMajor, setSelectedMajor] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   // History detail modal state
   const [selectedStudentForHistory, setSelectedStudentForHistory] = useState(null);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -19,6 +19,7 @@ import {
   Select,
   StatCard,
   ProgressBar,
+  Pagination,
 } from '../../components/shared';
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
 import { masterDataSummaryApi } from '../../services/masterDataApi';
@@ -54,6 +55,25 @@ export default function DashboardWakaPage() {
   const [missingJournals, setMissingJournals] = useState([]);
   const [sendingReminderId, setSendingReminderId] = useState(null);
   const [sentReminderIds, setSentReminderIds] = useState(new Set());
+
+  // Pagination & Scroll Container untuk Prioritas Harian (missingJournals)
+  const [journalPage, setJournalPage] = useState(1);
+  const JOURNALS_PER_PAGE = 5;
+  const journalContainerRef = useRef(null);
+
+  const totalJournalPages = Math.ceil(missingJournals.length / JOURNALS_PER_PAGE) || 1;
+
+  const paginatedJournals = useMemo(() => {
+    const start = (journalPage - 1) * JOURNALS_PER_PAGE;
+    return missingJournals.slice(start, start + JOURNALS_PER_PAGE);
+  }, [missingJournals, journalPage]);
+
+  // Reset ke halaman 1 jika filter/data berubah sehingga halaman saat ini melampaui total halaman
+  useEffect(() => {
+    if (journalPage > totalJournalPages) {
+      setJournalPage(1);
+    }
+  }, [totalJournalPages, journalPage]);
 
   // Agenda Kalender Akademik Hari Ini
   const [todayEvents, setTodayEvents] = useState([]);
@@ -563,54 +583,74 @@ export default function DashboardWakaPage() {
             </Badge>
           </div>
 
-          <div className="dashboard-row-cards-list">
-            {missingJournals.length === 0 ? (
-              <div className="dashboard-empty-row dw-empty-state">
-                <span className="dw-empty-state-icon">
-                  <CheckCircle2 size={18} />
-                </span>
-                <span className="dw-empty-state-title">Semua jurnal hari ini sudah terisi</span>
-                <span className="dw-empty-state-desc">
-                  Tidak ada sesi KBM yang melewati batas 30 menit tanpa jurnal mengajar.
-                </span>
-              </div>
-            ) : (
-              missingJournals.map((journal) => (
-                <div
-                  key={journal.id}
-                  className="dashboard-row-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4"
-                >
-                  <div className="dashboard-row-card-left flex flex-wrap items-center gap-2">
-                    <Badge variant="neutral">Kelas {journal.className}</Badge>
-                    <span className="text-[13px] font-semibold text-gray-900">
-                      {journal.teacherName}
-                    </span>
-                    <span className="text-[13px] font-normal text-gray-500">
-                      &bull; {journal.subjectName}
-                    </span>
-                    <span className="text-[11px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                      {journal.period}
-                    </span>
-                  </div>
-                  <div className="dashboard-row-card-right flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                    <Badge variant="error">Belum Diisi</Badge>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={sendingReminderId === journal.id || sentReminderIds.has(journal.id)}
-                      onClick={() => handleSendReminder(journal)}
-                    >
-                      {sendingReminderId === journal.id
-                        ? 'Mengirim...'
-                        : sentReminderIds.has(journal.id)
-                        ? 'Terkirim ✓'
-                        : 'Kirim Pengingat'}
-                    </Button>
-                  </div>
+          {/* Scrollable Container Wrapper */}
+          <div className="dw-hero-scroll-container" ref={journalContainerRef}>
+            <div className="dashboard-row-cards-list">
+              {missingJournals.length === 0 ? (
+                <div className="dashboard-empty-row dw-empty-state">
+                  <span className="dw-empty-state-icon">
+                    <CheckCircle2 size={18} />
+                  </span>
+                  <span className="dw-empty-state-title">Semua jurnal hari ini sudah terisi</span>
+                  <span className="dw-empty-state-desc">
+                    Tidak ada sesi KBM yang melewati batas 30 menit tanpa jurnal mengajar.
+                  </span>
                 </div>
-              ))
-            )}
+              ) : (
+                paginatedJournals.map((journal) => (
+                  <div
+                    key={journal.id}
+                    className="dashboard-row-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4"
+                  >
+                    <div className="dashboard-row-card-left flex flex-wrap items-center gap-2">
+                      <Badge variant="neutral">Kelas {journal.className}</Badge>
+                      <span className="text-[13px] font-semibold text-gray-900">
+                        {journal.teacherName}
+                      </span>
+                      <span className="text-[13px] font-normal text-gray-500">
+                        &bull; {journal.subjectName}
+                      </span>
+                      <span className="text-[11px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                        {journal.period}
+                      </span>
+                    </div>
+                    <div className="dashboard-row-card-right flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                      <Badge variant="error">Belum Diisi</Badge>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={sendingReminderId === journal.id || sentReminderIds.has(journal.id)}
+                        onClick={() => handleSendReminder(journal)}
+                      >
+                        {sendingReminderId === journal.id
+                          ? 'Mengirim...'
+                          : sentReminderIds.has(journal.id)
+                          ? 'Terkirim ✓'
+                          : 'Kirim Pengingat'}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
+
+          {/* Pagination Footer */}
+          {missingJournals.length > JOURNALS_PER_PAGE && (
+            <div className="dw-hero-pagination-wrapper">
+              <Pagination
+                currentPage={journalPage}
+                totalPages={totalJournalPages}
+                totalItems={missingJournals.length}
+                perPage={JOURNALS_PER_PAGE}
+                onPageChange={(page) => {
+                  setJournalPage(page);
+                  journalContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="dw-hero-pagination"
+              />
+            </div>
+          )}
         </section>
 
         {/* RAIL: kepatuhan jurnal + metrik referensi */}

@@ -39,9 +39,20 @@ class AcademicEventController extends Controller
             'class_id' => 'nullable|integer|exists:classes,id',
             'for_my_class' => 'nullable|boolean',
             'per_page' => 'nullable|integer|min:1|max:100',
+            'today' => 'nullable|in:0,1,true,false,on,off,yes,no',
         ]);
 
         $query = AcademicEvent::query()->with('creator:id,name,role');
+
+        // Filter agenda yang berlangsung HARI INI (zona waktu Asia/Jakarta)
+        if ($request->boolean('today')) {
+            $today = Carbon::today()->toDateString();
+
+            $query->where('start_date', '<=', $today)
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('end_date')->orWhere('end_date', '>=', $today);
+                });
+        }
 
         // Filter Tahun & Bulan Kalender
         if ($request->filled('month') && $request->filled('year')) {

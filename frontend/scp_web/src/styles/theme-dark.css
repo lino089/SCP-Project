@@ -228,6 +228,10 @@
   border-color: var(--color-border) !important;
 }
 
+[data-theme="dark"] .schedule-class-stat-badge strong {
+  color: var(--color-text-primary) !important;
+}
+
 [data-theme="dark"] .schedule-morning-badge--upacara {
   background-color: rgba(251, 191, 36, 0.18) !important;
   color: #FCD34D !important;
@@ -242,23 +246,27 @@
 
 /* --- Kenaikan Kelas & Kelulusan (Mengatasi Gambar Referensi 2) --- */
 [data-theme="dark"] .promotion-cohort-note {
-  background-color: var(--color-status-info-bg) !important;
-  color: var(--color-status-info-fg) !important;
-  border-color: rgba(96, 165, 250, 0.25) !important;
+  background-color: rgba(30, 58, 138, 0.22) !important;
+  color: #93C5FD !important;
+  border-color: rgba(96, 165, 250, 0.3) !important;
 }
 
 [data-theme="dark"] .promotion-cohort-note strong {
-  color: #93C5FD !important;
+  color: #BFDBFE !important;
+}
+
+[data-theme="dark"] .promotion-cohort-note-icon {
+  color: #60A5FA !important;
 }
 
 [data-theme="dark"] .promotion-cohort-note--graduated {
-  background-color: var(--color-status-success-bg) !important;
-  color: var(--color-status-success-fg) !important;
-  border-color: rgba(74, 222, 128, 0.25) !important;
+  background-color: rgba(6, 78, 59, 0.25) !important;
+  color: #86EFAC !important;
+  border-color: rgba(74, 222, 128, 0.3) !important;
 }
 
 [data-theme="dark"] .promotion-cohort-note--graduated strong {
-  color: #4ADE80 !important;
+  color: #BBF7D0 !important;
 }
 
 [data-theme="dark"] .promotion-target-select {
@@ -267,9 +275,67 @@
   border-color: var(--color-border) !important;
 }
 
+[data-theme="dark"] .promotion-target-select:disabled {
+  background-color: #1A1A1E !important;
+  color: #D4D4D8 !important;
+  border-color: #2E2E33 !important;
+  opacity: 0.9 !important;
+}
+
 [data-theme="dark"] .promotion-target-select option {
   background-color: #1F1F23;
   color: #F5F5F5;
+}
+
+[data-theme="dark"] .promotion-custom-table strong {
+  color: #F5F5F5 !important;
+}
+
+/* --- Master Data Kelas: Badge Jumlah Siswa & Rombel Tujuan (Mengatasi Gambar Referensi 3) --- */
+[data-theme="dark"] .master-data-student-badge--active,
+[data-theme="dark"] span.master-data-student-badge--active {
+  background-color: rgba(14, 165, 233, 0.14) !important;
+  color: #7DD3FC !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+[data-theme="dark"] .master-data-student-badge--empty,
+[data-theme="dark"] span.master-data-student-badge--empty {
+  background-color: #232327 !important;
+  color: #7C7C86 !important;
+  border-color: #2E2E33 !important;
+}
+[data-theme="dark"] .bg-sky-50 {
+  background-color: #0C1E33 !important;
+}
+[data-theme="dark"] .text-sky-700 {
+  color: #7DD3FC !important;
+}
+[data-theme="dark"] .border-sky-200 {
+  border-color: #1E3A5F !important;
+}
+[data-theme="dark"] .bg-neutral-100 {
+  background-color: #232327 !important;
+}
+[data-theme="dark"] .text-neutral-400 {
+  color: #7C7C86 !important;
+}
+[data-theme="dark"] .text-gray-800 {
+  color: #EDEDF2 !important;
+}
+[data-theme="dark"] .bg-gray-50 {
+  background-color: #232327 !important;
+}
+[data-theme="dark"] .border-gray-200 {
+  border-color: #2E2E33 !important;
+}
+[data-theme="dark"] .text-emerald-800 {
+  color: #86EFAC !important;
+}
+[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.25) !important;
+}
+[data-theme="dark"] .border-emerald-200 {
+  border-color: rgba(74, 222, 128, 0.3) !important;
 }
 
 /* --- Alumni Toolbar --- */

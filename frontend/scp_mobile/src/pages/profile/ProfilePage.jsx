@@ -47,14 +47,17 @@ export default function ProfilePage() {
   // WhatsApp Verification State (Derived & Editable)
   const [customWa, setCustomWa] = useState(null);
   const waNumber = customWa !== null ? customWa : (user?.phone_number || '');
-  const waVerified = Boolean(user?.phone_number);
+  const waVerified = Boolean(user?.phone_verified_at);
 
   const [waOtpSent, setWaOtpSent] = useState(false);
   const [waOtp, setWaOtp] = useState('');
+  const [waSessionToken, setWaSessionToken] = useState('');
   const [waLoading, setWaLoading] = useState(false);
   const [waMsg, setWaMsg] = useState('');
   const [waError, setWaError] = useState('');
   const [waCooldown, setWaCooldown] = useState(0);
+  const [isUnlinkWaOpen, setIsUnlinkWaOpen] = useState(false);
+  const [unlinkWaPassword, setUnlinkWaPassword] = useState('');
 
   // Google Linking State
   const { isLoaded: isGoogleLoaded, renderGoogleButton } = useGoogleAuth();
@@ -85,6 +88,7 @@ export default function ProfilePage() {
   const [updateErrorMsg, setUpdateErrorMsg] = useState('');
   const [availableUpdate, setAvailableUpdate] = useState(null);
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [downloadedBundleId, setDownloadedBundleId] = useState(null);
   const [isUpdateReadyToReload, setIsUpdateReadyToReload] = useState(false);
 
   useEffect(() => {
@@ -122,6 +126,7 @@ export default function ProfilePage() {
         (p) => setDownloadProgress(p)
       );
       if (bundle?.id) {
+        setDownloadedBundleId(bundle.id);
         await updaterService.setNextBundle(bundle.id);
         setIsUpdateReadyToReload(true);
         setUpdateStatusMsg('Pembaruan berhasil diunduh. Ketuk "Muat Ulang Sekarang" untuk menerapkan.');
@@ -138,7 +143,7 @@ export default function ProfilePage() {
     if (!availableUpdate?.updateInfo) return;
     setCheckingUpdate(true);
     try {
-      await updaterService.reloadImmediately(availableUpdate.updateInfo.version);
+      await updaterService.reloadImmediately(downloadedBundleId);
     } catch (err) {
       setUpdateErrorMsg(err.message || 'Gagal memuat ulang bundle.');
       setCheckingUpdate(false);
@@ -280,7 +285,8 @@ export default function ProfilePage() {
     try {
       const res = await authApi.requestPhoneOtp(waNumber.trim());
       setWaOtpSent(true);
-      setWaCooldown(60);
+      setWaSessionToken(res?.data?.session_token || '');
+      setWaCooldown(res?.data?.cooldown_seconds || 60);
       setWaMsg(res?.message || 'Kode OTP WhatsApp berhasil dikirim ke nomor Anda.');
     } catch (err) {
       if (err.status === 429) {
@@ -302,12 +308,41 @@ export default function ProfilePage() {
     setWaError('');
 
     try {
-      await authApi.verifyPhoneOtp({ phone_number: waNumber.trim(), code: waOtp.trim() });
+      await authApi.verifyPhoneOtp({
+        phone_number: waNumber.trim(),
+        code: waOtp.trim(),
+        session_token: waSessionToken,
+      });
       setWaOtpSent(false);
-      setWaMsg('Nomor WhatsApp berhasil diverifikasi.');
-      updateUserProfile({ phone_number: waNumber.trim() });
+      setWaOtp('');
+      setWaMsg('Nomor WhatsApp berhasil diverifikasi untuk notifikasi & login OTP.');
+      updateUserProfile({
+        phone_number: waNumber.trim(),
+        phone_verified_at: new Date().toISOString(),
+      });
     } catch (err) {
       setWaError(err.message || 'Kode OTP WhatsApp tidak valid atau kedaluwarsa.');
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  const handleUnlinkWa = async (password) => {
+    setWaLoading(true);
+    setWaError('');
+    setWaMsg('');
+
+    try {
+      const res = await authApi.unlinkPhone(password);
+      updateUserProfile({
+        phone_number: null,
+        phone_verified_at: null,
+      });
+      setIsUnlinkWaOpen(false);
+      setCustomWa('');
+      setWaMsg(res?.message || 'Penautan nomor WhatsApp berhasil dilepas.');
+    } catch (err) {
+      throw new Error(err.message || 'Kata sandi akun tidak valid.');
     } finally {
       setWaLoading(false);
     }
@@ -607,8 +642,8 @@ export default function ProfilePage() {
 
       {/* 3. Tautkan dan Verifikasi WhatsApp */}
       <Card
-        title="Nomor WhatsApp Notifikasi"
-        subtitle="Digunakan untuk notifikasi presensi & izin darurat"
+        title="Nomor WhatsApp (Login & Notifikasi)"
+        subtitle="Digunakan untuk login cepat dengan OTP WhatsApp dan notifikasi resmi"
       >
         <div className="space-y-3">
           {waMsg && (
@@ -621,6 +656,18 @@ export default function ProfilePage() {
             <div className="p-3 bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] rounded-[10px] text-[var(--color-danger-fg)] text-xs flex items-start gap-2">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{waError}</span>
+            </div>
+          )}
+
+          {user?.phone_number && !waVerified && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-[10px] text-xs text-amber-400 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <AlertCircle size={14} />
+                <span>Nomor Belum Diverifikasi</span>
+              </div>
+              <p className="text-[11px] text-[var(--color-text-secondary)]">
+                Nomor ini telah terdaftar tetapi belum diverifikasi via OTP. Verifikasi sekarang agar dapat digunakan untuk login WhatsApp.
+              </p>
             </div>
           )}
 
@@ -641,7 +688,7 @@ export default function ProfilePage() {
 
             {!waVerified && !waOtpSent && (
               <Button
-                variant="outline"
+                variant="brand"
                 size="md"
                 fullWidth
                 onClick={handleSendWaOtp}
@@ -675,7 +722,7 @@ export default function ProfilePage() {
                   onClick={handleVerifyWaOtp}
                   loading={waLoading}
                 >
-                  Verifikasi Nomor
+                  Verifikasi & Tautkan Nomor
                 </Button>
                 {waCooldown > 0 && (
                   <span className="text-[11px] font-mono text-[var(--color-text-muted)] self-center shrink-0 px-2">
@@ -687,9 +734,26 @@ export default function ProfilePage() {
           )}
 
           {waVerified && (
-            <div className="flex items-center gap-2 text-[var(--color-success-fg)] bg-[var(--color-success-bg)] border border-[var(--color-success-border)] px-3 py-2 rounded-[10px] text-xs font-medium">
-              <CheckCircle2 size={16} className="text-[var(--color-success-fg)] shrink-0" />
-              <span>Nomor WhatsApp terhubung untuk saluran notifikasi darurat.</span>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-[var(--color-success-fg)] bg-[var(--color-success-bg)] border border-[var(--color-success-border)] px-3 py-2.5 rounded-[10px] text-xs font-medium">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-[var(--color-success-fg)] shrink-0" />
+                  <span>Nomor aktif & terverifikasi untuk login OTP.</span>
+                </div>
+                <Badge variant="success" size="sm">
+                  Terverifikasi
+                </Badge>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                fullWidth
+                className="text-[var(--color-danger-fg)] hover:bg-[var(--color-danger-bg)] border-[var(--color-danger-border)]"
+                onClick={() => setIsUnlinkWaOpen(true)}
+              >
+                Lepas Tautan Nomor WhatsApp
+              </Button>
             </div>
           )}
         </div>
@@ -937,6 +1001,17 @@ export default function ProfilePage() {
         description="Masukkan kata sandi akun SCP Anda untuk memastikan keamanan sebelum melepas akun Google."
         confirmLabel="Ya, Lepas Tautan"
         loading={unlinkLoading}
+      />
+
+      {/* Sheet Konfirmasi Step-Up Auth untuk Lepas Tautan WhatsApp */}
+      <PasswordSheet
+        isOpen={isUnlinkWaOpen}
+        onClose={() => setIsUnlinkWaOpen(false)}
+        onConfirm={handleUnlinkWa}
+        title="Konfirmasi Lepas Nomor WhatsApp"
+        description="Masukkan kata sandi akun SCP Anda untuk memastikan keamanan sebelum melepas nomor WhatsApp."
+        confirmLabel="Ya, Lepas Nomor"
+        loading={waLoading}
       />
 
       {/* Sheet Konfirmasi Logout */}

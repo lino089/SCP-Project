@@ -49,16 +49,29 @@ try {
     fs.unlinkSync(zipPath);
   }
 
-  // 4. Kompresi Folder dist menjadi ZIP
-  console.log(`\n🗜️  2/4 Mengompres folder dist/ menjadi ${zipFilename}...`);
-  if (process.platform === 'win32') {
-    execSync(
-      `powershell -NoProfile -Command "Compress-Archive -Path '${distDir}\\*' -DestinationPath '${zipPath}' -Force"`,
-      { stdio: 'inherit' }
-    );
-  } else {
-    execSync(`cd "${distDir}" && zip -r "${zipPath}" ./*`, { stdio: 'inherit' });
+  // 4. Kompresi Folder dist menjadi ZIP menggunakan @capgo/cli resmi
+  // Ini krusial: utilitas bawaan Windows (Compress-Archive) tidak memiliki izin atribut POSIX (0o000),
+  // sedangkan @capgo/cli memastikan flag POSIX regular file (0o100644) dan struktur kompatibel Android 15.
+  console.log(`\n🗜️  2/4 Mengompres folder dist/ menggunakan @capgo/cli untuk ${zipFilename}...`);
+  const capgoZipOutputName = `id.my.schoolclassprogress.app_${targetVersion}.zip`;
+  const capgoTempZip = path.join(rootDir, capgoZipOutputName);
+
+  if (fs.existsSync(capgoTempZip)) {
+    fs.unlinkSync(capgoTempZip);
   }
+
+  execSync(
+    `npx @capgo/cli bundle zip id.my.schoolclassprogress.app --path dist --bundle "${targetVersion}" --json`,
+    { cwd: rootDir, stdio: 'inherit' }
+  );
+
+  if (!fs.existsSync(capgoTempZip)) {
+    throw new Error(`Gagal membuat file ZIP bundle dengan @capgo/cli di: ${capgoTempZip}`);
+  }
+
+  // Pindahkan ke direktori ota-output/bundles/
+  fs.copyFileSync(capgoTempZip, zipPath);
+  fs.unlinkSync(capgoTempZip);
 
   if (!fs.existsSync(zipPath)) {
     throw new Error(`Gagal membuat file ZIP di: ${zipPath}`);

@@ -111,3 +111,50 @@
   background: rgba(255, 212, 0, 0.08) !important;
   border-color: var(--color-brand) !important;
 }
+
+/* Master Data & Common Badges */
+[data-theme="dark"] .master-data-student-badge--active,
+[data-theme="dark"] span.master-data-student-badge--active {
+  background-color: rgba(14, 165, 233, 0.14) !important;
+  color: #7DD3FC !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+[data-theme="dark"] .master-data-student-badge--empty,
+[data-theme="dark"] span.master-data-student-badge--empty {
+  background-color: #232327 !important;
+  color: #7C7C86 !important;
+  border-color: #2E2E33 !important;
+}
+[data-theme="dark"] .bg-sky-50 {
+  background-color: #0C1E33 !important;
+}
+[data-theme="dark"] .text-sky-700 {
+  color: #7DD3FC !important;
+}
+[data-theme="dark"] .border-sky-200 {
+  border-color: #1E3A5F !important;
+}
+[data-theme="dark"] .bg-neutral-100 {
+  background-color: #232327 !important;
+}
+[data-theme="dark"] .text-neutral-400 {
+  color: #7C7C86 !important;
+}
+[data-theme="dark"] .text-gray-800 {
+  color: #EDEDF2 !important;
+}
+[data-theme="dark"] .bg-gray-50 {
+  background-color: #232327 !important;
+}
+[data-theme="dark"] .border-gray-200 {
+  border-color: #2E2E33 !important;
+}
+[data-theme="dark"] .text-emerald-800 {
+  color: #86EFAC !important;
+}
+[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.25) !important;
+}
+[data-theme="dark"] .border-emerald-200 {
+  border-color: rgba(74, 222, 128, 0.3) !important;
+}

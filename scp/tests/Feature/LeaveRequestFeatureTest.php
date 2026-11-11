@@ -595,11 +595,10 @@ class LeaveRequestFeatureTest extends TestCase
         $resKesiswaan->assertStatus(200);
         $this->assertCount(2, $resKesiswaan->json('data'));
 
-        // 4. Waka Kurikulum melihat seluruh izin (2 records)
+        // 4. Waka Kurikulum ditolak (403: Kebijakan Waka dilarang melihat/menyetujui izin)
         Sanctum::actingAs($this->waka);
         $resWaka = $this->getJson('/api/leave-requests');
-        $resWaka->assertStatus(200);
-        $this->assertCount(2, $resWaka->json('data'));
+        $resWaka->assertStatus(403);
 
         // 5. Guru reguler tanpa assignment ditolak (403)
         Sanctum::actingAs($this->teacherReguler);

@@ -133,6 +133,66 @@ export function AuthProvider({ children }) {
     return res;
   }, []);
 
+  // Helper to establish session from auth token
+  const establishSessionFromToken = useCallback(async (authToken, mustChangePwd = false) => {
+    localStorage.setItem('scp_token', authToken);
+    setToken(authToken);
+
+    try {
+      const meRes = await authApi.getMe();
+      const userData = meRes?.data;
+      if (userData && userData.role) {
+        userData.must_change_password = mustChangePwd || Boolean(userData.must_change_password);
+        setUser(userData);
+        localStorage.setItem('scp_user', JSON.stringify(userData));
+        return { user: userData, mustChangePassword: userData.must_change_password };
+      }
+      throw new Error('Data profil pengguna tidak memuat informasi role yang sah.');
+    } catch (meErr) {
+      localStorage.removeItem('scp_token');
+      localStorage.removeItem('scp_user');
+      setToken(null);
+      setUser(null);
+      throw (meErr?.message ? meErr : new Error('Gagal memuat profil pengguna setelah verifikasi nomor HP.'));
+    }
+  }, []);
+
+  // Request WhatsApp OTP for Login
+  const requestPhoneLoginOtp = useCallback(async (phoneNumber, deviceName = 'Web Browser') => {
+    return await authApi.requestPhoneLoginOtp(phoneNumber, deviceName);
+  }, []);
+
+  // Verify WhatsApp OTP for Login
+  const verifyPhoneLoginOtp = useCallback(async (sessionToken, code, deviceName = 'Web Browser') => {
+    const res = await authApi.verifyPhoneLoginOtp(sessionToken, code, deviceName);
+
+    if (res?.multiple_accounts) {
+      return res;
+    }
+
+    const authToken = res?.data?.token;
+    const mustChangePwd = Boolean(res?.data?.must_change_password);
+
+    if (authToken) {
+      return await establishSessionFromToken(authToken, mustChangePwd);
+    }
+
+    return res;
+  }, [establishSessionFromToken]);
+
+  // Select account from Multi-Account picker
+  const selectAccountPhoneLogin = useCallback(async (selectionToken, userId, deviceName = 'Web Browser') => {
+    const res = await authApi.selectAccountPhoneLogin(selectionToken, userId, deviceName);
+    const authToken = res?.data?.token;
+    const mustChangePwd = Boolean(res?.data?.must_change_password);
+
+    if (authToken) {
+      return await establishSessionFromToken(authToken, mustChangePwd);
+    }
+
+    return res;
+  }, [establishSessionFromToken]);
+
   // Logout method
   const logout = useCallback(async () => {
     try {
@@ -213,6 +273,9 @@ export function AuthProvider({ children }) {
     mustChangePassword: Boolean(user?.must_change_password),
     login,
     loginWithGoogle,
+    requestPhoneLoginOtp,
+    verifyPhoneLoginOtp,
+    selectAccountPhoneLogin,
     logout,
     updateUserProfile,
     changePassword,
@@ -226,6 +289,9 @@ export function AuthProvider({ children }) {
     isLoading,
     login,
     loginWithGoogle,
+    requestPhoneLoginOtp,
+    verifyPhoneLoginOtp,
+    selectAccountPhoneLogin,
     logout,
     updateUserProfile,
     changePassword,

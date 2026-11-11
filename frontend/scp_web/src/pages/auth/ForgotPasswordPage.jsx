@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  Phone,
 } from 'lucide-react';
 import { Button, Input } from '../../components/shared';
 import forgotPasswordApi from '../../services/forgotPasswordApi';
@@ -35,6 +36,7 @@ export default function ForgotPasswordPage() {
   // Form Inputs
   const [identifier, setIdentifier] = useState('');
   const [accountInfo, setAccountInfo] = useState(null);
+  const [selectedChannel, setSelectedChannel] = useState('whatsapp'); // 'whatsapp' | 'email'
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [resetToken, setResetToken] = useState(null);
   const [newPassword, setNewPassword] = useState('');
@@ -86,7 +88,7 @@ export default function ForgotPasswordPage() {
   const handleCheckIdentity = async (e) => {
     e?.preventDefault();
     if (!identifier.trim()) {
-      setErrorMessage('ID Pengguna, NIS, NIP, atau Email wajib diisi.');
+      setErrorMessage('ID Pengguna, NIS, NIP, Email, atau No. WhatsApp wajib diisi.');
       return;
     }
 
@@ -95,9 +97,13 @@ export default function ForgotPasswordPage() {
 
     try {
       const res = await forgotPasswordApi.checkIdentity(identifier.trim());
-      if (res?.data) {
-        setAccountInfo(res.data);
-        if (res.data.has_email) {
+      const data = res?.data || res;
+      if (data) {
+        setAccountInfo(data);
+        const hasChannel = data.has_channel ?? (data.has_email || data.has_phone);
+        if (hasChannel) {
+          const defaultCh = data.default_channel || (data.has_phone ? 'whatsapp' : 'email');
+          setSelectedChannel(defaultCh);
           setCurrentStep(STEPS.CONFIRM_SEND);
         } else {
           setCurrentStep(STEPS.NO_EMAIL);
@@ -105,20 +111,20 @@ export default function ForgotPasswordPage() {
       }
     } catch (err) {
       setErrorMessage(
-        err.message || 'ID Pengguna tidak ditemukan. Silakan periksa kembali NIS, NIP, atau email Anda.'
+        err.message || 'ID Pengguna tidak ditemukan. Silakan periksa kembali NIS, NIP, email, atau no. WhatsApp Anda.'
       );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handler Langkah 2: Kirim Kode OTP ke Email
-  const handleSendOtp = async () => {
+  // Handler Langkah 2: Kirim Kode OTP ke Email atau WhatsApp
+  const handleSendOtp = async (channelToUse = selectedChannel) => {
     setIsLoading(true);
     setErrorMessage('');
 
     try {
-      const res = await forgotPasswordApi.sendOtp(identifier.trim(), 'email');
+      const res = await forgotPasswordApi.sendOtp(identifier.trim(), channelToUse);
       const cooldownSec = res?.data?.cooldown_seconds || 60;
       setCooldown(cooldownSec);
       setCurrentStep(STEPS.INPUT_OTP);
@@ -130,7 +136,7 @@ export default function ForgotPasswordPage() {
       if (err.status === 429) {
         setCooldown(err.raw?.response?.data?.cooldown_remaining || 60);
       }
-      setErrorMessage(err.message || 'Gagal mengirim kode verifikasi ke email. Coba lagi nanti.');
+      setErrorMessage(err.message || 'Gagal mengirim kode verifikasi. Coba lagi nanti.');
     } finally {
       setIsLoading(false);
     }
@@ -312,8 +318,8 @@ export default function ForgotPasswordPage() {
         {currentStep === STEPS.IDENTIFY && (
           <form onSubmit={handleCheckIdentity} className="space-y-4">
             <Input
-              label="ID Pengguna / NIS / NIP"
-              placeholder="Masukkan NIS (Siswa) atau NIP (Guru/Waka)"
+              label="ID | Email | No.WA"
+              placeholder="Masukkan NIS, NIP, Email, atau No. WhatsApp"
               value={identifier}
               onChange={(e) => {
                 setIdentifier(e.target.value);
@@ -337,21 +343,68 @@ export default function ForgotPasswordPage() {
         )}
 
         {/* ============================================================ */}
-        {/* LANGKAH 2A: AKUN DITEMUKAN & MEMILIKI EMAIL                  */}
+        {/* LANGKAH 2A: AKUN DITEMUKAN & MEMILIKI SALURAN PEMULIHAN     */}
         {/* ============================================================ */}
         {currentStep === STEPS.CONFIRM_SEND && accountInfo && (
           <div className="space-y-4">
-            <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
-              <div className="text-gray-500 font-medium">Nama Pengguna:</div>
-              <div className="text-sm font-bold text-gray-900">{accountInfo.user_name}</div>
-              <div className="pt-2 border-t border-gray-200 text-gray-500 font-medium">Alamat Email Terdaftar:</div>
-              <div className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded inline-block font-mono">
-                {accountInfo.masked_email}
+            <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-2">
+              <div>
+                <div className="text-gray-500 font-medium">Nama Pengguna:</div>
+                <div className="text-sm font-bold text-gray-900">{accountInfo.user_name}</div>
+              </div>
+
+              {/* Pilihan Saluran OTP jika tersedia Email & WhatsApp */}
+              <div className="pt-2 border-t border-gray-200 space-y-1.5">
+                <div className="text-gray-500 font-medium">Kirim kode verifikasi ke:</div>
+                
+                {accountInfo.has_phone && (
+                  <label className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition ${
+                    selectedChannel === 'whatsapp'
+                      ? 'bg-blue-50/50 border-blue-500 text-blue-900'
+                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="otpChannel"
+                        value="whatsapp"
+                        checked={selectedChannel === 'whatsapp'}
+                        onChange={() => setSelectedChannel('whatsapp')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <Phone size={15} className="text-emerald-600" />
+                      <span className="font-medium text-xs">WhatsApp</span>
+                    </div>
+                    <span className="font-mono text-xs font-semibold">{accountInfo.masked_phone}</span>
+                  </label>
+                )}
+
+                {accountInfo.has_email && (
+                  <label className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition ${
+                    selectedChannel === 'email'
+                      ? 'bg-blue-50/50 border-blue-500 text-blue-900'
+                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="otpChannel"
+                        value="email"
+                        checked={selectedChannel === 'email'}
+                        onChange={() => setSelectedChannel('email')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <Mail size={15} className="text-blue-600" />
+                      <span className="font-medium text-xs">Email Resmi</span>
+                    </div>
+                    <span className="font-mono text-xs font-semibold">{accountInfo.masked_email}</span>
+                  </label>
+                )}
               </div>
             </div>
 
             <p className="text-xs text-gray-600 leading-relaxed">
-              Sistem akan mengirimkan 6 digit kode OTP verifikasi ke alamat email di atas. Kode ini berlaku selama 10 menit.
+              Sistem akan mengirimkan 6 digit kode OTP verifikasi ke saluran yang Anda pilih. Kode berlaku selama 10 menit.
             </p>
 
             <Button
@@ -360,11 +413,11 @@ export default function ForgotPasswordPage() {
               size="lg"
               fullWidth
               loading={isLoading}
-              onClick={handleSendOtp}
+              onClick={() => handleSendOtp(selectedChannel)}
               className="flex items-center justify-center gap-2"
             >
-              <Mail size={16} />
-              <span>Kirim Kode OTP ke Email</span>
+              {selectedChannel === 'whatsapp' ? <Phone size={16} /> : <Mail size={16} />}
+              <span>Kirim Kode OTP ke {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
             </Button>
 
             <button
@@ -381,17 +434,17 @@ export default function ForgotPasswordPage() {
         )}
 
         {/* ============================================================ */}
-        {/* LANGKAH 2B: FALLBACK AKUN TANPA EMAIL (TEMUAN DATA AKTUAL)   */}
+        {/* LANGKAH 2B: FALLBACK AKUN TANPA EMAIL & NO HP                */}
         {/* ============================================================ */}
         {currentStep === STEPS.NO_EMAIL && accountInfo && (
           <div className="space-y-4">
             <div className="forgot-fallback-card">
               <div className="forgot-fallback-header">
                 <HelpCircle size={18} className="shrink-0 text-blue-700" />
-                <span>Email Belum Tertaut</span>
+                <span>Saluran Pemulihan Belum Tertaut</span>
               </div>
               <p className="forgot-fallback-text mb-2">
-                Halo <strong>{accountInfo.user_name}</strong>, akun Anda terdaftar dalam sistem SCP, namun belum memiliki alamat email yang tertaut untuk menerima kode OTP.
+                Halo <strong>{accountInfo.user_name}</strong>, akun Anda terdaftar dalam sistem SCP, namun belum memiliki nomor WhatsApp maupun email yang tertaut untuk menerima kode OTP.
               </p>
               <p className="forgot-fallback-text text-xs text-gray-600 bg-white/80 p-2.5 rounded border border-blue-200">
                 Silakan hubungi <strong>Waka Kurikulum</strong> atau Administrator sekolah di ruang kurikulum untuk mereset kata sandi Anda secara manual.
@@ -420,7 +473,10 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleVerifyOtp} className="space-y-4">
             <div className="text-center">
               <span className="text-xs text-gray-500">
-                Kode dikirim ke: <strong className="text-gray-800">{accountInfo?.masked_email}</strong>
+                Kode dikirim ke {selectedChannel === 'whatsapp' ? 'WhatsApp: ' : 'Email: '}
+                <strong className="text-gray-800 font-mono">
+                  {selectedChannel === 'whatsapp' ? accountInfo?.masked_phone : accountInfo?.masked_email}
+                </strong>
               </span>
             </div>
 

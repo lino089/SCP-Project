@@ -89,7 +89,20 @@ export default function WakaDashboardPage() {
       if (eventsRes.status === 'fulfilled') {
         const ev = eventsRes.value;
         const list = Array.isArray(ev) ? ev : Array.isArray(ev?.data) ? ev.data : [];
-        setTodayEvents(list);
+        // Pengaman klien: hanya agenda yang mencakup tanggal hari ini (WIB)
+        const iso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+        const todayOnly = list.filter((e) => {
+          const start = e.start_date || e.start;
+          const end = e.end_date || e.start_date || e.start;
+          if (!start) return false;
+          return start <= iso && (!end || end >= iso);
+        });
+        todayOnly.sort((a, b) => {
+          const ah = a.all_day ? '00:00' : (a.start_time || '23:59');
+          const bh = b.all_day ? '00:00' : (b.start_time || '23:59');
+          return String(ah).localeCompare(String(bh));
+        });
+        setTodayEvents(todayOnly);
       }
       setLoadError(null);
     } catch (err) {
@@ -133,7 +146,20 @@ export default function WakaDashboardPage() {
         if (eventsRes.status === 'fulfilled') {
           const ev = eventsRes.value;
           const list = Array.isArray(ev) ? ev : Array.isArray(ev?.data) ? ev.data : [];
-          setTodayEvents(list);
+          // Pengaman klien: hanya agenda yang mencakup tanggal hari ini (WIB)
+        const iso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+        const todayOnly = list.filter((e) => {
+          const start = e.start_date || e.start;
+          const end = e.end_date || e.start_date || e.start;
+          if (!start) return false;
+          return start <= iso && (!end || end >= iso);
+        });
+        todayOnly.sort((a, b) => {
+          const ah = a.all_day ? '00:00' : (a.start_time || '23:59');
+          const bh = b.all_day ? '00:00' : (b.start_time || '23:59');
+          return String(ah).localeCompare(String(bh));
+        });
+        setTodayEvents(todayOnly);
         }
         setLoadError(null);
       } catch (err) {
@@ -328,6 +354,18 @@ export default function WakaDashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {todayEvents.length === 0 && (
+        <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px]">
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar size={16} className="text-[var(--color-text-muted)]" />
+            <h2 className="text-xs font-bold text-[var(--color-text-primary)]">Agenda Sekolah Hari Ini</h2>
+          </div>
+          <p className="text-[11px] text-[var(--color-text-secondary)]">
+            Tidak ada agenda hari ini — kegiatan belajar mengajar berjalan normal.
+          </p>
         </div>
       )}
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\LeaveRequestController;
 use App\Http\Controllers\API\MasterDataSummaryController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\PhoneAuthController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\RecycleBinController;
@@ -91,6 +92,13 @@ Route::prefix('auth/forgot-password')->group(function () {
     Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 });
 
+// Autentikasi Nomor WhatsApp & OTP (Passwordless Login)
+Route::prefix('auth/phone')->group(function () {
+    Route::post('/login-request', [PhoneAuthController::class, 'requestLoginOtp'])->middleware('throttle:login');
+    Route::post('/login-verify', [PhoneAuthController::class, 'verifyLoginOtp'])->middleware('throttle:login');
+    Route::post('/login-select', [PhoneAuthController::class, 'selectAccount'])->middleware('throttle:login');
+});
+
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -100,6 +108,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/me/email/verify', [ProfileController::class, 'verifyEmailOtp']);
     Route::post('/me/phone', [ProfileController::class, 'requestPhoneOtp']);
     Route::post('/me/phone/verify', [ProfileController::class, 'verifyPhoneOtp']);
+    Route::post('/me/phone/unlink', [ProfileController::class, 'unlinkPhone']);
     Route::post('/me/google-link', [ProfileController::class, 'linkGoogle']);
     Route::post('/me/google-unlink', [ProfileController::class, 'unlinkGoogle']);
     Route::patch('/me/password', [ProfileController::class, 'changePassword']);
