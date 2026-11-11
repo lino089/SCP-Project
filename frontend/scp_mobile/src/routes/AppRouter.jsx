@@ -99,11 +99,12 @@ export default function AppRouter() {
               <Route path="/web/grade-promotion" element={<GradePromotionPage />} />
             </Route>
 
-            {/* Shared Waka + Teacher Kesiswaan Route */}
+            {/* Shared Waka + Teacher Kesiswaan + Wali Kelas Route */}
             <Route
-              element={<RoleRoute allowedRoles={[ROLES.WAKA]} allowKesiswaan />}
+              element={<RoleRoute allowedRoles={[ROLES.WAKA]} allowKesiswaan allowWaliKelas />}
             >
               <Route path="/web/monitoring" element={<MonitoringPage />} />
+              <Route path="/teacher/attendance-recap" element={<Navigate to="/web/monitoring?tab=rekap_siswa" replace />} />
             </Route>
 
             {/* ==========================================

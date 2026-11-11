@@ -13,6 +13,7 @@ import {
   BookOpen,
   FileQuestion,
   Home,
+  Users,
   Moon,
   Sun,
 } from 'lucide-react';
@@ -148,6 +149,15 @@ export default function MobileMoreDrawer({ isOpen = false, onClose }) {
           desc: 'Rekap kehadiran & pemantauan aktivitas kelas',
           to: '/web/monitoring',
           icon: Eye,
+        });
+      }
+
+      if (isWaliKelas()) {
+        items.push({
+          label: 'Rekap Kehadiran Siswa',
+          desc: 'Pantau persentase kehadiran & siswa berisiko kelas binaan',
+          to: '/web/monitoring?tab=rekap_siswa',
+          icon: Users,
         });
       }
 

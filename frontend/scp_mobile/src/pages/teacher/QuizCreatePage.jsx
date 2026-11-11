@@ -130,7 +130,7 @@ export default function MobileQuizCreatePage() {
     })();
   }, [resumeId, loadQuestions]);
 
-  const pollQuestions = async (quizId, attempts = 15, delay = 1500) => {
+  const pollQuestions = async (quizId, attempts = 30, delay = 2000) => {
     for (let i = 1; i <= attempts; i++) {
       try {
         const res = await quizApi.getQuizQuestions(quizId);
