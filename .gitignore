@@ -25,3 +25,4 @@ hs_err_pid*.log
 replay_pid*.log
 test_parse_*.json
 
+temp_nginx.conf
