@@ -39,7 +39,10 @@ export default function ParentCalendarPage() {
   // Modal Detail
   const [selectedEvent, setSelectedEvent] = useState(null);
 
-  const loadCalendar = useCallback(async (signal) => {
+  const loadCalendar = useCallback(async (abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -55,7 +58,8 @@ export default function ParentCalendarPage() {
         params.type = filterType;
       }
 
-      const res = await academicEventApi.getMyCalendar(params, { signal });
+      const config = validSignal ? { signal: validSignal } : {};
+      const res = await academicEventApi.getMyCalendar(params, config);
       const payload = unwrap(res);
       if (payload?.events) {
         setEvents(payload.events || []);
@@ -65,7 +69,7 @@ export default function ParentCalendarPage() {
         setEvents(payload);
       }
     } catch (err) {
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       setErrorMessage(
         err.response?.data?.message || err.message || 'Gagal memuat agenda kalender sekolah.'
       );
@@ -226,7 +230,7 @@ export default function ParentCalendarPage() {
 
           <Button
             variant="secondary"
-            onClick={loadCalendar}
+            onClick={() => loadCalendar()}
             disabled={isLoading}
             className="flex items-center gap-1.5"
           >

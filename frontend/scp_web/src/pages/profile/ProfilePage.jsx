@@ -33,10 +33,25 @@ export default function ProfilePage() {
   const [waNumber, setWaNumber] = useState(user?.phone_number || '');
   const [waOtpSent, setWaOtpSent] = useState(false);
   const [waOtp, setWaOtp] = useState('');
-  const [waVerified, setWaVerified] = useState(Boolean(user?.phone_number));
+  const [waSessionToken, setWaSessionToken] = useState('');
+  const [waVerified, setWaVerified] = useState(Boolean(user?.phone_verified_at));
   const [waLoading, setWaLoading] = useState(false);
   const [waMsg, setWaMsg] = useState('');
   const [waError, setWaError] = useState('');
+  const [unlinkWaModalOpen, setUnlinkWaModalOpen] = useState(false);
+  const [unlinkWaPassword, setUnlinkWaPassword] = useState('');
+  const [unlinkWaLoading, setUnlinkWaLoading] = useState(false);
+  const [unlinkWaError, setUnlinkWaError] = useState('');
+
+  useEffect(() => {
+    setEmail(user?.email || '');
+    setEmailVerified(Boolean(user?.email_verified_at));
+  }, [user?.email, user?.email_verified_at]);
+
+  useEffect(() => {
+    setWaNumber(user?.phone_number || '');
+    setWaVerified(Boolean(user?.phone_verified_at));
+  }, [user?.phone_number, user?.phone_verified_at]);
 
   // Google Linking state
   const { isLoaded: isGoogleLoaded, renderGoogleButton } = useGoogleAuth();
@@ -180,9 +195,13 @@ export default function ProfilePage() {
     setWaMsg('');
 
     try {
-      await authApi.requestPhoneOtp(waNumber);
+      const res = await authApi.requestPhoneOtp(waNumber);
+      const token = res?.data?.session_token || res?.session_token;
+      if (token) {
+        setWaSessionToken(token);
+      }
       setWaOtpSent(true);
-      setWaMsg('Kode OTP telah dikirim ke nomor WhatsApp Anda.');
+      setWaMsg(res?.message || 'Kode OTP telah dikirim ke nomor WhatsApp Anda.');
     } catch (err) {
       setWaError(err.message || 'Gagal mengirim kode OTP WhatsApp. Periksa kembali nomor Anda.');
     } finally {
@@ -199,15 +218,56 @@ export default function ProfilePage() {
     setWaError('');
 
     try {
-      await authApi.verifyPhoneOtp({ phone_number: waNumber, code: waOtp.trim() });
+      const res = await authApi.verifyPhoneOtp({
+        phone_number: waNumber,
+        code: waOtp.trim(),
+        session_token: waSessionToken || undefined,
+      });
       setWaVerified(true);
       setWaOtpSent(false);
-      setWaMsg('Nomor WhatsApp berhasil diverifikasi.');
-      updateUserProfile({ phone_number: waNumber });
+      setWaOtp('');
+      setWaSessionToken('');
+      setWaMsg(res?.message || 'Nomor WhatsApp berhasil diverifikasi.');
+      const updatedUser = res?.data?.user;
+      if (updatedUser) {
+        updateUserProfile(updatedUser);
+      } else {
+        updateUserProfile({ phone_number: waNumber, phone_verified_at: new Date().toISOString() });
+      }
     } catch (err) {
       setWaError(err.message || 'Kode verifikasi WhatsApp tidak valid atau telah kedaluwarsa.');
     } finally {
       setWaLoading(false);
+    }
+  };
+
+  const handleUnlinkWa = async () => {
+    if (!unlinkWaPassword) {
+      setUnlinkWaError('Kata sandi akun wajib diisi untuk konfirmasi keamanan.');
+      return;
+    }
+
+    setUnlinkWaLoading(true);
+    setUnlinkWaError('');
+
+    try {
+      const res = await authApi.unlinkPhone(unlinkWaPassword);
+      updateUserProfile({
+        phone_number: null,
+        phone_verified_at: null,
+      });
+      setWaNumber('');
+      setWaVerified(false);
+      setWaOtpSent(false);
+      setWaOtp('');
+      setWaSessionToken('');
+      setUnlinkWaModalOpen(false);
+      setUnlinkWaPassword('');
+      setWaMsg(res?.message || 'Penautan nomor WhatsApp berhasil dilepas.');
+    } catch (err) {
+      setUnlinkWaError(err.message || 'Kata sandi saat ini tidak valid.');
+    } finally {
+      setUnlinkWaLoading(false);
     }
   };
 
@@ -469,48 +529,92 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1">
-                  <Input
-                    label="Nomor Telepon / WhatsApp Aktif"
-                    value={waNumber}
-                    onChange={(e) => setWaNumber(e.target.value)}
-                    placeholder="08xxxxxxxxxx"
-                    disabled={waVerified}
-                  />
-                </div>
-                {!waVerified && !waOtpSent && (
-                  <div className="sm:self-end sm:mb-[2px]">
-                    <Button variant="secondary" onClick={handleSendWaOtp} loading={waLoading}>
-                      Kirim OTP WA
-                    </Button>
+              {waVerified ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="status-dot status-dot--success" />
+                    <div>
+                      <span className="text-xs font-semibold text-emerald-900 block">Nomor WhatsApp Terverifikasi</span>
+                      <span className="text-[11px] text-emerald-700 font-mono">
+                        {user?.phone_number || waNumber}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {waOtpSent && !waVerified && (
-                <div className="flex flex-col sm:flex-row gap-2 p-3.5 bg-gray-50 border border-gray-200 rounded-md">
-                  <div className="flex-1">
-                    <Input
-                      label="Masukkan 6 Digit OTP WhatsApp"
-                      placeholder="Contoh: 123456"
-                      value={waOtp}
-                      onChange={(e) => setWaOtp(e.target.value)}
-                    />
-                  </div>
-                  <div className="sm:self-end sm:mb-[2px]">
-                    <Button variant="primary" onClick={handleVerifyWaOtp} loading={waLoading}>
-                      Verifikasi
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <span className="text-[11px] text-emerald-600 font-semibold px-2 py-0.5 bg-emerald-100 rounded">
+                      Aktif
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setUnlinkWaPassword('');
+                        setUnlinkWaError('');
+                        setUnlinkWaModalOpen(true);
+                      }}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 text-xs py-1 px-2.5 h-auto"
+                    >
+                      Lepas Penautan
                     </Button>
                   </div>
                 </div>
-              )}
+              ) : (
+                <>
+                  {user?.phone_number && !user?.phone_verified_at && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs flex items-center gap-2">
+                      <AlertCircle size={15} className="flex-shrink-0 text-amber-600" />
+                      <span>
+                        Nomor ini belum diverifikasi. Silakan klik <strong>Kirim OTP WA</strong> untuk memverifikasi agar nomor dapat digunakan untuk login cepat dan notifikasi darurat.
+                      </span>
+                    </div>
+                  )}
 
-              {waVerified && (
-                <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded text-xs font-medium">
-                  <CheckCircle size={15} />
-                  <span>Nomor WhatsApp terhubung untuk saluran notifikasi darurat.</span>
-                </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex-1">
+                      <Input
+                        label="Nomor Telepon / WhatsApp Aktif"
+                        value={waNumber}
+                        onChange={(e) => setWaNumber(e.target.value)}
+                        placeholder="08xxxxxxxxxx"
+                      />
+                    </div>
+                    {!waOtpSent && (
+                      <div className="sm:self-end sm:mb-[2px]">
+                        <Button variant="secondary" onClick={handleSendWaOtp} loading={waLoading}>
+                          Kirim OTP WA
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {waOtpSent && (
+                    <div className="flex flex-col sm:flex-row gap-2 p-3.5 bg-gray-50 border border-gray-200 rounded-md">
+                      <div className="flex-1">
+                        <Input
+                          label="Masukkan 6 Digit OTP WhatsApp"
+                          placeholder="Contoh: 123456"
+                          value={waOtp}
+                          onChange={(e) => setWaOtp(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2 sm:self-end sm:mb-[2px]">
+                        <Button variant="primary" onClick={handleVerifyWaOtp} loading={waLoading}>
+                          Verifikasi
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setWaOtpSent(false);
+                            setWaOtp('');
+                          }}
+                          disabled={waLoading}
+                        >
+                          Batal
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -706,6 +810,74 @@ export default function ProfilePage() {
             onChange={(e) => {
               setUnlinkPassword(e.target.value);
               if (unlinkError) setUnlinkError('');
+            }}
+            required
+            autoFocus
+          />
+        </div>
+      </Modal>
+
+      {/* Modal Konfirmasi Pelepasan Penautan Nomor WhatsApp */}
+      <Modal
+        isOpen={unlinkWaModalOpen}
+        onClose={() => {
+          if (!unlinkWaLoading) {
+            setUnlinkWaModalOpen(false);
+            setUnlinkWaError('');
+            setUnlinkWaPassword('');
+          }
+        }}
+        title="Lepas Penautan Nomor WhatsApp"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUnlinkWaModalOpen(false);
+                setUnlinkWaError('');
+                setUnlinkWaPassword('');
+              }}
+              disabled={unlinkWaLoading}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleUnlinkWa}
+              loading={unlinkWaLoading}
+            >
+              Ya, Lepas Penautan
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 py-1">
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Demi keamanan data akun Anda, masukkan <strong>kata sandi akun SCP</strong> saat ini untuk mengonfirmasi pelepasan nomor WhatsApp (
+            <span className="font-semibold text-gray-800">
+              {user?.phone_number || waNumber}
+            </span>
+            ). Setelah dilepas, nomor ini tidak lagi terhubung untuk notifikasi maupun login.
+          </p>
+
+          {unlinkWaError && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-600 flex items-center gap-2">
+              <AlertCircle size={14} className="flex-shrink-0" />
+              <span>{unlinkWaError}</span>
+            </div>
+          )}
+
+          <Input
+            type="password"
+            label="Kata Sandi Akun SCP"
+            placeholder="Masukkan kata sandi akun Anda"
+            value={unlinkWaPassword}
+            onChange={(e) => {
+              setUnlinkWaPassword(e.target.value);
+              if (unlinkWaError) setUnlinkWaError('');
             }}
             required
             autoFocus

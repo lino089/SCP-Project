@@ -41,7 +41,7 @@ function formatDateIndo(dateStr) {
   }
 }
 
-export default function StudentAttendanceRecapPage() {
+export default function StudentAttendanceRecapPage({ embedded = false }) {
   const { user, isKesiswaan, isWaliKelas, hasRole } = useAuth();
 
   // State Akses Kelas
@@ -252,14 +252,20 @@ export default function StudentAttendanceRecapPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6 sm:px-6">
+    <div className={embedded ? "space-y-6" : "space-y-6 max-w-7xl mx-auto px-4 py-6 sm:px-6"}>
       {/* 1. Header Halaman */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              Rekap Kehadiran Siswa
+            <h1 className={embedded ? "text-lg sm:text-xl font-bold text-gray-900" : "text-xl sm:text-2xl font-bold text-gray-900"}>
+              Rekapitulasi Kehadiran Siswa
             </h1>
+            {roleContext?.is_vice_principal && (
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold flex items-center gap-1">
+                <Users size={13} />
+                <span>Waka Kurikulum</span>
+              </span>
+            )}
             {roleContext?.is_wali_kelas && (
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold flex items-center gap-1">
                 <GraduationCap size={13} />
@@ -274,7 +280,7 @@ export default function StudentAttendanceRecapPage() {
             )}
           </div>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Pantau statistik kehadiran, identifikasi dini siswa sering tidak hadir, dan telusuri catatan guru per sesi KBM.
+            Pantau statistik kehadiran kumulatif, identifikasi dini siswa sering tidak hadir, dan telusuri catatan presensi rombel.
           </p>
         </div>
 

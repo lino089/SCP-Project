@@ -79,7 +79,10 @@ export default function AcademicCalendarPage() {
   }, []);
 
   // P-14: loadEvents dengan AbortSignal guard
-  const loadEvents = useCallback(async (signal) => {
+  const loadEvents = useCallback(async (abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     setIsLoading(true);
     try {
       const params = {
@@ -91,7 +94,8 @@ export default function AcademicCalendarPage() {
       if (filterGrade !== 'ALL') params.grade = filterGrade;
       if (filterClassId !== 'ALL') params.class_id = Number(filterClassId);
 
-      const res = await academicEventApi.getMyCalendar(params, { signal });
+      const config = validSignal ? { signal: validSignal } : {};
+      const res = await academicEventApi.getMyCalendar(params, config);
       const payload = unwrap(res);
       if (payload?.events) {
         setEvents(payload.events || []);
@@ -100,7 +104,7 @@ export default function AcademicCalendarPage() {
         setEvents(payload);
       }
     } catch (err) {
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       showToastError(err.response?.data?.message || err.message || 'Gagal memuat agenda kalender akademik.');
     } finally {
       setIsLoading(false);
@@ -327,7 +331,7 @@ export default function AcademicCalendarPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={loadEvents} disabled={isLoading} className="flex items-center gap-1.5">
+          <Button variant="secondary" onClick={() => loadEvents()} disabled={isLoading} className="flex items-center gap-1.5">
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             <span>Muat Ulang</span>
           </Button>

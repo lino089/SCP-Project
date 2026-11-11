@@ -176,16 +176,6 @@ export default function Sidebar({ isOpen = false, onClose }) {
                 >
                   Monitoring &amp; Rekap
                 </NavLink>
-
-                <NavLink
-                  to="/teacher/attendance-recap"
-                  className={({ isActive }) =>
-                    `web-sidebar__sublink ${isActive ? 'web-sidebar__sublink--active' : ''}`
-                  }
-                  onClick={() => onClose?.()}
-                >
-                  Rekap Kehadiran
-                </NavLink>
               </div>
             )}
           </div>

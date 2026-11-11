@@ -47,6 +47,7 @@ return [
         'token' => env('FONNTE_TOKEN'),
         'base_url' => env('FONNTE_BASE_URL', 'https://api.fonnte.com'),
         'driver' => env('WHATSAPP_DRIVER', 'fonnte'),
+        'verify_ssl' => (bool) env('WHATSAPP_VERIFY_SSL', true),
     ],
 
     'google' => [

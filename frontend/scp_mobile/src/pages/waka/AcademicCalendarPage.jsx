@@ -81,17 +81,20 @@ export default function AcademicCalendarPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const fetchEvents = useCallback(async (signal) => {
+  const fetchEvents = useCallback(async (abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
     try {
+      const config = validSignal ? { signal: validSignal } : {};
       const res = await academicEventApi.getAll({
         year: currentYear,
         month: currentMonth,
-      }, { signal });
+      }, config);
       const list = unwrapList(res);
       setEvents(list);
       setLoadError(null);
     } catch (err) {
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       setLoadError(err.message || 'Gagal memuat agenda kalender akademik.');
     } finally {
       setIsLoading(false);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -11,6 +11,8 @@ import {
   BookOpen,
   Calendar,
   FileText,
+  Download,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
@@ -23,6 +25,7 @@ import {
   NUMBER_TO_DAY,
   detectScheduleConflicts,
 } from '../../utils/timetableHelper';
+import { generateSchedulePdf } from '../../utils/schedulePdfGenerator';
 import { unwrap, unwrapList } from '../../utils/responseHelper';
 import { todayLocalISO } from '../../utils/dateUtils';
 import {
@@ -63,6 +66,24 @@ export default function TeacherSchedulePage() {
   const [selectedCycle, setSelectedCycle] = useState(() => Number(user?.active_cycle || 1));
   const [mondayIsUpacara, setMondayIsUpacara] = useState(() => (typeof user?.monday_is_upacara === 'boolean' ? user.monday_is_upacara : true));
   const [periodTemplates, setPeriodTemplates] = useState([]);
+  const [academicYear, setAcademicYear] = useState('2026/2027');
+  const [semester, setSemester] = useState('Ganjil');
+
+  // Export PDF States
+  const [isExporting, setIsExporting] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef(null);
+
+  // Tutup dropdown menu ekspor saat klik di luar elemen
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter States
   const [selectedDay, setSelectedDay] = useState('Semua Hari');
@@ -90,6 +111,12 @@ export default function TeacherSchedulePage() {
         }
         if (typeof sData.monday_is_upacara === 'boolean') {
           setMondayIsUpacara(sData.monday_is_upacara);
+        }
+        if (sData.academic_year) {
+          setAcademicYear(sData.academic_year);
+        }
+        if (sData.semester) {
+          setSemester(sData.semester);
         }
         if (Array.isArray(sData.period_templates)) {
           setPeriodTemplates(sData.period_templates);
@@ -133,13 +160,17 @@ export default function TeacherSchedulePage() {
   }, [teacherLeaves, todayStr]);
 
   // Ambil data jadwal mengajar guru dari database riil (P-12: allSettled, P-14: signal guard)
-  const fetchData = useCallback(async (signal) => {
+  const fetchData = useCallback(async (abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     setIsLoading(true);
     setFetchError(null);
     try {
+      const config = validSignal ? { signal: validSignal } : {};
       const [schedRes, missingRes] = await Promise.allSettled([
-        journalApi.getTeacherSchedules({ cycle: selectedCycle, all: 1, per_page: 100 }, { signal }),
-        journalApi.getMissingJournals({}, { signal }),
+        journalApi.getTeacherSchedules({ cycle: selectedCycle, all: 1, per_page: 100 }, config),
+        journalApi.getMissingJournals({}, config),
       ]);
 
       const rawSchedules = schedRes.status === 'fulfilled' ? unwrapList(schedRes.value) : [];
@@ -186,7 +217,7 @@ export default function TeacherSchedulePage() {
         setMissingJournals([]);
       }
     } catch (err) {
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       console.warn('Gagal memuat jadwal guru:', err);
       setFetchError(err.message || 'Gagal memuat jadwal mengajar dari server.');
       setSchedules([]);
@@ -196,17 +227,21 @@ export default function TeacherSchedulePage() {
   }, [selectedCycle, user?.name]);
 
   // Pemuatan data jadwal kelas binaan jika tab kelas binaan aktif
-  const fetchHomeroomData = useCallback(async (signal) => {
+  const fetchHomeroomData = useCallback(async (abortSignal) => {
     if (scheduleContext !== 'homeroom' || !homeroomClassId) return;
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     setIsLoading(true);
     setFetchError(null);
     try {
+      const config = validSignal ? { signal: validSignal } : {};
       const res = await scheduleApi.getSchedules({
         class_id: homeroomClassId,
         cycle: selectedCycle,
         all: 1,
         per_page: 100,
-      }, { signal });
+      }, config);
 
       const raw = unwrapList(res);
 
@@ -245,6 +280,7 @@ export default function TeacherSchedulePage() {
 
       setHomeroomSchedules(mapped);
     } catch (err) {
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       console.warn('Gagal memuat jadwal kelas binaan:', err);
       setFetchError(err.message || 'Gagal memuat jadwal kelas binaan dari server.');
       setHomeroomSchedules([]);
@@ -378,6 +414,126 @@ export default function TeacherSchedulePage() {
     return [selectedDay];
   }, [isAllDaysView, selectedDay]);
 
+  // Ekspor Jadwal Terpadu ke PDF (Putaran 1 & Putaran 2 Sekaligus)
+  const handleExportPdf = async (target = 'my_schedule') => {
+    setIsExporting(true);
+    try {
+      if (target === 'homeroom') {
+        const [resP1, resP2] = await Promise.all([
+          scheduleApi.getSchedules({ class_id: homeroomClassId, cycle: 1, all: 1, per_page: 100 }),
+          scheduleApi.getSchedules({ class_id: homeroomClassId, cycle: 2, all: 1, per_page: 100 }),
+        ]);
+
+        const mapHomeroomItems = (rawList, cNum) => {
+          return rawList.map((s) => ({
+            ...s,
+            id: s.id,
+            cycle: Number(s.cycle_type || s.cycle || cNum),
+            cycle_type: Number(s.cycle_type || s.cycle || cNum),
+            day:
+              typeof s.day_of_week === 'number'
+                ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
+                : s.day || 'Senin',
+            day_of_week:
+              typeof s.day_of_week === 'number'
+                ? s.day_of_week
+                : DAY_TO_NUMBER[s.day] || 1,
+            slot: Number(s.period_number || s.slot || 1),
+            period_number: Number(s.period_number || s.slot || 1),
+            duration: Number(s.duration_periods || s.duration || 1),
+            duration_periods: Number(s.duration_periods || s.duration || 1),
+            teacherName: s.teacher?.name || s.teacherName || 'Guru Pengampu',
+            className:
+              s.school_class?.name ||
+              s.schoolClass?.name ||
+              s.className ||
+              homeroomClassName,
+            roomName: s.room?.name || s.roomName || 'Ruang',
+            subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
+          }));
+        };
+
+        const p1Data = mapHomeroomItems(unwrapList(resP1), 1);
+        const p2Data = mapHomeroomItems(unwrapList(resP2), 2);
+
+        generateSchedulePdf({
+          role: 'homeroom',
+          user,
+          schedulesByCycle: {
+            1: p1Data,
+            2: p2Data,
+          },
+          cycles: [1, 2],
+          mondayIsUpacara,
+          periodTemplates,
+          academicYear,
+          semester,
+          homeroomClassName,
+        });
+        toast.success(`Jadwal kelas binaan ${homeroomClassName} (Putaran 1 & 2) berhasil diekspor.`);
+      } else {
+        const [resP1, resP2] = await Promise.all([
+          journalApi.getTeacherSchedules({ cycle: 1, all: 1, per_page: 100 }),
+          journalApi.getTeacherSchedules({ cycle: 2, all: 1, per_page: 100 }),
+        ]);
+
+        const mapTeacherItems = (rawList, cNum) => {
+          return rawList.map((s) => ({
+            ...s,
+            id: s.id,
+            cycle: Number(s.cycle_type || s.cycle || cNum),
+            cycle_type: Number(s.cycle_type || s.cycle || cNum),
+            day:
+              typeof s.day_of_week === 'number'
+                ? NUMBER_TO_DAY[s.day_of_week] || 'Senin'
+                : s.day || 'Senin',
+            day_of_week:
+              typeof s.day_of_week === 'number'
+                ? s.day_of_week
+                : DAY_TO_NUMBER[s.day] || 1,
+            slot: Number(s.period_number || s.slot || 1),
+            period_number: Number(s.period_number || s.slot || 1),
+            duration: Number(s.duration_periods || s.duration || 1),
+            duration_periods: Number(s.duration_periods || s.duration || 1),
+            teacherName: s.teacher?.name || s.teacherName || user?.name || 'Guru',
+            className:
+              s.school_class?.name ||
+              s.schoolClass?.name ||
+              s.class_name ||
+              s.className ||
+              (s.class_id ? `Kelas #${s.class_id}` : '-'),
+            level: s.school_class?.level || s.level || 10,
+            roomName: s.room?.name || s.roomName || 'Ruang',
+            subjectName: s.subject?.name || s.subjectName || 'Mata Pelajaran',
+          }));
+        };
+
+        const p1Data = mapTeacherItems(unwrapList(resP1), 1);
+        const p2Data = mapTeacherItems(unwrapList(resP2), 2);
+
+        generateSchedulePdf({
+          role: 'teacher',
+          user,
+          schedulesByCycle: {
+            1: p1Data,
+            2: p2Data,
+          },
+          cycles: [1, 2],
+          mondayIsUpacara,
+          periodTemplates,
+          academicYear,
+          semester,
+        });
+        toast.success('Jadwal mengajar pribadi (Putaran 1 & 2) berhasil diekspor ke PDF.');
+      }
+    } catch (err) {
+      console.error('Gagal mengekspor jadwal:', err);
+      toast.error('Gagal mengekspor jadwal ke format PDF. Silakan coba kembali.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="schedule-page teacher-schedule-page">
       {/* 1. Header Halaman Standar Waka */}
@@ -390,6 +546,65 @@ export default function TeacherSchedulePage() {
         </div>
 
         <div className="schedule-header__actions">
+          {/* Tombol Ekspor PDF (Dropdown untuk Wali Kelas / Tombol Tunggal untuk Guru) */}
+          {isWaliKelas() && homeroomClassId ? (
+            <div className="relative inline-block text-left" ref={exportMenuRef}>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={Download}
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                disabled={isLoading || isExporting}
+                title="Pilih opsi ekspor jadwal PDF"
+              >
+                <span>{isExporting ? 'Mengekspor...' : 'Ekspor PDF'}</span>
+                <ChevronDown size={14} className="ml-1" />
+              </Button>
+              {isExportMenuOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 text-xs">
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-700 cursor-pointer"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportPdf('my_schedule');
+                    }}
+                  >
+                    <FileText size={15} className="text-blue-600 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Jadwal Mengajar Pribadi</div>
+                      <div className="text-[10px] text-gray-500">Mata pelajaran yang Anda ampu</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-700 border-t border-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportPdf('homeroom');
+                    }}
+                  >
+                    <Layers size={15} className="text-purple-600 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Jadwal Kelas Binaan</div>
+                      <div className="text-[10px] text-gray-500">{homeroomClassName}</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Download}
+              onClick={() => handleExportPdf('my_schedule')}
+              disabled={isLoading || isExporting}
+            >
+              {isExporting ? 'Mengekspor...' : 'Ekspor PDF'}
+            </Button>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
@@ -670,7 +885,7 @@ export default function TeacherSchedulePage() {
           <ErrorState
             title="Gagal Memuat Jadwal Mengajar"
             message={fetchError}
-            onRetry={scheduleContext === 'homeroom' ? fetchHomeroomData : fetchData}
+            onRetry={() => (scheduleContext === 'homeroom' ? fetchHomeroomData() : fetchData())}
             retryLabel="Muat Ulang Jadwal"
           />
         </div>

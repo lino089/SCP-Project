@@ -180,7 +180,7 @@ export default function QuizCreatePage() {
     })();
   }, [resumeId, loadQuestions]);
 
-  const pollForQuizQuestions = async (quizId, maxAttempts = 15, delayMs = 1500) => {
+  const pollForQuizQuestions = async (quizId, maxAttempts = 30, delayMs = 1500) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const qRes = await quizApi.getQuizQuestions(quizId);

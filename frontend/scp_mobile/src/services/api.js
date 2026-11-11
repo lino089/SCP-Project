@@ -55,13 +55,14 @@ api.interceptors.response.use(
       }
     }
 
+    const isCanceled = axios.isCancel(error) || error.code === 'ERR_CANCELED' || error.name === 'CanceledError';
     const status = error.response?.status;
     const data = error.response?.data;
-    const isNetworkError = !error.response || error.code === 'ERR_NETWORK';
     const isTimeout = error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout');
+    const isNetworkError = !isCanceled && !isTimeout && (!error.response || error.code === 'ERR_NETWORK');
 
-    // P-5: Handle 401 HANYA jika benar-benar respons 401 valid dari backend
-    if (status === 401) {
+    // P-5: Handle 401 HANYA jika benar-benar respons 401 valid dari backend (bukan pembatalan)
+    if (status === 401 && !isCanceled) {
       const url = config?.url || '';
       const isAuthCheck =
         url.includes('/login') ||
@@ -79,12 +80,17 @@ api.interceptors.response.use(
     }
 
     return Promise.reject({
+      name: error.name || (isCanceled ? 'CanceledError' : 'Error'),
+      code: error.code || (isCanceled ? 'ERR_CANCELED' : undefined),
       status,
+      isCanceled,
       isNetworkError,
       isTimeout,
       message:
         data?.message ||
-        (isNetworkError
+        (isCanceled
+          ? 'Permintaan dibatalkan.'
+          : isNetworkError
           ? 'Koneksi ke server terputus. Memeriksa jaringan...'
           : isTimeout
           ? 'Waktu permintaan berakhir (timeout). Silakan periksa koneksi Anda.'

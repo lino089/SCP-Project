@@ -169,13 +169,17 @@ export default function ScheduleManagementPage() {
   }, []);
 
   // Fetch schedules for active cycle (P-14: AbortSignal guard)
-  const fetchSchedules = useCallback(async (cycleToFetch, signal) => {
+  const fetchSchedules = useCallback(async (cycleToFetch, abortSignal) => {
+    const validSignal = abortSignal instanceof AbortSignal ? abortSignal : undefined;
+    if (validSignal?.aborted) return;
+
     const targetCycle = cycleToFetch !== undefined ? cycleToFetch : selectedCycle;
     setIsPageLoading(true);
     setFetchError(null);
 
     try {
-      const schedRes = await scheduleApi.getSchedules({ cycle: targetCycle, all: 1 }, { signal });
+      const config = validSignal ? { signal: validSignal } : {};
+      const schedRes = await scheduleApi.getSchedules({ cycle: targetCycle, all: 1 }, config);
       const raw = unwrapList(schedRes);
       const mapped = raw.map((s) => ({
         id: s.id,
@@ -206,7 +210,7 @@ export default function ScheduleManagementPage() {
       }));
       setScheduleList(mapped);
     } catch (err) {
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+      if (err?.isCanceled || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       setFetchError(
         err.message || 'Gagal memuat data jadwal pelajaran dari backend. Silakan coba beberapa saat lagi.'
       );

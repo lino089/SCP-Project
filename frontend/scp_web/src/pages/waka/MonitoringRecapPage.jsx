@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
   Image as ImageIcon,
@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import leaveApi from '../../services/leaveApi';
 import journalApi from '../../services/journalApi';
 import { classApi } from '../../services/masterDataApi';
+import StudentAttendanceRecapPage from '../teacher/StudentAttendanceRecapPage';
 import {
   Badge,
   Button,
@@ -39,8 +40,25 @@ export default function MonitoringRecapPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState('presensi'); // 'presensi' | 'jurnal'
+  const validTabs = ['rekap_siswa', 'presensi', 'jurnal'];
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) return tabFromUrl;
+    return 'rekap_siswa';
+  });
+
+  useEffect(() => {
+    if (tabFromUrl && validTabs.includes(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    setSearchParams({ tab: newTab }, { replace: true });
+  };
 
   // Data State
   const [attendances, setAttendances] = useState([]);
@@ -713,19 +731,25 @@ export default function MonitoringRecapPage() {
         </div>
       )}
 
-      {/* Tabs Menu Utama: Rekap Presensi vs Jurnal Mengajar */}
+      {/* Tabs Menu Utama: Rekapitulasi Kehadiran Siswa, Log Presensi Harian, Jurnal Mengajar */}
       <div className="mb-6">
         <Tabs
           activeTab={activeTab}
-          onChange={setActiveTab}
+          onChange={handleTabChange}
           tabs={[
-            { id: 'presensi', label: 'Rekap Presensi Siswa' },
-            { id: 'jurnal', label: 'Rekap Jurnal Mengajar Sekolah' },
+            { id: 'rekap_siswa', label: 'Rekapitulasi Kehadiran Siswa' },
+            { id: 'presensi', label: 'Log Presensi Harian' },
+            { id: 'jurnal', label: 'Jurnal Mengajar Sekolah' },
           ]}
         />
       </div>
 
-      {/* TAB 1: REKAP PRESENSI SISWA */}
+      {/* TAB 1: REKAPITULASI KEHADIRAN SISWA (AGREGAT, DETEKSI RISIKO <80%, EXPORT EXCEL, NOTIFIKASI WA) */}
+      {activeTab === 'rekap_siswa' && (
+        <StudentAttendanceRecapPage embedded={true} />
+      )}
+
+      {/* TAB 2: LOG PRESENSI HARIAN */}
       {activeTab === 'presensi' && (
         <div className="space-y-6">
           {/* Metrik Cards Kehadiran */}

@@ -52,10 +52,17 @@ class WhatsAppService
         try {
             $token = config('services.fonnte.token');
             $baseUrl = rtrim(config('services.fonnte.base_url', 'https://api.fonnte.com'), '/');
+            $verifySsl = (bool) config('services.fonnte.verify_ssl', true);
 
-            $response = Http::withHeaders([
+            $httpClient = Http::withHeaders([
                 'Authorization' => $token,
-            ])->timeout(15)->post("{$baseUrl}/send", [
+            ])->timeout(15);
+
+            if (! $verifySsl) {
+                $httpClient = $httpClient->withoutVerifying();
+            }
+
+            $response = $httpClient->post("{$baseUrl}/send", [
                 'target' => $normalizedTarget,
                 'message' => $message,
                 'countryCode' => '62',

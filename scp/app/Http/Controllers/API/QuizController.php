@@ -279,15 +279,22 @@ class QuizController extends Controller
         // Tandai status kuis menjadi generating
         $quiz->update(['status' => 'generating']);
 
-        // Dispatch job pembuatan butir soal AI secara asinkron ke background queue
+        // Dispatch job pembuatan butir soal AI (dijalankan secara sinkron jika sync, atau via worker jika database)
         GenerateQuizFromPromptJob::dispatch($quiz->id, $validated);
+
+        $quiz->refresh();
+        $questions = $quiz->questions()->get();
+        $isReady = $questions->isNotEmpty();
 
         return response()->json([
             'success' => true,
-            'message' => 'Permintaan pembuatan soal kuis sedang diproses oleh AI di latar belakang.',
+            'message' => $isReady
+                ? 'Soal kuis berhasil dihasilkan oleh AI.'
+                : 'Permintaan pembuatan soal kuis sedang diproses oleh AI di latar belakang.',
             'data' => [
                 'quiz_id' => $quiz->id,
-                'status' => 'generating',
+                'status' => $quiz->status,
+                'questions' => $isReady ? $questions : null,
                 'config' => [
                     'prompt' => $validated['prompt'],
                     'total_questions' => $total,
@@ -296,7 +303,7 @@ class QuizController extends Controller
                     'essay_count' => $essayCount,
                 ],
             ],
-        ], 202);
+        ], $isReady ? 200 : 202);
     }
 
     /**
@@ -349,19 +356,26 @@ class QuizController extends Controller
 
         $quiz->update(['status' => 'generating']);
 
-        // Dispatch job ekstraksi dokumen AI secara asinkron ke background queue
+        // Dispatch job ekstraksi dokumen AI (sinkron jika sync, atau via worker jika database)
         ExtractQuizFromDocumentJob::dispatch($quiz->id, $extractedText);
+
+        $quiz->refresh();
+        $questions = $quiz->questions()->get();
+        $isReady = $questions->isNotEmpty();
 
         return response()->json([
             'success' => true,
-            'message' => 'Ekstraksi soal dari dokumen sedang diproses oleh AI di latar belakang.',
+            'message' => $isReady
+                ? 'Soal kuis berhasil diekstrak dari dokumen.'
+                : 'Ekstraksi soal dari dokumen sedang diproses oleh AI di latar belakang.',
             'data' => [
                 'quiz_id' => $quiz->id,
-                'status' => 'generating',
+                'status' => $quiz->status,
+                'questions' => $isReady ? $questions : null,
                 'document_name' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
             ],
-        ], 202);
+        ], $isReady ? 200 : 202);
     }
 
     /**

@@ -26,7 +26,7 @@ import './PermissionVerify.css';
 
 export default function PermissionVerifyPage() {
   const navigate = useNavigate();
-  const { user, isKesiswaan, isWaliKelas } = useAuth();
+  const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
   const { toast } = useToast();
 
   // Wewenang verifikasi per baris izin: Guru Kesiswaan atau Wali Kelas untuk kelas binaannya (Waka dilarang)
