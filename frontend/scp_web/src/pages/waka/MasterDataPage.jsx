@@ -107,6 +107,7 @@ export default function MasterDataPage() {
 
   // Delete dialog states
   const [smartDeleteItem, setSmartDeleteItem] = useState(null);
+  const [smartDeleteInitialAction, setSmartDeleteInitialAction] = useState('soft');
   const [smartDeleteError, setSmartDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [conflictError, setConflictError] = useState(null); // { entityName, entityType, message }
@@ -807,6 +808,7 @@ export default function MasterDataPage() {
 
   // Smart Delete Handlers
   const handleOpenDelete = useCallback((item) => {
+    setSmartDeleteInitialAction('soft');
     setSmartDeleteItem(item);
     setSmartDeleteError('');
   }, []);
@@ -852,6 +854,7 @@ export default function MasterDataPage() {
       if (isConflict) {
         setSmartDeleteItem(null);
         setConflictError({
+          item,
           entityName: item.name,
           entityType: tabs.find((t) => t.id === activeTab)?.label || 'Data',
           errorMessage: err?.response?.data?.message || err?.message,
@@ -2481,6 +2484,7 @@ export default function MasterDataPage() {
         onClose={() => setSmartDeleteItem(null)}
         entityType={activeTab}
         item={smartDeleteItem}
+        initialActionType={smartDeleteInitialAction}
         onSoftDelete={handleSoftDelete}
         onForceDelete={handleForceDelete}
         loading={isDeleting}
@@ -2491,6 +2495,14 @@ export default function MasterDataPage() {
       <DeleteConflictDialog
         isOpen={conflictError !== null}
         onClose={() => setConflictError(null)}
+        onProceedForceDelete={() => {
+          const targetItem = conflictError?.item;
+          setConflictError(null);
+          if (targetItem) {
+            setSmartDeleteInitialAction('force');
+            setSmartDeleteItem(targetItem);
+          }
+        }}
         entityName={conflictError?.entityName}
         entityType={conflictError?.entityType}
         errorMessage={conflictError?.errorMessage}

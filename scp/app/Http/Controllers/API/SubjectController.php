@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Subject;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class SubjectController extends Controller
@@ -96,21 +97,17 @@ class SubjectController extends Controller
     /**
      * Menghapus mata pelajaran (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
+    /**
+     * Menghapus mata pelajaran (soft-delete), memindahkan ke tempat sampah dan menonaktifkan jadwal KBM terkait.
+     */
     public function destroy($id): JsonResponse
     {
         $subject = Subject::findOrFail($id);
 
-        if ($subject->schedules()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Mata pelajaran tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
-                'errors' => [
-                    'subject' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.'],
-                ],
-            ], 409);
-        }
-
-        $subject->delete();
+        DB::transaction(function () use ($subject) {
+            $subject->schedules()->delete();
+            $subject->delete();
+        });
 
         return response()->json([
             'success' => true,

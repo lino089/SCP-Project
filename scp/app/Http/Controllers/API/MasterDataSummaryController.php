@@ -137,6 +137,9 @@ class MasterDataSummaryController extends Controller
                     if (Schema::hasTable('journals')) {
                         DB::table('journals')->whereIn('substitute_teacher_id', $teacherUserIds)->update(['substitute_teacher_id' => null]);
                     }
+                    if (Schema::hasTable('schedule_import_rows')) {
+                        DB::table('schedule_import_rows')->whereIn('matched_teacher_id', $teacherUserIds)->update(['matched_teacher_id' => null]);
+                    }
                     if (Schema::hasTable('otp_codes')) {
                         DB::table('otp_codes')->whereIn('user_id', $teacherUserIds)->delete();
                     }

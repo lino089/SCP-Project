@@ -421,14 +421,20 @@ export default function TeacherJournalPage() {
         )
       );
 
-      // Ambil daftar siswa kelas terkait
-      const classId = targetSchedule.school_class_id || targetSchedule.class_id;
+      // Ambil daftar siswa kelas terkait dengan resolusi properti yang lengkap
+      const classId = targetSchedule.class_id || targetSchedule.school_class_id || targetSchedule.school_class?.id || targetSchedule.schoolClass?.id;
       if (!classId) {
         setErrorMessage('Data rombel kelas pada jadwal ini tidak ditemukan.');
         return;
       }
-      const studRes = await journalApi.getClassStudents(classId);
-      const studentList = studRes.data || [];
+
+      // Prioritaskan daftar siswa dari response atomik openJournal jika tersedia, fallback ke API students
+      const studentsFromRes = unwrapList(res.data?.students);
+      let studentList = studentsFromRes.length > 0 ? studentsFromRes : [];
+      if (studentList.length === 0) {
+        const studRes = await journalApi.getClassStudents(classId);
+        studentList = unwrapList(studRes);
+      }
       setStudents(studentList);
 
       const leaves = res.meta?.approved_leaves || [];
@@ -524,6 +530,23 @@ export default function TeacherJournalPage() {
 
         if (studList.length > 0) {
           setStudents(studList);
+        } else {
+          // Jika data attendances belum tersimpan (misal sesi masih ongoing), gunakan students dari detail jurnal atau fetch API
+          const classStudentsFromRes = unwrapList(jData.students);
+          if (classStudentsFromRes.length > 0) {
+            setStudents(classStudentsFromRes);
+          } else {
+            const classId = targetSchedule.class_id || targetSchedule.school_class_id || targetSchedule.school_class?.id || jData.schedule?.class_id;
+            if (classId) {
+              try {
+                const studRes = await journalApi.getClassStudents(classId);
+                const fetchedStudents = unwrapList(studRes);
+                setStudents(fetchedStudents);
+              } catch (err) {
+                console.warn('Gagal memuat siswa kelas untuk detail jurnal:', err);
+              }
+            }
+          }
         }
         setAttendance(initAtt);
         setStudentNotes(initNts);
@@ -539,6 +562,20 @@ export default function TeacherJournalPage() {
       setIsSubmitting(false);
     }
   };
+
+  // Auto-buka sesi ketika navigasi membawa passedSchedule dari Dashboard atau Jadwal Pelajaran
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (passedSchedule && !autoOpenedRef.current && todaySchedules.length > 0) {
+      autoOpenedRef.current = true;
+      const found = todaySchedules.find((s) => s.id === passedSchedule.id) || passedSchedule;
+      if (found.journal_status === 'completed') {
+        handleViewJournalDetailForSchedule(found);
+      } else {
+        handleOpenClassForSchedule(found);
+      }
+    }
+  }, [passedSchedule, todaySchedules]);
 
   // Menandai Guru Berhalangan Hadir
   const handleMarkTeacherAbsent = async (targetSchedule) => {
@@ -1101,7 +1138,17 @@ export default function TeacherJournalPage() {
                     variant="outline"
                     size="sm"
                     icon={Edit3}
-                    onClick={() => {
+                    onClick={async () => {
+                      const classId = schedule?.class_id || schedule?.school_class_id || schedule?.school_class?.id || savedJournalData?.schedule?.class_id;
+                      if ((!students || students.length === 0) && classId) {
+                        try {
+                          const studRes = await journalApi.getClassStudents(classId);
+                          const fetchedStudents = unwrapList(studRes);
+                          setStudents(fetchedStudents);
+                        } catch (err) {
+                          console.warn('Gagal memuat siswa saat klik edit:', err);
+                        }
+                      }
                       setSubmitted(false);
                       setClassOpened(true);
                     }}

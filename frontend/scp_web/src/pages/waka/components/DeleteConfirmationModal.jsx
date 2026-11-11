@@ -49,13 +49,21 @@ export default function DeleteConfirmationModal({
   onForceDelete,
   loading = false,
   serverError = '',
+  initialActionType = 'soft',
 }) {
-  const [actionType, setActionType] = useState('soft'); // 'soft' | 'force'
+  const [actionType, setActionType] = useState(initialActionType);
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [isCheckingDeps, setIsCheckingDeps] = useState(false);
   const [depData, setDepData] = useState(null);
   const [depError, setDepError] = useState('');
+
+  // Sync initialActionType when opened
+  useEffect(() => {
+    if (isOpen) {
+      setActionType(initialActionType);
+    }
+  }, [isOpen, initialActionType]);
 
   // Fetch dependencies when opened
   useEffect(() => {

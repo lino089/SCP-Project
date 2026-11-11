@@ -97,6 +97,36 @@ export default function TeacherJournalPage() {
     };
   }, [schedule, user?.academic_setting?.active_cycle, user?.active_cycle]);
 
+  // Load students for class
+  const loadClassStudents = useCallback(async (approvedLeaves = []) => {
+    const classId = schedule?.class_id || schedule?.school_class_id || schedule?.school_class?.id;
+    if (!classId) return;
+    try {
+      const res = await journalApi.getClassStudents(classId);
+      const list = unwrapList(res);
+      setStudents(list);
+
+      const appMap = {};
+      approvedLeaves.forEach((al) => {
+        appMap[al.student_id] = al;
+      });
+      setApprovedLeavesMap(appMap);
+
+      const initialAtt = {};
+      list.forEach((st) => {
+        if (appMap[st.id]) {
+          const leaveType = (appMap[st.id].type === 'sakit' || appMap[st.id].category === 'sakit') ? 'Sakit' : 'Izin';
+          initialAtt[st.id] = leaveType;
+        } else {
+          initialAtt[st.id] = 'Hadir';
+        }
+      });
+      setAttendanceMap(initialAtt);
+    } catch (err) {
+      console.warn('Gagal memuat siswa kelas:', err);
+    }
+  }, [schedule]);
+
   // Check active journal for this schedule & date
   useEffect(() => {
     let isMounted = true;
@@ -116,6 +146,10 @@ export default function TeacherJournalPage() {
           if (j.photo_url || j.photo_path) {
             setPhotoPreview(getStorageUrl(j.photo_url || j.photo_path));
           }
+          if (j.status === 'ongoing') {
+            const leaves = j.approved_leaves || j.meta?.approved_leaves || [];
+            await loadClassStudents(leaves);
+          }
         }
       } catch {
         // ignore
@@ -125,36 +159,7 @@ export default function TeacherJournalPage() {
     return () => {
       isMounted = false;
     };
-  }, [schedule, todayIso]);
-
-  // Load students for class
-  const loadClassStudents = useCallback(async (approvedLeaves = []) => {
-    if (!schedule?.class_id) return;
-    try {
-      const res = await journalApi.getClassStudents(schedule.class_id);
-      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-      setStudents(list);
-
-      const appMap = {};
-      approvedLeaves.forEach((al) => {
-        appMap[al.student_id] = al;
-      });
-      setApprovedLeavesMap(appMap);
-
-      const initialAtt = {};
-      list.forEach((st) => {
-        if (appMap[st.id]) {
-          const leaveType = appMap[st.id].type === 'sakit' ? 'Sakit' : 'Izin';
-          initialAtt[st.id] = leaveType;
-        } else {
-          initialAtt[st.id] = 'Hadir';
-        }
-      });
-      setAttendanceMap(initialAtt);
-    } catch (err) {
-      console.warn('Gagal memuat siswa kelas:', err);
-    }
-  }, [schedule]);
+  }, [schedule, todayIso, loadClassStudents]);
 
   // Open Class Session (Buka Sesi Kelas)
   const handleOpenSession = async () => {
@@ -170,8 +175,30 @@ export default function TeacherJournalPage() {
       setJournalId(journalData.id);
       setSessionStatus('ongoing');
 
-      const approvedLeaves = res.data?.meta?.approved_leaves || [];
-      await loadClassStudents(approvedLeaves);
+      const approvedLeaves = res.meta?.approved_leaves || res.data?.meta?.approved_leaves || [];
+      const studentsList = unwrapList(journalData.students);
+
+      if (studentsList.length > 0) {
+        setStudents(studentsList);
+        const appMap = {};
+        approvedLeaves.forEach((al) => {
+          appMap[al.student_id] = al;
+        });
+        setApprovedLeavesMap(appMap);
+
+        const initialAtt = {};
+        studentsList.forEach((st) => {
+          if (appMap[st.id]) {
+            const leaveType = (appMap[st.id].type === 'sakit' || appMap[st.id].category === 'sakit') ? 'Sakit' : 'Izin';
+            initialAtt[st.id] = leaveType;
+          } else {
+            initialAtt[st.id] = 'Hadir';
+          }
+        });
+        setAttendanceMap(initialAtt);
+      } else {
+        await loadClassStudents(approvedLeaves);
+      }
     } catch (err) {
       setErrorMessage(
         err.response?.data?.message || err.message || 'Gagal membuka sesi kelas KBM.'

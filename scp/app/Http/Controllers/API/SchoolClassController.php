@@ -167,23 +167,16 @@ class SchoolClassController extends Controller
     }
 
     /**
-     * Menghapus kelas (soft-delete), ditolak 409 jika terikat jadwal aktif.
+     * Menghapus kelas (soft-delete), memindahkan ke tempat sampah dan menonaktifkan jadwal KBM terkait.
      */
     public function destroy($id): JsonResponse
     {
         $class = Classes::findOrFail($id);
 
-        if ($class->schedules()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Kelas tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
-                'errors' => [
-                    'class' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.'],
-                ],
-            ], 409);
-        }
-
-        $class->delete();
+        DB::transaction(function () use ($class) {
+            $class->schedules()->delete();
+            $class->delete();
+        });
 
         return response()->json([
             'success' => true,

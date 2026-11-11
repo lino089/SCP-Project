@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Room;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class RoomController extends Controller
@@ -98,21 +99,17 @@ class RoomController extends Controller
     /**
      * Menghapus ruangan (soft-delete), ditolak 409 jika terikat jadwal aktif.
      */
+    /**
+     * Menghapus ruangan (soft-delete), memindahkan ke tempat sampah dan menonaktifkan jadwal KBM terkait.
+     */
     public function destroy($id): JsonResponse
     {
         $room = Room::findOrFail($id);
 
-        if ($room->schedules()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Ruangan tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
-                'errors' => [
-                    'room' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu.'],
-                ],
-            ], 409);
-        }
-
-        $room->delete();
+        DB::transaction(function () use ($room) {
+            $room->schedules()->delete();
+            $room->delete();
+        });
 
         return response()->json([
             'success' => true,

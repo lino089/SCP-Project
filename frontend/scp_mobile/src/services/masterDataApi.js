@@ -18,8 +18,8 @@ export const roomApi = {
   createRoom: (data) => api.post('/rooms', data),
   update: (id, data) => api.put(`/rooms/${id}`, data),
   updateRoom: (id, data) => api.put(`/rooms/${id}`, data),
-  delete: (id) => api.delete(`/rooms/${id}`),
-  deleteRoom: (id) => api.delete(`/rooms/${id}`),
+  delete: (id, data) => api.delete(`/rooms/${id}`, { data }),
+  deleteRoom: (id, data) => api.delete(`/rooms/${id}`, { data }),
 };
 
 export const classApi = {
@@ -38,8 +38,8 @@ export const classApi = {
   createClass: (data) => api.post('/classes', data),
   update: (id, data) => api.put(`/classes/${id}`, data),
   updateClass: (id, data) => api.put(`/classes/${id}`, data),
-  delete: (id) => api.delete(`/classes/${id}`),
-  deleteClass: (id) => api.delete(`/classes/${id}`),
+  delete: (id, data) => api.delete(`/classes/${id}`, { data }),
+  deleteClass: (id, data) => api.delete(`/classes/${id}`, { data }),
   promoteClasses: (data) => api.post('/class-promotions', data),
 };
 
@@ -51,8 +51,8 @@ export const subjectApi = {
   createSubject: (data) => api.post('/subjects', data),
   update: (id, data) => api.put(`/subjects/${id}`, data),
   updateSubject: (id, data) => api.put(`/subjects/${id}`, data),
-  delete: (id) => api.delete(`/subjects/${id}`),
-  deleteSubject: (id) => api.delete(`/subjects/${id}`),
+  delete: (id, data) => api.delete(`/subjects/${id}`, { data }),
+  deleteSubject: (id, data) => api.delete(`/subjects/${id}`, { data }),
 };
 
 export const teacherApi = {

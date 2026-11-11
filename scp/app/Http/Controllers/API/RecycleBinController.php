@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Classes;
 use App\Models\Room;
+use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\MasterDataDependencyService;
@@ -143,6 +144,15 @@ class RecycleBinController extends Controller
                         ->restore();
                 }
             }
+
+            // Pulihkan juga jadwal KBM terkait yang sempat dinonaktifkan saat masuk tempat sampah
+            match ($normalized) {
+                'teacher' => Schedule::onlyTrashed()->where('teacher_id', $model->id)->restore(),
+                'class' => Schedule::onlyTrashed()->where('class_id', $model->id)->restore(),
+                'room' => Schedule::onlyTrashed()->where('room_id', $model->id)->restore(),
+                'subject' => Schedule::onlyTrashed()->where('subject_id', $model->id)->restore(),
+                default => null,
+            };
         });
 
         $name = $model->name ?? 'Data';
@@ -196,6 +206,14 @@ class RecycleBinController extends Controller
 
         // Hapus token login Sanctum
         $teacher->tokens()->delete();
+
+        // 0. Putus referensi riwayat import jadwal & guru pengganti
+        if (Schema::hasTable('schedule_import_rows')) {
+            DB::table('schedule_import_rows')->where('matched_teacher_id', $id)->update(['matched_teacher_id' => null]);
+        }
+        if (Schema::hasTable('journals')) {
+            DB::table('journals')->where('substitute_teacher_id', $id)->update(['substitute_teacher_id' => null]);
+        }
 
         // 1. Hapus kuis dan pertanyaan
         if (Schema::hasTable('ai_quizzes')) {
@@ -258,6 +276,11 @@ class RecycleBinController extends Controller
         // Putus class_id pada siswa atau update null
         User::where('class_id', $id)->update(['class_id' => null]);
 
+        // Putus referensi riwayat import jadwal
+        if (Schema::hasTable('schedule_import_rows')) {
+            DB::table('schedule_import_rows')->where('matched_class_id', $id)->update(['matched_class_id' => null]);
+        }
+
         // Hapus penugasan wali kelas
         if (Schema::hasTable('teacher_assignments')) {
             DB::table('teacher_assignments')->where('class_id', $id)->delete();
@@ -274,6 +297,10 @@ class RecycleBinController extends Controller
     {
         $room = Room::withTrashed()->findOrFail($id);
 
+        if (Schema::hasTable('schedule_import_rows')) {
+            DB::table('schedule_import_rows')->where('matched_room_id', $id)->update(['matched_room_id' => null]);
+        }
+
         $scheduleIds = DB::table('schedules')->where('room_id', $id)->pluck('id');
         $this->deleteSchedulesAndChildren($scheduleIds);
 
@@ -286,6 +313,10 @@ class RecycleBinController extends Controller
 
         // Lepas relasi subject_id pada guru
         User::where('subject_id', $id)->update(['subject_id' => null]);
+
+        if (Schema::hasTable('schedule_import_rows')) {
+            DB::table('schedule_import_rows')->where('matched_subject_id', $id)->update(['matched_subject_id' => null]);
+        }
 
         $scheduleIds = DB::table('schedules')->where('subject_id', $id)->pluck('id');
         $this->deleteSchedulesAndChildren($scheduleIds);

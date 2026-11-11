@@ -158,10 +158,26 @@ class JournalController extends Controller
             ], 403);
         }
 
+        $journalArray = $journal->toArray();
+
+        // Selalu sertakan data siswa kelas jika presensi belum tercatat (status ongoing atau attendances kosong)
+        if ($journal->attendances->isEmpty() || $journal->status === 'ongoing') {
+            $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+            $orderRaw = $isPgsql ? 'student_number ASC NULLS LAST' : 'student_number IS NULL, student_number ASC';
+            $classStudents = User::where('role', 'student')
+                ->where('class_id', $journal->schedule->class_id)
+                ->whereNull('deleted_at')
+                ->whereNull('graduation_date')
+                ->orderByRaw($orderRaw)
+                ->orderBy('name')
+                ->get(['id', 'name', 'nis_nip', 'student_number', 'gender', 'class_id']);
+            $journalArray['students'] = $classStudents;
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Detail jurnal berhasil diambil.',
-            'data' => $journal,
+            'data' => $journalArray,
         ], 200);
     }
 
@@ -274,11 +290,32 @@ class JournalController extends Controller
             ->with('student:id,name,nis_nip')
             ->get();
 
+        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+        $orderRaw = $isPgsql ? 'student_number ASC NULLS LAST' : 'student_number IS NULL, student_number ASC';
+
+        $classStudents = User::where('role', 'student')
+            ->where('class_id', $schedule->class_id)
+            ->whereNull('deleted_at')
+            ->whereNull('graduation_date')
+            ->orderByRaw($orderRaw)
+            ->orderBy('name')
+            ->get(['id', 'name', 'nis_nip', 'student_number', 'gender', 'class_id']);
+
+        $freshJournal = $journal->fresh([
+            'schedule.subject',
+            'schedule.schoolClass',
+            'substituteTeacher',
+            'attendances.student:id,name,nis_nip',
+        ]);
+        $journalArray = $freshJournal->toArray();
+        $journalArray['students'] = $classStudents;
+
         return response()->json([
             'success' => true,
             'message' => 'Jurnal KBM berhasil dibuka.',
-            'data' => $journal->fresh(['schedule.subject', 'schedule.schoolClass', 'substituteTeacher', 'attendances.student:id,name,nis_nip']),
+            'data' => $journalArray,
             'meta' => [
+                'total_students' => $classStudents->count(),
                 'approved_leaves' => $approvedLeaves->map(function ($leave) {
                     return [
                         'student_id' => $leave->student_id,

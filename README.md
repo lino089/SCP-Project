@@ -3,7 +3,7 @@
 
 > **Fase Pengembangan:** Uji Kompetensi Keahlian (UKK) Rekayasa Perangkat Lunak 2026/2027 — SMK Negeri 1 Bantul  
 > **Arsitektur Sistem:** *Headless API-First Architecture* (Backend REST API murni, Frontend Web SPA, dan Mobile App Client)  
-> **Status Implementasi:** Production-Ready & Tested (425+ Automated Tests)
+> **Status Implementasi:** Production-Ready & Tested (480 Automated Tests, 3.300+ Assertions)
 
 ---
 
@@ -23,8 +23,9 @@
    - [3.1 Persyaratan Sistem & Dependensi](#31-persyaratan-sistem--dependensi)
    - [3.2 Langkah Instalasi & Konfigurasi Backend](#32-langkah-instalasi--konfigurasi-backend)
    - [3.3 Langkah Instalasi & Menjalankan Frontend Web](#33-langkah-instalasi--menjalankan-frontend-web)
-   - [3.4 Referensi Variabel Lingkungan (.env)](#34-referensi-variabel-lingkungan-env)
-   - [3.5 Perintah Artisan, Testing, & Database Migration](#35-perintah-artisan-testing--database-migration)
+   - [3.4 Langkah Kompilasi Aplikasi Mobile (Capacitor Android)](#34-langkah-kompilasi-aplikasi-mobile-capacitor-android)
+   - [3.5 Referensi Variabel Lingkungan (.env)](#35-referensi-variabel-lingkungan-env)
+   - [3.6 Perintah Artisan, Testing, & Database Migration](#36-perintah-artisan-testing--database-migration)
 4. [Catatan Status Fitur & Penyesuaian Arsitektur](#4-catatan-status-fitur--penyesuaian-arsitektur)
 
 ---
@@ -35,25 +36,28 @@
 **School Class Progress (SCP)** adalah sistem informasi terpadu yang dirancang untuk mengelola seluruh aspek operasional Kegiatan Belajar Mengajar (KBM) pada jenjang sekolah menengah kejuruan (SMK), dengan studi kasus implementasi nyata di **SMK Negeri 1 Bantul**.
 
 Tujuan utama project ini:
-- Menyediakan **Single Source of Truth** berupa REST API terpusat yang aman, efisien, dan konsisten untuk dikonsumsi oleh Web Client (Waka, Guru, Siswa, Orang Tua) maupun Mobile Client.
-- Mengotomatisasi siklus penyusunan jadwal sekolah berbasis **Siklus Putaran (Putaran 1 & Putaran 2)** serta integrasi impor otomatis dari berkas keluaran aplikasi **FET Tim Kurikulum**.
+- Menyediakan **Single Source of Truth** berupa REST API terpusat yang aman, efisien, dan konsisten untuk dikonsumsi oleh Web Client (Waka, Guru, Siswa, Orang Tua) maupun Mobile Client (Android App).
+- Mengotomatisasi siklus penyusunan jadwal sekolah berbasis **Siklus Putaran (Putaran 1 & Putaran 2 TeFa)** serta integrasi impor otomatis dari berkas keluaran aplikasi **FET Tim Kurikulum** tanpa konfigurasi manual (*Zero-Manual Matching*).
 - Mengakomodasi **Resolusi Jam Pelajaran Dinamis** yang menyesuaikan durasi jam belajar secara otomatis terhadap agenda rutin (Upacara Senin, Literasi Selasa, Tadarus/Pendalaman Iman Rabu–Kamis, serta KBM Pendek Jumat).
 - Meningkatkan akuntabilitas KBM melalui **Jurnal Mengajar Guru Berbasis Bukti Kamera Realtime** dan **Presensi Exception-Based** yang terintegrasi langsung dengan perizinan siswa.
-- Mengintegrasikan evaluasi pembelajaran modern melalui **Modul Kuis Berbantuan AI (*Google Gemini 3.8 Flash*)** untuk pembuatan soal otomatis, ekstraksi dokumen materi, dan koreksi semantik soal esai.
+- Memberikan wewenang terdistribusi yang presisi bagi **Wali Kelas** untuk menyetujui izin siswa rombel binaannya dengan sinkronisasi presensi otomatis, serta hak inval guru pengganti.
+- Mengelola siklus tahunan **Kenaikan Kelas Berbasis Tahun Ajaran & Angkatan** dengan auto-create rombel paralel baru, auto-archiving kelas usang, dan pengelolaan terpusat **Arsip Siswa & Kelulusan**.
+- Mengintegrasikan evaluasi pembelajaran modern melalui **Modul Kuis Berbantuan AI (*Google Gemini 3.8 Flash*)** untuk pembuatan soal otomatis, ekstraksi dokumen materi (PDF/TXT), dan koreksi semantik soal esai siswa.
 
 ---
 
 ### 1.2 Spesifikasi & Arsitektur Sistem
 Project mengadopsi pola **Headless API-First Architecture**:
 - **Backend Service (`scp/`)**: Dibangun sebagai API Provider mandiri berbasis Laravel 13 dan Laravel Sanctum. Seluruh hak otorisasi dan validasi logika bisnis ditegakkan di sisi server.
-- **Frontend Web Service (`frontend/scp_web/`)**: Dibangun sebagai Single Page Application (SPA) berbasis React 19 dan Vite, mengonsumsi endpoint JSON RESTful.
+- **Frontend Web Service (`frontend/scp_web/`)**: Single Page Application (SPA) berbasis React 19 dan Vite 8, mengonsumsi endpoint JSON RESTful dengan styling Tailwind CSS v4.
+- **Frontend Mobile Service (`frontend/scp_mobile/`)**: Aplikasi mobile berbasis Capacitor 8 + React 19 dengan dukungan update OTA (*Over-The-Air*) via `capacitor-updater`.
 - **Worker & Subprocess**: Pemrosesan berkas PDF tabular kompleks didelegasikan ke subprocess Python (`pdf_parser.py`), sementara pemanggilan AI dan evaluasi kuis dikelola melalui job antrean asinkron.
 
 ```mermaid
 flowchart TD
     subgraph Clients["Lapisan Klien Antarmuka (Consumers)"]
         WEB["React 19 Web SPA\n(Vite 8, Tailwind v4, React Router v7)"]
-        MOB["Mobile App Client\n(Capacitor + React 19)"]
+        MOB["Mobile App Client (Android)\n(Capacitor 8 + React 19 + OTA Updater)"]
     end
 
     subgraph BackendAPI["Backend REST API Gateway (Laravel 13 / PHP 8.4)"]
@@ -70,7 +74,7 @@ flowchart TD
     end
 
     subgraph DataStorage["Penyimpanan & Layanan Eksternal"]
-        PG["PostgreSQL 18 (db_scp)\n3.514 Users | 721 Jadwal"]
+        PG["PostgreSQL (db_scp)\n32 Rombel Aktif | 1.148 Siswa | 563 Arsip Lulusan"]
         S3["Supabase Storage S3 Bucket\n(Foto Jurnal, Dokumen Izin, Template)"]
         GEMINI["9Router API Gateway\n(Google Gemini 3.8 Flash)"]
     end
@@ -96,12 +100,13 @@ flowchart TD
 | Domain | Teknologi | Versi | Peran Teknis |
 |:---|:---|:---|:---|
 | **Backend Framework** | Laravel Framework | 13.17 (PHP ^8.3 / 8.4) | RESTful API Engine, ORM Eloquent, Form Validation, Scheduled Jobs |
-| **Autentikasi API** | Laravel Sanctum | 4.0 | Multi-device Personal Access Token (Bearer Token) |
-| **Basis Data Utama** | PostgreSQL | 18 | Relational database dengan indexing komposit dan transaction rollback |
+| **Autentikasi API** | Laravel Sanctum | 4.0 | Multi-device Personal Access Token (Bearer Token 30 Hari) |
+| **Basis Data Utama** | PostgreSQL | 16+ / 18 | Relational database dengan indexing komposit, soft deletes, dan transaction rollback |
 | **File Storage** | Supabase Storage (S3 SDK) | AWS S3 Client v3 | Penyimpanan awan persisten untuk foto jurnal, surat izin, dan lampiran tugas |
 | **Ekstraksi PDF** | Python + `pdfplumber` | 3.10+ / >=0.11.0 | Parsing koordinat matriks tabel PDF FET Kurikulum |
 | **AI Gateway** | 9Router Gateway | API v1 | Proxy LLM Google Gemini `ag/gemini-3.8-flash` |
-| **Frontend Web** | React.js | 19.2 | Library antarmuka komponen reaktif |
+| **Frontend Web** | React.js | 19.2 | Library antarmuka komponen reaktif SPA |
+| **Frontend Mobile** | Capacitor | 8.6 | Native bridge runtime untuk build Android APK & OTA update |
 | **Build Tool & Bundler**| Vite | 8.3 | HMR cepat, ESM bundling, dynamic import code-splitting |
 | **Styling & CSS** | Tailwind CSS | 4.3 | Utility-first CSS styling dengan `@tailwindcss/vite` |
 | **Navigasi Web** | React Router DOM | 7.18 | Declarative client-side routing & nested route protection |
@@ -122,12 +127,14 @@ flowchart TD
 - `symfony/process` (`^7.0`): Memanggil subprocess Python dari job antrean Laravel secara aman.
 - `phpunit/phpunit` (`^12.5`): Framework automated testing (unit & feature tests).
 
-#### Frontend (JavaScript / NPM)
+#### Frontend Web & Mobile (JavaScript / NPM)
 - `react` & `react-dom` (`^19.2.8`): Core library UI deklaratif berbasis komponen.
 - `react-router-dom` (`^7.18.4`): Routing SPA dengan perlindungan *Route Guards* berbasis role.
-- `axios` (`^1.20.0`): Klien HTTP terkonfigurasi dengan penanganan retry eksponensial (khusus GET) dan pencegahan logout prematur.
+- `@capacitor/core`, `@capacitor/android`, `@capacitor/cli` (`^8.6.0`): Wrapper runtime mobile Android native.
+- `@capgo/capacitor-updater` (`^6.0.0`): Layanan live OTA (*Over-The-Air*) update tanpa re-install file APK.
+- `axios` (`^1.20.0`): Klien HTTP terkonfigurasi dengan penanganan retry eksponensial (khusus GET) dan proteksi token logout.
 - `@tailwindcss/vite` & `tailwindcss` (`^4.3.3`): Framework CSS modern generasi terbaru.
-- `xlsx` (`^0.18.5`): Library pemrosesan spreadsheet di sisi klien untuk ekspor rekap harian.
+- `xlsx` (`^0.18.5`): Library pemrosesan spreadsheet di sisi klien untuk ekspor rekap harian & arsip siswa.
 - `lucide-react` (`^0.511.0`): Koleksi ikon SVG teroptimasi.
 
 #### Python Parser (`scp/requirements.txt`)
@@ -138,14 +145,17 @@ flowchart TD
 ### 1.5 Sistem Autentikasi, Otorisasi, & Pembagian Role
 
 #### Model Autentikasi
-1. **Login Kredensial Standar (`POST /api/login`)**:
-   - Menggunakan NIS (Siswa), NIP (Guru/Waka), atau identifier khusus.
-   - Mengembalikan Bearer Token dengan masa kedaluwarsa 30 hari (43.200 menit).
+1. **Multi-Identifier Login (`POST /api/login`)**:
+   - Mendukung login fleksibel menggunakan:
+     - **NIS / NIP**: Nomor Induk Siswa atau Pegawai resmi.
+     - **Email**: Alamat email akun yang terdaftar.
+     - **Nomor Telepon / Handphone**: Mendukung normalisasi nomor otomatis (awalan `08`, `628`, atau `+628`).
+   - Mengembalikan Bearer Token Sanctum dengan masa kedaluwarsa 30 hari (43.200 menit).
    - Flag `must_change_password`: Mengharuskan pengguna mengganti kata sandi acak awal sebelum mengakses data operasional.
 2. **Google OAuth SSO (`POST /api/auth/google`)**:
    - Menerima `id_token` dari SDK Google One-Tap/Sign-In, memverifikasi identitas via Google API Client, dan menerbitkan sesi Sanctum.
 3. **Step-Up Authentication (Password Re-confirmation)**:
-   - Sesuai revisi PRD v4.4, fitur global *Lock Schedule* dihapus dan digantikan kewajiban menyertakan `password` akun Waka yang sedang login pada setiap mutasi kritis (tambah/edit/hapus jadwal manual, konfirmasi komit impor PDF, ubah siklus putaran, ubah status upacara Senin, dan ubah tahun ajaran).
+   - Sesuai revisi PRD v4.4, fitur global *Lock Schedule* digantikan kewajiban menyertakan `password` akun Waka yang sedang login pada setiap mutasi kritis (tambah/edit/hapus jadwal manual, konfirmasi komit impor PDF, ubah siklus putaran, ubah status upacara Senin, dan ubah tahun ajaran).
 
 #### Pembagian Role & Penugasan Tambahan (*Multirole*)
 Sistem mengombinasikan kolom `role` pada tabel `users` dengan tabel relasi `teacher_assignments`:
@@ -154,8 +164,8 @@ Sistem mengombinasikan kolom `role` pada tabel `users` dengan tabel relasi `teac
 |:---|:---|:---|
 | **`vice_principal`** *(Waka Kurikulum)* | — | Pengelolaan penuh Kurikulum: CRUD Master Data, Manajemen Jadwal Pelajaran (manual & PDF), Siklus Kenaikan Kelas, Kalender Akademik, Konfigurasi Upacara, Reset Master Data, Monitoring Seluruh Sekolah. |
 | **`teacher`** *(Guru Pengampu)* | *(Dasar tanpa assignment)* | *Read-only* Jadwal Mengajar mandiri, membuka sesi kelas KBM, upload foto dokumentasi berkamera, presensi siswa *exception-based*, pengajuan izin mengajar mandiri, serta penyusunan dan evaluasi Kuis AI. |
-| **`teacher`** | **`kesiswaan`** *(Guru Kesiswaan/BK)* | Hak Guru Pengampu ditambah: Memantau rekap presensi seluruh sekolah, verifikasi perizinan siswa, verifikasi izin mengajar guru, menandai jam kosong (*teacher_absent*), dan bertindak sebagai Guru Pengganti (*substitute teacher*) pada jadwal guru yang berhalangan hadir. |
-| **`teacher`** | **`wali_kelas`** *(Wali Kelas)* | Hak Guru Pengampu ditambah: Monitoring kehadiran siswa kelas binaan, deteksi siswa berisiko kehadiran (alpa $\ge 3$), rekap presensi kelas binaan, unduh laporan Excel rombel, serta hak inval khusus pada kelas binaannya. |
+| **`teacher`** | **`kesiswaan`** *(Guru Kesiswaan/BK)* | Hak Guru Pengampu ditambah: Memantau rekap presensi seluruh sekolah, verifikasi perizinan siswa lintas kelas, verifikasi izin mengajar guru, menandai jam kosong (*teacher_absent*), dan bertindak sebagai Guru Pengganti (*substitute teacher*) pada jadwal guru yang berhalangan hadir. |
+| **`teacher`** | **`wali_kelas`** *(Wali Kelas)* | Hak Guru Pengampu ditambah: **Verifikasi resmi (Setujui/Tolak) izin siswa khusus untuk rombel binaannya** dengan sinkronisasi presensi otomatis, monitoring kehadiran siswa kelas binaan, deteksi siswa berisiko kehadiran (alpa $\ge 3$), unduh laporan Excel rombel, serta hak inval pengganti khusus pada kelas binaannya. |
 | **`student`** *(Peserta Didik)* | — | Melihat jadwal kelasnya, ringkasan presensi mandiri, mengajukan permohonan izin (tidak masuk / keluar sekolah) dengan bukti surat, mengerjakan kuis AI aktif, dan melihat riwayat nilai yang dirilis. |
 | **`parent`** *(Orang Tua / Wali)* | — *(Terkoneksi via `linked_student_id`)* | Akses *read-only* atas kehadiran anak per jam pelajaran, status izin anak, jadwal kelas anak, dan nilai asesmen kuis anak. |
 
@@ -164,8 +174,9 @@ Sistem mengombinasikan kolom `role` pada tabel `users` dengan tabel relasi `teac
 ### 1.6 Database, Standar API, & Integrasi Layanan Eksternal
 
 #### Struktur Entitas Database Utama (PostgreSQL `db_scp`)
-- `users`: Induk akun seluruh pengguna (Waka, Guru, Siswa, Orang Tua) beserta kontak verifikasi, Google ID, dan penautan relasi.
-- `classes`: Rombongan belajar sekolah (tingkat 10, 11, 12). Kolom `next_class_id` memetakan jalur promosi kenaikan kelas.
+- `users`: Induk akun seluruh pengguna (Waka, Guru, Siswa, Orang Tua) beserta kontak verifikasi, Google ID, nomor telepon, status kelulusan, dan soft deletes.
+- `classes`: Rombongan belajar sekolah (tingkat 10, 11, 12). Kolom `next_class_id` memetakan jalur promosi kenaikan kelas; mendukung soft deletes untuk pengarsipan kelas usang.
+- `student_class_histories`: Rekam jejak riwayat kelas, mutasi rombel, promosi kenaikan kelas (`promoted`), tinggal kelas (`held_back`), dan kelulusan siswa (`graduated`).
 - `rooms`: Ruang teori dan laboratorium beserta kapasitas maksimal.
 - `subjects`: Master mata pelajaran resmi sekolah.
 - `teacher_assignments`: Menyimpan penugasan multirole guru (`kesiswaan` atau `wali_kelas`) beserta rombel yang dinaungi.
@@ -190,8 +201,8 @@ Seluruh endpoint menghasilkan struktur *envelope* yang seragam:
 {
   "success": true,
   "message": "Deskripsi hasil operasi",
-  "data": { ... } // Objek atau Array koleksi data
-  "meta": { "current_page": 1, "per_page": 15, "total": 100, "last_page": 7 } // Opsional
+  "data": { ... }, // Objek atau Array koleksi data
+  "meta": { "current_page": 1, "per_page": 25, "total": 100, "last_page": 4 } // Opsional pagination
 }
 
 // Format Gagal / Error:
@@ -221,7 +232,7 @@ Seluruh endpoint menghasilkan struktur *envelope* yang seragam:
 ### 2.1 Struktur Folder Proyek
 ```
 SchoolClassProject/
-├── .github/                   # Workflow CI/CD & konfigurasi repositori
+├── .github/                   # Workflow CI/CD & konfigurasi deployment
 ├── deploy/                    # Berkas konfigurasi deployment Nginx & container
 ├── scp/                       # BACKEND REST API (Laravel 13)
 │   ├── app/
@@ -242,7 +253,7 @@ SchoolClassProject/
 │   ├── routes/                # api.php (121 routes), console.php, web.php
 │   ├── script/                # Script Python pemroses PDF (pdf_parser.py, pdf_doc_extractor.py)
 │   ├── storage/               # Penyimpanan lokal sementara & templates
-│   └── tests/                 # 67 Automated Feature & Unit Test files
+│   └── tests/                 # 67 Automated Feature & Unit Test files (480 test cases)
 │
 ├── frontend/
 │   ├── scp_web/               # FRONTEND WEBSITE SPA (React 19 + Vite 8)
@@ -264,15 +275,22 @@ SchoolClassProject/
 │   │   │   │   ├── profile/   # ProfilePage (universal profile)
 │   │   │   │   ├── student/   # StudentHome, Schedule, Permission, Quiz, Calendar
 │   │   │   │   ├── teacher/   # Dashboard, Schedule, Journal, Leave, Quiz, Verification
-│   │   │   │   └── waka/      # DashboardWaka, Schedule, MasterData, Promotion, dll.
+│   │   │   │   └── waka/      # DashboardWaka, Schedule, MasterData, Promotion, AlumniPage (Arsip Siswa)
 │   │   │   ├── routes/        # AppRouter, ProtectedRoute, PublicRoute, RoleRoute
 │   │   │   ├── services/      # 10 Modul pemanggil endpoint REST API Axios
 │   │   │   ├── styles/        # global.css, tokens.css
 │   │   │   └── utils/         # dateUtils (WIB), responseHelper, timetableHelper
-│   │   ├── package.json       # Konfigurasi dependensi frontend
+│   │   ├── package.json       # Konfigurasi dependensi frontend web
 │   │   └── vite.config.js     # Konfigurasi Vite, Tailwind plugin, & Build Guard
 │   │
-│   └── scp_mobile/            # APLIKASI MOBILE (Capacitor + React 19)
+│   └── scp_mobile/            # APLIKASI MOBILE ANDROID (Capacitor 8 + React 19)
+│       ├── android/           # Project native Android Studio (Gradle build)
+│       ├── src/               # Source code antarmuka mobile React 19
+│       │   ├── services/      # updaterService.js (OTA live updates), api.js
+│       │   └── pages/         # Halaman mobile operasional (Guru, Siswa, Ortu, Waka)
+│       ├── capacitor.config.json # Konfigurasi App ID, nama aplikasi, & plugins
+│       └── package.json       # Dependensi mobile client
+│
 ├── ANALISIS_PERFORMA_DAN_STABILITAS_SISTEM.md # Dokumen baseline performa & root cause
 └── README.md                  # Dokumentasi teknis utama project (file ini)
 ```
@@ -283,24 +301,25 @@ SchoolClassProject/
 
 | Fitur | Lokasi File Backend | Lokasi File Frontend | Fungsi & Tanggung Jawab |
 |:---|:---|:---|:---|
-| **Autentikasi & Sesi** | `scp/app/Http/Controllers/API/AuthController.php`<br>`scp/app/Http/Middleware/RoleMiddleware.php` | `frontend/scp_web/src/pages/auth/LoginPage.jsx`<br>`frontend/scp_web/src/context/AuthContext.jsx`<br>`frontend/scp_web/src/routes/ProtectedRoute.jsx` | Mengelola login multi-role via NIS/NIP, Google SSO, token Sanctum, dan otorisasi rute. |
+| **Autentikasi & Sesi** | `scp/app/Http/Controllers/API/AuthController.php`<br>`scp/app/Http/Middleware/RoleMiddleware.php` | `frontend/scp_web/src/pages/auth/LoginPage.jsx`<br>`frontend/scp_web/src/context/AuthContext.jsx`<br>`frontend/scp_web/src/routes/ProtectedRoute.jsx` | Mengelola login multi-role via NIS/NIP, Email, atau No. Handphone (WhatsApp), Google SSO, token Sanctum, dan otorisasi rute. |
 | **Pemulihan Kata Sandi** | `scp/app/Http/Controllers/API/ForgotPasswordController.php`<br>`scp/app/Services/PasswordResetOtpService.php` | `frontend/scp_web/src/pages/auth/ForgotPasswordPage.jsx`<br>`frontend/scp_web/src/services/forgotPasswordApi.js` | Wizard 5 langkah reset password mandiri via kode OTP email dan token reset aman. |
 | **Profil & Tautan Kontak**| `scp/app/Http/Controllers/API/ProfileController.php`<br>`scp/app/Services/GoogleAuthService.php`<br>`scp/app/Services/WhatsAppService.php` | `frontend/scp_web/src/pages/profile/ProfilePage.jsx`<br>`frontend/scp_web/src/pages/auth/ChangePasswordPage.jsx` | Pengaturan data profil, ganti kata sandi, tautan akun Google SSO, dan verifikasi OTP WA/Email. |
 | **Pengaturan Akademik** | `scp/app/Http/Controllers/API/AcademicSettingController.php`<br>`scp/app/Models/SystemConfiguration.php` | `frontend/scp_web/src/pages/waka/DashboardWakaPage.jsx`<br>`frontend/scp_web/src/services/scheduleApi.js` | Pengaturan siklus Putaran 1/2 TeFa, status upacara Senin, tahun ajaran, dan riwayat pergantian putaran. |
 | **Resolusi Jam KBM** | `scp/app/Services/PeriodResolutionService.php`<br>`scp/app/Models/PeriodTemplate.php` | `frontend/scp_web/src/utils/timetableHelper.js`<br>`frontend/scp_web/src/components/schedule/*` | Menghitung waktu pasti KBM per slot jam dinamis sesuai kondisi hari dan menampilkan matriks jadwal. |
-| **Manajemen Master Data** | `scp/app/Http/Controllers/API/{SchoolClass,Room,Subject,Teacher,Student}Controller.php` | `frontend/scp_web/src/pages/waka/MasterDataPage.jsx`<br>`frontend/scp_web/src/services/masterDataApi.js` | CRUD data Kelas, Ruangan, Mapel, Guru (+ penugasan tambahan), Siswa (+ akun orang tua otomatis). |
+| **Manajemen Master Data** | `scp/app/Http/Controllers/API/{SchoolClass,Room,Subject,Teacher,Student}Controller.php` | `frontend/scp_web/src/pages/waka/MasterDataPage.jsx`<br>`frontend/scp_web/src/services/masterDataApi.js` | CRUD data Kelas (dengan hitungan siswa aktif), Ruangan, Mapel, Guru (+ penugasan tambahan), Siswa (+ akun orang tua otomatis). |
 | **Tempat Sampah & Dependensi**| `scp/app/Http/Controllers/API/RecycleBinController.php`<br>`scp/app/Services/MasterDataDependencyService.php` | `frontend/scp_web/src/pages/waka/components/DeleteConflictDialog.jsx`<br>`MasterDataPage.jsx` (Tab Tempat Sampah) | Deteksi keterikatan foreign key sebelum penghapusan, soft delete, restore, dan force delete. |
 | **Jadwal Manual Waka** | `scp/app/Http/Controllers/API/ScheduleController.php`<br>`scp/app/Services/ScheduleConflictService.php` | `frontend/scp_web/src/pages/waka/ScheduleManagementPage.jsx`<br>`frontend/scp_web/src/components/shared/PasswordModal.jsx` | Input jadwal manual per putaran, deteksi bentrok guru/ruang/kelas real-time, dan password re-confirmation. |
-| **Impor Jadwal PDF FET** | `scp/app/Http/Controllers/API/ScheduleImportController.php`<br>`scp/app/Jobs/ParseSchedulePdfJob.php`<br>`scp/script/pdf_parser.py` | `frontend/scp_web/src/pages/waka/ScheduleImportPage.jsx`<br>`frontend/scp_web/src/services/scheduleImportApi.js` | Upload 2 PDF (jadwal kelas & ruangan), parsing tabel via Python, preview 3-tier, resolusi guru/ruang, komit final. |
+| **Impor Jadwal PDF FET** | `scp/app/Http/Controllers/API/ScheduleImportController.php`<br>`scp/app/Jobs/ParseSchedulePdfJob.php`<br>`scp/script/pdf_parser.py` | `frontend/scp_web/src/pages/waka/ScheduleImportPage.jsx`<br>`frontend/scp_web/src/services/scheduleImportApi.js` | Upload 2 PDF (jadwal kelas & ruangan), parsing tabel via Python, preview 3-tier, resolusi guru/ruang, tombol Batalkan Draf bersih, komit final. |
 | **Kalender & Peniadaan KBM**| `scp/app/Http/Controllers/API/AcademicEventController.php`<br>`scp/app/Services/AcademicCalendarExclusionService.php` | `frontend/scp_web/src/pages/waka/AcademicCalendarPage.jsx`<br>`frontend/scp_web/src/components/calendar/SharedCalendarView.jsx` | Manajemen kegiatan sekolah, penanda hari libur/ujian, dan pemblokiran otomatis kewajiban jurnal KBM. |
 | **Jurnal Mengajar Guru** | `scp/app/Http/Controllers/API/JournalController.php`<br>`scp/app/Models/Journal.php` | `frontend/scp_web/src/pages/teacher/TeacherJournalPage.jsx`<br>`frontend/scp_web/src/services/journalApi.js` | Membuka sesi kelas KBM, jepret foto dokumentasi via webcam/HP, kompresi foto otomatis, dan materi pembelajaran. |
 | **Presensi Siswa Exception**| `scp/app/Http/Controllers/API/JournalController.php` (update)<br>`scp/app/Models/Attendance.php` | `TeacherJournalPage.jsx` (Tabel presensi)<br>`frontend/scp_web/src/utils/imageCompressor.js` | Presensi presisi: hanya siswa tidak hadir (Sakit/Izin/Alpa) yang dikirim; siswa lainnya otomatis Hadir di DB. |
-| **Perizinan Siswa** | `scp/app/Http/Controllers/API/LeaveRequestController.php`<br>`scp/app/Models/LeaveRequest.php` | `frontend/scp_web/src/pages/student/StudentPermissionPage.jsx`<br>`frontend/scp_web/src/pages/teacher/PermissionVerifyPage.jsx` | Pengajuan izin siswa multi-hari/keluar KBM dengan surat bukti, serta verifikasi oleh Kesiswaan/Wali Kelas. |
+| **Perizinan Siswa** | `scp/app/Http/Controllers/API/LeaveRequestController.php`<br>`scp/app/Models/LeaveRequest.php` | `frontend/scp_web/src/pages/student/StudentPermissionPage.jsx`<br>`frontend/scp_web/src/pages/teacher/PermissionVerifyPage.jsx` | Pengajuan izin siswa (tidak masuk / dispensasi). **Wali Kelas memiliki wewenang verifikasi resmi (Setujui/Tolak)** untuk rombel binaannya dengan sinkronisasi presensi otomatis; Kesiswaan lintas kelas. |
 | **Perizinan Mengajar Guru**| `scp/app/Http/Controllers/API/TeacherLeaveRequestController.php`<br>`scp/app/Services/TeacherLeaveAuthorityResolver.php` | `frontend/scp_web/src/pages/teacher/TeacherLeavePage.jsx`<br>`PermissionVerifyPage.jsx` (Tab Izin Guru) | Pengajuan izin guru berhalangan hadir disertai surat izin dan instruksi tugas titipan untuk guru pengganti. |
 | **Inval & Guru Pengganti** | `scp/app/Http/Controllers/API/JournalController.php` (store)<br>`scp/app/Models/Journal.php` | `TeacherJournalPage.jsx` (Mode Pengganti)<br>`TeacherDashboardPage.jsx` | Mengizinkan Guru Kesiswaan atau Wali Kelas membuka dan mengisi jurnal/presensi pada jadwal guru yang berhalangan. |
 | **Rekapitulasi Kehadiran** | `scp/app/Http/Controllers/API/AttendanceRecapController.php`<br>`scp/app/Http/Controllers/API/AttendanceController.php` | `frontend/scp_web/src/pages/teacher/StudentAttendanceRecapPage.jsx`<br>`frontend/scp_web/src/pages/waka/MonitoringRecapPage.jsx` | Agregasi SQL rekap kehadiran siswa, filter periode, deteksi siswa berisiko (alpa $\ge 3$), dan ekspor Excel `.xlsx`. |
 | **Kuis Berbantuan AI** | `scp/app/Http/Controllers/API/QuizController.php`<br>`scp/app/Services/AIService.php`<br>`scp/app/Jobs/GenerateQuizFromPromptJob.php` | `frontend/scp_web/src/pages/teacher/TeacherQuizPage.jsx`<br>`frontend/scp_web/src/pages/student/StudentQuizPage.jsx`<br>`frontend/scp_web/src/services/quizApi.js` | Pembuatan kuis AI via Prompt (konfigurasi komposisi PG/Esai ketat), ekstraksi dokumen PDF/TXT, pengerjaan kuis siswa, koreksi esai semantik AI, override nilai guru, dan rilis hasil. |
-| **Kenaikan Kelas & Alumni** | `scp/app/Http/Controllers/API/SchoolClassController.php` (promote)<br>`scp/app/Http/Controllers/API/StudentController.php` (holdBack) | `frontend/scp_web/src/pages/waka/GradePromotionPage.jsx` | Simulasi promosi kenaikan rombel massal akhir tahun, menandai siswa tinggal kelas, dan tanggal kelulusan kelas 12. |
+| **Kenaikan Kelas Berbasis Tahun Ajaran** | `scp/app/Http/Controllers/API/SchoolClassController.php` (`autoMapClasses`, `promoteClasses`, `saveAllMappings`) | `frontend/scp_web/src/pages/waka/GradePromotionPage.jsx` | Kenaikan kelas berbasis tahun ajaran: pemetaan otomatis rombel paralel baru, aksi simpan massal, isolasi kelulusan Kelas 12, dan pengarsipan rombel usang pasca-promosi. |
+| **Modul Arsip Siswa & Kelulusan** | `scp/app/Http/Controllers/API/StudentController.php` (`alumniIndex`, `exportAlumni`) | `frontend/scp_web/src/pages/waka/AlumniPage.jsx` (Menu Arsip Siswa) | Basis data terpusat siswa lulusan/alumni: badge count terintegrasi (`563 Siswa`), filter tahun kelulusan & jurusan, modal riwayat kelas, dan ekspor spreadsheet `.xlsx`. |
 | **Monitoring Anak (Ortu)** | Scoped query pada `JournalController`, `AttendanceController`, `QuizController` | `frontend/scp_web/src/pages/parent/ParentMonitoringPage.jsx`<br>`frontend/scp_web/src/pages/parent/ParentCalendarPage.jsx` | Portal pemantauan orang tua atas kehadiran anak per jam pelajaran, status permohonan izin, dan nilai kuis. |
 | **Notifikasi Internal (Lonceng)** | `scp/app/Http/Controllers/API/NotificationController.php`<br>`scp/app/Models/Notification.php` | `frontend/scp_web/src/components/layout/TopBar.jsx`<br>`frontend/scp_web/src/services/notificationApi.js`<br>`DashboardWakaPage.jsx` | Sistem pengingat KBM & teguran jurnal in-app: tombol pengingat Waka, polling badge unread di lonceng TopBar, popover dropdown, dan navigasi langsung ke formulir jurnal. |
 
@@ -312,7 +331,7 @@ SchoolClassProject/
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Guru as Guru Pengampu
+    actor Guru as Guru Pengampu / Wali Kelas (Inval)
     participant Page as TeacherJournalPage.jsx
     participant API as JournalController.php
     participant DB as PostgreSQL (db_scp)
@@ -337,36 +356,53 @@ sequenceDiagram
     API-->>Page: 200 OK (jurnal selesai & terkunci)
 ```
 
-#### Alur 2: Ekstraksi Jadwal PDF FET Kurikulum
+#### Alur 2: Verifikasi Perizinan Siswa oleh Wali Kelas & Sinkronisasi Presensi
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Walas as Wali Kelas Rombel Binaan
+    participant UI as PermissionVerifyPage.jsx
+    participant API as LeaveRequestController.php
+    participant DB as PostgreSQL (db_scp)
+
+    Walas->>UI: Buka menu Perizinan Siswa (Ter-scope ke rombel binaan)
+    UI->>API: GET /api/leave-requests?status=pending
+    API->>DB: Query izin siswa ter-filter homeroomClassIds
+    API-->>UI: 200 OK (Daftar antrean izin siswa)
+    Walas->>UI: Klik "Lihat Surat" (Pratinjau berkas lampiran izin)
+    Walas->>UI: Klik tombol "Setujui" (Aksi Verifikasi Aktif)
+    UI->>API: PATCH /api/leave-requests/{id} (status: approved)
+    API->>API: Validasi otorisasi ($isWaliKelasForClass)
+    API->>DB: DB::transaction -> Update leave_requests (verified_by: walas_id, status: approved)
+    API->>DB: Sinkronisasi retroaktif tabel attendances (status: Sakit / Izin)
+    API-->>UI: 200 OK + Feedback Notifikasi Toast
+    UI-->>Walas: Status baris berubah menjadi "Disetujui"
+```
+
+#### Alur 3: Siklus Kenaikan Kelas, Auto-Mapping Rombel, & Pengarsipan Alumni
 ```mermaid
 sequenceDiagram
     autonumber
     actor Waka as Waka Kurikulum
-    participant UI as ScheduleImportPage.jsx
-    participant Ctrl as ScheduleImportController.php
-    participant Job as ParseSchedulePdfJob.php
-    participant Py as Python Subprocess (pdf_parser.py)
+    participant UI as GradePromotionPage.jsx
+    participant Ctrl as SchoolClassController.php
     participant DB as PostgreSQL (db_scp)
 
-    Waka->>UI: Unggah berkas Jadwal_Kelas.pdf & Jadwal_Ruangan.pdf
-    UI->>Ctrl: POST /api/schedule-imports (Multipart + cycle_type)
-    Ctrl->>Ctrl: Validasi kelayakan Master Data (MasterDataPrerequisiteService)
-    Ctrl->>DB: Simpan record schedule_imports (status: parsing)
-    Ctrl->>Job: Dispatch ParseSchedulePdfJob (asinkron)
-    Ctrl-->>UI: 202 Accepted (Batch ID)
-    
-    Job->>Py: Eksekusi python pdf_parser.py <path_kelas> <path_ruang>
-    Py->>Py: Ekstraksi koordinat tabel & normalisasi kode ruang
-    Py-->>Job: Output JSON Array hasil parsing
-    Job->>DB: Pencocokan 3-Tier (TeacherMatcherService, Room, Subject)
-    Job->>DB: Simpan baris schedule_import_rows (status: preview_ready)
-    
-    UI->>Ctrl: Polling GET /api/schedule-imports/{id}
-    Ctrl-->>UI: Data baris matched, unmatched, conflict
-    Waka->>UI: Koreksi baris unmatched & masukkan password Waka
-    UI->>Ctrl: POST /api/schedule-imports/{id}/confirm (password)
-    Ctrl->>DB: Verifikasi password -> Soft delete jadwal siklus lama -> Insert jadwal baru
-    Ctrl-->>UI: 200 OK (Import Sukses Terkomit)
+    Waka->>UI: Buka menu Kenaikan Kelas
+    UI->>Ctrl: GET /api/classes/auto-map (Kalkulasi pemetaan rombel otomatis)
+    Ctrl->>DB: Cocokkan rombel paralel (Contoh: XI LPS 1 -> XII LPS 1)
+    Ctrl->>DB: Jika rombel tujuan belum ada di tahun baru, auto-create/restore
+    Ctrl-->>UI: Matriks pemetaan otomatis (Tingkat 10->11, 11->12, 12->Lulus)
+    Waka->>UI: Klik "Simpan Semua Pemetaan"
+    UI->>Ctrl: POST /api/classes/bulk-save-mapping (Simpan next_class_id seluruh rombel)
+    Waka->>UI: Konfirmasi Eksekusi Kenaikan Kelas (Input Password Waka)
+    UI->>Ctrl: POST /api/classes/promote (Password Re-confirmation)
+    Ctrl->>DB: DB::transaction:
+    Note over Ctrl,DB: 1. Siswa Kelas 12: graduation_date diisi, class_id=NULL (Masuk Arsip Siswa)
+    Note over Ctrl,DB: 2. Siswa Kelas 10 & 11: Pindah ke target next_class_id
+    Note over Ctrl,DB: 3. Insert student_class_histories untuk seluruh siswa
+    Note over Ctrl,DB: 4. Soft-delete rombel kosong (X usang & XII lama tak terpakai)
+    Ctrl-->>UI: 200 OK (Promosi Selesai: 32 Rombel Aktif, 563 Siswa Terarsip)
 ```
 
 ---
@@ -380,6 +416,7 @@ Sebelum menjalankan project di lingkungan lokal maupun server, pastikan dependen
 - **Node.js**: Versi 20.x atau 22.x LTS, serta package manager **npm** versi 10+.
 - **Database**: PostgreSQL versi 16, 17, atau 18.
 - **Python**: Versi 3.10+ (untuk script ekstraksi PDF).
+- **Android SDK & Gradle**: Versi Android 13+ (API 33+) untuk kompilasi client mobile Capacitor.
 - **Web Server (Produksi)**: Nginx dengan PHP-FPM (hindari menjalankan `php artisan serve` atau `php -S` di lingkungan produksi).
 
 ---
@@ -470,7 +507,38 @@ Sebelum menjalankan project di lingkungan lokal maupun server, pastikan dependen
 
 ---
 
-### 3.4 Referensi Variabel Lingkungan (.env)
+### 3.4 Langkah Kompilasi Aplikasi Mobile (Capacitor Android)
+
+1. **Masuk ke direktori mobile:**
+   ```bash
+   cd frontend/scp_mobile
+   ```
+
+2. **Pasang dependensi mobile:**
+   ```bash
+   npm install
+   ```
+
+3. **Build aset web mobile:**
+   ```bash
+   npm run build
+   ```
+
+4. **Sinkronisasi aset web ke project native Android:**
+   ```bash
+   npx cap sync android
+   ```
+
+5. **Buka project di Android Studio atau build APK rilis:**
+   ```bash
+   npx cap open android
+   # Atau langsung kompilasi APK via gradle:
+   cd android && ./gradlew assembleDebug
+   ```
+
+---
+
+### 3.5 Referensi Variabel Lingkungan (.env)
 
 #### Konfigurasi Kunci Backend (`scp/.env`)
 ```ini
@@ -533,7 +601,7 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 
 ---
 
-### 3.5 Perintah Artisan, Testing, & Database Migration
+### 3.6 Perintah Artisan, Testing, & Database Migration
 
 - **Menjalankan Seluruh Automated Test Suite (Feature & Unit):**
   ```bash
@@ -541,9 +609,12 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
   ```
 - **Menjalankan Tes Spesifik Modul:**
   ```bash
-  php artisan test tests/Feature/ScheduleTest.php
-  php artisan test tests/Feature/QuizTest.php
-  php artisan test tests/Unit/PeriodResolutionBenchmarkTest.php
+  php artisan test --filter=WaliKelasAccessTest
+  php artisan test --filter=ClassPromotionTest
+  php artisan test --filter=StudentImportTest
+  php artisan test --filter=LeaveRequestFeatureTest
+  php artisan test --filter=ScheduleTest
+  php artisan test --filter=QuizTest
   ```
 - **Membersihkan dan Me-reset Database ke Kondisi Bersih:**
   ```bash
@@ -563,24 +634,31 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 
 ## 4. CATATAN STATUS FITUR & PENYESUAIAN ARSITEKTUR
 
-Untuk memudahkan developer baru memahami divergensi antara dokumen perencanaan awal (Paket 3 / PRD lama) dengan kode aktual saat ini:
+Untuk memudahkan tim pengembang memahami divergensi antara dokumen perencanaan awal (Paket 3 / PRD lama) dengan implementasi mutakhir yang aktif di sistem:
 
 1. **Pengelolaan Jadwal Terpusat di Waka Kurikulum:**
    - *Status:* **Aktif Penuh.**
    - Guru tidak memiliki hak mutasi jadwal sama sekali (`TeacherSchedulePage.jsx` berstatus *read-only*). Seluruh penambahan, pengeditan, impor PDF, dan penghapusan jadwal dilakukan oleh Waka Kurikulum.
-2. **Penghapusan Kolom `fet_staff_id`:**
+2. **Penghapusan Kolom `fet_staff_id` & Algoritma Matcher 3-Tier:**
    - *Status:* **Aktif Penuh.**
-   - Kolom `fet_staff_id` telah dihapus dari tabel `users` via migration `2026_11_04_000003`. Pencocokan jadwal impor FET kini menggunakan nama guru dan normalisasi gelar melalui `TeacherMatcherService.php`.
-3. **Wewenang Inval Guru Pengganti (*Substitute Teacher*):**
+   - Kolom `fet_staff_id` telah dihapus dari tabel `users` via migration `2026_11_04_000003`. Pencocokan jadwal impor FET kini menggunakan nama guru dan normalisasi gelar melalui `TeacherMatcherService.php` secara otomatis (*Zero-Manual Matching*).
+3. **Wewenang Verifikasi Perizinan Siswa oleh Wali Kelas:**
+   - *Status:* **Aktif Penuh (Backend & Frontend).**
+   - Sesuai business logic terbaru, **Wali Kelas memiliki wewenang verifikasi resmi (Setujui / Tolak)** untuk perizinan siswa dari rombel yang diampunya. Persetujuan izin otomatis menyinkronkan status presensi KBM siswa secara retroaktif menjadi *Sakit* atau *Izin*. Otorisasi siswa dari kelas di luar binaannya tetap dikunci ketat (`403 Forbidden`).
+4. **Wewenang Inval Guru Pengganti (*Substitute Teacher*):**
    - *Status:* **Aktif pada Kode Sumber.**
    - Di implementasi kode nyata (`JournalController.php` dan `TeacherJournalPage.jsx`), selain Guru Kesiswaan, **Wali Kelas juga memiliki wewenang untuk membuka dan mengisi sesi KBM pengganti pada kelas binaannya sendiri**.
-4. **Ekspor Data Rekapitulasi (Excel vs PDF):**
+5. **Kenaikan Kelas Berbasis Tahun Ajaran & Modul Arsip Siswa:**
+   - *Status:* **Aktif Penuh.**
+   - Kenaikan kelas mengelola struktur rombel antar-tahun ajaran secara dinamis. Jika kelas paralel di tingkat baru belum ada (misal `XI LPS 1` & `XI LPS 2` naik ke tingkat 12 yang dulunya hanya punya rombel tunggal `XII LPS`), sistem **secara otomatis membuat rombel paralel `XII LPS 1` dan `XII LPS 2`** serta mengarsipkan rombel kosong pasca-promosi via soft-delete.
+   - Siswa yang lulus otomatis masuk ke modul **Arsip Siswa & Kelulusan** (`AlumniPage.jsx`), tidak lagi muncul di daftar siswa aktif, dan data kelulusan dapat diekspor ke Excel `.xlsx`.
+6. **Ekspor Data Rekapitulasi (Excel vs PDF):**
    - *Status:* **Excel Lengkap, PDF Native Belum.**
-   - Ekspor rekapitulasi kehadiran dan rekapitulasi jurnal mengajar telah berfungsi penuh dalam format **Excel Spreadsheet (`.xlsx`)** menggunakan Spatie Simple Excel dan SheetJS. Ekspor langsung dalam format berkas PDF native (misalnya menggunakan DomPDF) belum diimplementasikan dan saat ini mengandalkan fungsi cetak browser (*Print to PDF*).
-5. **Konfigurasi Background Queue Worker:**
+   - Ekspor rekapitulasi kehadiran, rekapitulasi jurnal mengajar, dan data arsip siswa telah berfungsi penuh dalam format **Excel Spreadsheet (`.xlsx`)** menggunakan Spatie Simple Excel dan SheetJS. Ekspor langsung dalam format berkas PDF native (misalnya menggunakan DomPDF) belum diimplementasikan dan saat ini mengandalkan fungsi cetak browser (*Print to PDF*).
+7. **Konfigurasi Background Queue Worker:**
    - *Status:* **Memerlukan Perhatian Operasional.**
    - Kode backend menggunakan antrean job (`ExtractQuizFromDocumentJob`, `GenerateQuizFromPromptJob`, `GradeQuizSubmissionJob`, `ParseSchedulePdfJob`). Pastikan perintah `php artisan queue:work` selalu berjalan sebagai daemon (misal via Supervisor/systemd) di server agar proses pembuatan kuis AI dan evaluasi pengerjaan siswa tidak tertahan di status `generating`/`pending`.
 
 ---
 
-*Dokumentasi ini disusun secara objektif berdasarkan verifikasi menyeluruh terhadap source code aktual pada repositori School Class Progress (SCP).*
+*Dokumentasi ini disusun dan diverifikasi secara objektif berdasarkan audit menyeluruh terhadap kode sumber aktual repositori School Class Progress (SCP).*

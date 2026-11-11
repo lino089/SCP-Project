@@ -9,6 +9,7 @@ import Button from '../../../components/shared/Button';
 export default function DeleteConflictDialog({
   isOpen = false,
   onClose,
+  onProceedForceDelete,
   entityName = '',
   entityType = 'Data',
   errorMessage = '',
@@ -20,8 +21,17 @@ export default function DeleteConflictDialog({
       size="sm"
       title="Tidak Dapat Menghapus Data"
       footer={
-        <div className="flex justify-end w-full">
-          <Button variant="primary" onClick={onClose}>
+        <div className="flex justify-between items-center w-full gap-2">
+          {onProceedForceDelete && (
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={onProceedForceDelete}
+            >
+              Lanjutkan ke Hapus Paksa
+            </Button>
+          )}
+          <Button variant="primary" size="sm" onClick={onClose}>
             Saya Mengerti
           </Button>
         </div>
@@ -37,7 +47,7 @@ export default function DeleteConflictDialog({
               Konflik Keterikatan Jadwal (HTTP 409)
             </h4>
             <p className="text-xs text-amber-700 mt-0.5">
-              {entityType} <strong>{entityName}</strong> tidak dapat dihapus saat ini.
+              {entityType} <strong>{entityName}</strong> memiliki keterkaitan jadwal aktif.
             </p>
           </div>
         </div>
@@ -50,7 +60,7 @@ export default function DeleteConflictDialog({
           <div className="p-2.5 bg-neutral-50 rounded border border-neutral-200 flex items-start gap-2 text-neutral-700">
             <AlertCircle size={15} className="text-gray-500 shrink-0 mt-0.5" />
             <span>
-              <strong>Solusi:</strong> Silakan buka menu <em>Jadwal Pelajaran</em> untuk memindahkan atau menghapus sesi jadwal yang menggunakan {entityType.toLowerCase()} ini terlebih dahulu.
+              <strong>Pilihan:</strong> Anda dapat memindahkan atau menghapus sesi jadwal di menu <em>Jadwal Pelajaran</em> terlebih dahulu, atau gunakan opsi <strong>Hapus Bersih & Paksa</strong> dengan verifikasi kata sandi untuk membersihkan seluruh keterkaitan data secara permanen.
             </span>
           </div>
         </div>

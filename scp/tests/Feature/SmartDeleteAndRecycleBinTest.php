@@ -287,4 +287,107 @@ class SmartDeleteAndRecycleBinTest extends TestCase
             'schedule_id' => $schedule->id,
         ]);
     }
+
+    public function test_soft_delete_teacher_with_schedules_and_restore_restores_schedules(): void
+    {
+        $schedule = Schedule::create([
+            'teacher_id' => $this->teacher->id,
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'room_id' => $this->room->id,
+            'day_of_week' => 2,
+            'period_number' => 3,
+            'duration_periods' => 2,
+            'cycle_type' => 1,
+            'source' => 'manual',
+        ]);
+
+        Sanctum::actingAs($this->waka);
+
+        // Soft delete teacher
+        $deleteRes = $this->deleteJson("/api/teachers/{$this->teacher->id}");
+        $deleteRes->assertStatus(200);
+
+        $this->assertSoftDeleted('users', ['id' => $this->teacher->id]);
+        $this->assertSoftDeleted('schedules', ['id' => $schedule->id]);
+
+        // Restore teacher
+        $restoreRes = $this->postJson("/api/master/guru/{$this->teacher->id}/restore");
+        $restoreRes->assertStatus(200);
+
+        $restoredTeacher = User::find($this->teacher->id);
+        $this->assertNotNull($restoredTeacher);
+        $this->assertTrue((bool) $restoredTeacher->is_active);
+
+        // Schedules also restored
+        $restoredSchedule = Schedule::find($schedule->id);
+        $this->assertNotNull($restoredSchedule);
+        $this->assertNull($restoredSchedule->deleted_at);
+    }
+
+    public function test_force_delete_teacher_with_schedule_import_rows_and_substitute_journal_succeeds(): void
+    {
+        // Hubungkan guru dengan schedule_import_rows
+        $importId = \Illuminate\Support\Facades\DB::table('schedule_imports')->insertGetId([
+            'waka_id' => $this->waka->id,
+            'cycle_type' => 1,
+            'status' => 'confirmed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $importRowId = \Illuminate\Support\Facades\DB::table('schedule_import_rows')->insertGetId([
+            'import_id' => $importId,
+            'raw_data' => json_encode(['test' => 1]),
+            'matched_teacher_id' => $this->teacher->id,
+            'day_of_week' => 1,
+            'period_number' => 1,
+            'duration_periods' => 1,
+            'match_status' => 'matched',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Hubungkan guru sebagai substitute_teacher_id di journal
+        $schedule = Schedule::create([
+            'teacher_id' => $this->waka->id,
+            'class_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'room_id' => $this->room->id,
+            'day_of_week' => 4,
+            'period_number' => 2,
+            'duration_periods' => 1,
+            'cycle_type' => 1,
+            'source' => 'manual',
+        ]);
+
+        $journal = Journal::create([
+            'schedule_id' => $schedule->id,
+            'date' => now()->toDateString(),
+            'status' => 'ongoing',
+            'substitute_teacher_id' => $this->teacher->id,
+        ]);
+
+        Sanctum::actingAs($this->waka);
+
+        // Force delete guru
+        $forceRes = $this->deleteJson("/api/master/guru/{$this->teacher->id}/force", [
+            'password' => 'wakaSecret123',
+        ]);
+
+        $forceRes->assertStatus(200);
+
+        // Guru terhapus permanen
+        $this->assertNull(User::withTrashed()->find($this->teacher->id));
+
+        // Foreign keys dinullkan
+        $this->assertDatabaseHas('schedule_import_rows', [
+            'id' => $importRowId,
+            'matched_teacher_id' => null,
+        ]);
+        $this->assertDatabaseHas('journals', [
+            'id' => $journal->id,
+            'substitute_teacher_id' => null,
+        ]);
+    }
 }

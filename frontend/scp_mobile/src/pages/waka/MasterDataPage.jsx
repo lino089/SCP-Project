@@ -270,7 +270,7 @@ export default function MasterDataPage() {
       else if (tab === 'ruang') await roomApi.delete(id, { password });
       else if (tab === 'siswa') await studentApi.delete(id, { password });
 
-      showToast(`Data berhasil dihapus.`);
+      showToast(`Data berhasil dihapus dan dipindahkan ke Tempat Sampah.`);
       setIsPasswordSheetOpen(false);
       handleRefresh();
     } catch (err) {

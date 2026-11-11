@@ -463,7 +463,7 @@ class TeacherController extends Controller
     }
 
     /**
-     * Menghapus akun guru (soft-delete), ditolak 409 jika terikat jadwal aktif.
+     * Menghapus akun guru (soft-delete), memindahkan ke tempat sampah dan menonaktifkan jadwal KBM terkait.
      */
     public function destroy(Request $request, $id): JsonResponse
     {
@@ -475,19 +475,14 @@ class TeacherController extends Controller
 
         $teacher = User::where('role', 'teacher')->findOrFail($id);
 
-        if ($teacher->schedules()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Guru tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
-                'errors' => [
-                    'teacher' => ['Hapus atau pindahkan jadwal terkait terlebih dahulu, atau gunakan opsi Hapus Paksa.'],
-                ],
-            ], 409);
-        }
+        DB::transaction(function () use ($teacher) {
+            // Soft-delete jadwal aktif terkait agar slot KBM tidak berjalan saat guru berada di Tempat Sampah
+            $teacher->schedules()->delete();
 
-        $teacher->tokens()->delete();
-        $teacher->update(['is_active' => false]);
-        $teacher->delete();
+            $teacher->tokens()->delete();
+            $teacher->update(['is_active' => false]);
+            $teacher->delete();
+        });
 
         return response()->json([
             'success' => true,

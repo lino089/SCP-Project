@@ -141,7 +141,7 @@ class TeacherManagementTest extends TestCase
         $this->assertSoftDeleted('users', ['id' => $target->id]);
     }
 
-    public function test_delete_teacher_fails_with_409_if_referenced_by_schedule(): void
+    public function test_delete_teacher_soft_deletes_teacher_and_referenced_schedules(): void
     {
         Sanctum::actingAs($this->waka);
 
@@ -149,7 +149,7 @@ class TeacherManagementTest extends TestCase
         $class = Classes::create(['name' => 'XII RPL 1', 'level' => 12]);
         $subject = Subject::create(['name' => 'PBO']);
 
-        Schedule::create([
+        $schedule = Schedule::create([
             'teacher_id' => $this->teacher->id,
             'class_id' => $class->id,
             'room_id' => $room->id,
@@ -162,11 +162,14 @@ class TeacherManagementTest extends TestCase
         ]);
 
         $response = $this->deleteJson('/api/teachers/' . $this->teacher->id);
-        $response->assertStatus(409)
+        $response->assertStatus(200)
             ->assertJson([
-                'success' => false,
-                'message' => 'Guru tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'success' => true,
+                'message' => 'Data guru berhasil dihapus.',
             ]);
+
+        $this->assertSoftDeleted('users', ['id' => $this->teacher->id]);
+        $this->assertSoftDeleted('schedules', ['id' => $schedule->id]);
     }
 
     public function test_waka_can_assign_homeroom_role_to_teacher(): void

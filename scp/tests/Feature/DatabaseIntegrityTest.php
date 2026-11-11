@@ -92,64 +92,61 @@ class DatabaseIntegrityTest extends TestCase
         ]);
     }
 
-    public function test_delete_class_fails_with_409_conflict_when_referenced_by_active_schedule(): void
+    public function test_delete_class_soft_deletes_when_referenced_by_active_schedule(): void
     {
         Sanctum::actingAs($this->waka);
 
         $response = $this->deleteJson('/api/classes/' . $this->class->id);
 
-        $response->assertStatus(409)
+        $response->assertStatus(200)
             ->assertJson([
-                'success' => false,
-                'message' => 'Kelas tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'success' => true,
             ]);
 
-        $this->assertDatabaseHas('classes', ['id' => $this->class->id]);
+        $this->assertSoftDeleted('classes', ['id' => $this->class->id]);
     }
 
-    public function test_delete_room_fails_with_409_conflict_when_referenced_by_active_schedule(): void
+    public function test_delete_room_soft_deletes_when_referenced_by_active_schedule(): void
     {
         Sanctum::actingAs($this->waka);
 
         $response = $this->deleteJson('/api/rooms/' . $this->room->id);
 
-        $response->assertStatus(409)
+        $response->assertStatus(200)
             ->assertJson([
-                'success' => false,
-                'message' => 'Ruangan tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'success' => true,
             ]);
 
-        $this->assertDatabaseHas('rooms', ['id' => $this->room->id]);
+        $this->assertSoftDeleted('rooms', ['id' => $this->room->id]);
     }
 
-    public function test_delete_subject_fails_with_409_conflict_when_referenced_by_active_schedule(): void
+    public function test_delete_subject_soft_deletes_when_referenced_by_active_schedule(): void
     {
         Sanctum::actingAs($this->waka);
 
         $response = $this->deleteJson('/api/subjects/' . $this->subject->id);
 
-        $response->assertStatus(409)
+        $response->assertStatus(200)
             ->assertJson([
-                'success' => false,
-                'message' => 'Mata pelajaran tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'success' => true,
             ]);
 
-        $this->assertDatabaseHas('subjects', ['id' => $this->subject->id]);
+        $this->assertSoftDeleted('subjects', ['id' => $this->subject->id]);
     }
 
-    public function test_delete_teacher_fails_with_409_conflict_when_referenced_by_active_schedule(): void
+    public function test_delete_teacher_soft_deletes_teacher_and_schedules_when_referenced_by_active_schedule(): void
     {
         Sanctum::actingAs($this->waka);
 
         $response = $this->deleteJson('/api/teachers/' . $this->teacher->id);
 
-        $response->assertStatus(409)
+        $response->assertStatus(200)
             ->assertJson([
-                'success' => false,
-                'message' => 'Guru tidak bisa dihapus karena masih digunakan untuk jadwal aktif.',
+                'success' => true,
+                'message' => 'Data guru berhasil dihapus.',
             ]);
 
-        $this->assertDatabaseHas('users', ['id' => $this->teacher->id]);
+        $this->assertSoftDeleted('users', ['id' => $this->teacher->id]);
     }
 
     public function test_database_seeder_initializes_all_mandatory_records(): void
