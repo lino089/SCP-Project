@@ -71,7 +71,7 @@
   font-size: 0.8125rem;
   border: 1px solid var(--neutral-300);
   border-radius: var(--radius-sm);
-  background-color: #fff;
+  background-color: var(--color-card) ;
   color: var(--neutral-700);
   outline: none;
   cursor: pointer;
@@ -79,7 +79,7 @@
 }
 
 .master-data__filter-select:focus {
-  border-color: #0F172A;
+  border-color: var(--color-text-primary);
 }
 
 /* Selection Action Bar for Guru & Siswa */
@@ -94,9 +94,9 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 10px 16px;
-  background-color: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-left: 4px solid #FFDE00;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
   border-radius: var(--radius-sm);
   margin-bottom: 1rem;
   font-size: 0.8125rem;
@@ -141,7 +141,7 @@
   padding: 0;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -149,7 +149,7 @@
 }
 
 .master-data__selection-link-btn:hover {
-  color: #2563EB;
+  color: var(--color-badge-blue-text) ;
 }
 
 .master-data__selection-link-btn--danger {
@@ -166,8 +166,8 @@
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background-color: #F8FAFC;
-  border: 1px solid #E2E8F0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
@@ -175,8 +175,8 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background-color: #0F172A;
-  color: #FFFFFF;
+  background-color: var(--color-text-primary);
+  color: var(--color-on-dark) ;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,12 +208,12 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 .master-data__detail-value {
   font-size: 0.875rem;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   font-weight: 500;
 }
 
@@ -234,7 +234,7 @@
   border: 1px solid var(--neutral-300);
   border-radius: var(--radius-xs);
   color: var(--neutral-700);
-  background-color: #fff;
+  background-color: var(--color-card) ;
   cursor: pointer;
   transition: all 0.15s ease;
 }

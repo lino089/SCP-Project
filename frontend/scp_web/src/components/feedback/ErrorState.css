@@ -19,7 +19,7 @@
   width: 48px;
   height: 48px;
   border-radius: var(--radius-circle);
-  background-color: #FEE2E2;
+  background-color: var(--color-error-bg) ;
   color: var(--color-error);
   margin-bottom: var(--space-3);
 }

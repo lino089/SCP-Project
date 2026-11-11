@@ -29,7 +29,7 @@
 .monitoring-recap__title-group h1 {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -37,7 +37,7 @@
 
 .monitoring-recap__subtitle {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin: 0.35rem 0 0;
   line-height: 1.5;
 }
@@ -75,8 +75,8 @@
 
 /* Filter Card Box */
 .monitoring-filter-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
@@ -91,7 +91,7 @@
   align-items: center;
   justify-content: space-between;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
 }
 
 .monitoring-filter-grid {
@@ -126,7 +126,7 @@
   align-items: flex-start;
   justify-content: space-between;
   padding-top: 0.75rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-surface-hover);
 }
 
 @media (min-width: 640px) {
@@ -138,7 +138,7 @@
 
 /* Excel Export Button Styling (.xlsx) */
 .export-excel-btn {
-  background-color: #ecfdf5 !important;
+  background-color: var(--color-status-success-bg) !important;
   color: #065f46 !important;
   border-color: #a7f3d0 !important;
   font-weight: 600 !important;
@@ -148,9 +148,9 @@
 }
 
 .export-excel-btn:hover {
-  background-color: #d1fae5 !important;
+  background-color: var(--color-status-success-bg) !important;
   border-color: #6ee7b7 !important;
-  color: #047857 !important;
+  color: var(--color-status-success-fg) !important;
   box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15) !important;
 }
 
@@ -159,13 +159,13 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.625rem;
   padding: 0.875rem 1rem;
   margin-bottom: 1.25rem;
   font-size: 0.8125rem;
-  color: #475569;
+  color: var(--color-text-secondary) ;
   line-height: 1.5;
 }
 
@@ -183,8 +183,8 @@
 .monitoring-recap__photo-preview {
   border-radius: 0.5rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  background-color: #f8fafc;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface) ;
   text-align: center;
 }
 
@@ -192,7 +192,7 @@
   position: relative;
   min-height: 240px;
   max-height: 440px;
-  background-color: #0f172a;
+  background-color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,7 +208,7 @@
 
 .monitoring-recap__photo-meta {
   padding: 1rem;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   text-align: left;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-surface-hover);
 }

@@ -57,29 +57,29 @@
 /* Variants - Precision Style (Exness Fintech) */
 .btn--primary,
 .btn--accent {
-  background-color: #FFDE00;
-  color: #000000;
-  border-color: #FFDE00;
+  background-color: var(--color-accent) ;
+  color: var(--color-accent-text) ;
+  border-color: var(--color-accent) ;
   font-weight: 600;
 }
 
 .btn--primary:hover:not(:disabled),
 .btn--accent:hover:not(:disabled) {
-  background-color: #FFE63B;
-  border-color: #FFE63B;
-  color: #000000;
+  background-color: var(--color-accent-hover) ;
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-text) ;
 }
 
 .btn--primary:active:not(:disabled),
 .btn--accent:active:not(:disabled) {
-  background-color: #E6C800;
+  background-color: var(--color-accent-hover) ;
   border-color: #E6C800;
 }
 
 .btn--dark {
-  background-color: #0F172A;
-  color: #FFFFFF;
-  border-color: #0F172A;
+  background-color: var(--color-text-primary);
+  color: var(--color-on-dark) ;
+  border-color: var(--color-text-primary);
   font-weight: 500;
 }
 
@@ -89,49 +89,49 @@
 }
 
 .btn--secondary {
-  background-color: #F3F4F6;
-  color: #1F2937;
+  background-color: var(--color-surface-hover) ;
+  color: var(--color-text-primary) ;
   border-color: transparent;
   font-weight: 500;
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background-color: #E5E7EB;
-  color: #111827;
+  background-color: var(--color-border) ;
+  color: var(--color-text-primary) ;
   border-color: transparent;
 }
 
 .btn--secondary:active:not(:disabled) {
-  background-color: #D1D5DB;
+  background-color: var(--color-border);
 }
 
 .btn--outline {
-  background-color: #FFFFFF;
-  color: #1F2937;
-  border-color: #E5E7EB;
+  background-color: var(--color-card) ;
+  color: var(--color-text-primary) ;
+  border-color: var(--color-border) ;
   font-weight: 500;
 }
 
 .btn--outline:hover:not(:disabled) {
-  background-color: #F9FAFB;
-  border-color: #D1D5DB;
+  background-color: var(--color-surface) ;
+  border-color: var(--color-border) ;
 }
 
 .btn--ghost {
   background-color: transparent;
-  color: #4B5563;
+  color: var(--color-text-secondary) ;
   border-color: transparent;
 }
 
 .btn--ghost:hover:not(:disabled) {
-  background-color: #F3F4F6;
-  color: #111827;
+  background-color: var(--color-surface-hover) ;
+  color: var(--color-text-primary) ;
 }
 
 .btn--danger {
-  background-color: #EF4444;
-  color: #FFFFFF;
-  border-color: #EF4444;
+  background-color: var(--color-error);
+  color: var(--color-on-dark) ;
+  border-color: var(--color-error);
 }
 
 .btn--danger:hover:not(:disabled) {

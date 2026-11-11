@@ -177,6 +177,7 @@ Sistem mengombinasikan kolom `role` pada tabel `users` dengan tabel relasi `teac
 - `leave_requests`: Permohonan izin siswa (tipe `tidak_masuk` multi-hari atau `keluar_sekolah`).
 - `teacher_leave_requests`: Permohonan izin mengajar guru berhalangan hadir beserta lampiran berkas dan instruksi tugas titipan.
 - `academic_events`: Kalender akademik sekolah dan agenda peniadaan KBM dengan cakupan global, jenjang, atau rombel spesifik.
+- `notifications`: Notifikasi in-app untuk pengguna (peringatan pengisian jurnal KBM oleh Waka, status dibaca `read_at`, dan metadata aksi).
 - `ai_quizzes`, `quiz_questions`, `quiz_submissions`: Metadata kuis, butir soal AI/manual, dan lembar jawaban siswa beserta hasil evaluasi AI.
 - `system_configurations`: Menyimpan konfigurasi global putaran aktif (`active_cycle`), tahun ajaran, dan status upacara Senin (`monday_is_upacara`).
 - `cycle_history`: Log audit pergantian putaran jadwal.
@@ -301,6 +302,7 @@ SchoolClassProject/
 | **Kuis Berbantuan AI** | `scp/app/Http/Controllers/API/QuizController.php`<br>`scp/app/Services/AIService.php`<br>`scp/app/Jobs/GenerateQuizFromPromptJob.php` | `frontend/scp_web/src/pages/teacher/TeacherQuizPage.jsx`<br>`frontend/scp_web/src/pages/student/StudentQuizPage.jsx`<br>`frontend/scp_web/src/services/quizApi.js` | Pembuatan kuis AI via Prompt (konfigurasi komposisi PG/Esai ketat), ekstraksi dokumen PDF/TXT, pengerjaan kuis siswa, koreksi esai semantik AI, override nilai guru, dan rilis hasil. |
 | **Kenaikan Kelas & Alumni** | `scp/app/Http/Controllers/API/SchoolClassController.php` (promote)<br>`scp/app/Http/Controllers/API/StudentController.php` (holdBack) | `frontend/scp_web/src/pages/waka/GradePromotionPage.jsx` | Simulasi promosi kenaikan rombel massal akhir tahun, menandai siswa tinggal kelas, dan tanggal kelulusan kelas 12. |
 | **Monitoring Anak (Ortu)** | Scoped query pada `JournalController`, `AttendanceController`, `QuizController` | `frontend/scp_web/src/pages/parent/ParentMonitoringPage.jsx`<br>`frontend/scp_web/src/pages/parent/ParentCalendarPage.jsx` | Portal pemantauan orang tua atas kehadiran anak per jam pelajaran, status permohonan izin, dan nilai kuis. |
+| **Notifikasi Internal (Lonceng)** | `scp/app/Http/Controllers/API/NotificationController.php`<br>`scp/app/Models/Notification.php` | `frontend/scp_web/src/components/layout/TopBar.jsx`<br>`frontend/scp_web/src/services/notificationApi.js`<br>`DashboardWakaPage.jsx` | Sistem pengingat KBM & teguran jurnal in-app: tombol pengingat Waka, polling badge unread di lonceng TopBar, popover dropdown, dan navigasi langsung ke formulir jurnal. |
 
 ---
 

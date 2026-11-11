@@ -39,7 +39,7 @@
 
 .search-input-field:focus {
   border-color: var(--color-text-primary);
-  background-color: #FFFFFF;
+  background-color: var(--color-card) ;
 }
 
 .search-input-clear-btn {

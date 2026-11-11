@@ -11,13 +11,13 @@ export default function RoleRoute({
   const { hasRole, isKesiswaan, isWaliKelas, getHomeRoute } = useAuth();
   const navigate = useNavigate();
 
-  const roleAllowed = allowedRoles.length === 0 || hasRole(allowedRoles);
+  const roleAllowed = allowedRoles.length > 0 ? hasRole(allowedRoles) : false;
   const kesiswaanAllowed = allowKesiswaan && isKesiswaan();
   const waliKelasAllowed = allowWaliKelas && isWaliKelas();
 
   let isAuthorized = roleAllowed || kesiswaanAllowed || waliKelasAllowed;
 
-  if (requireKesiswaan && !isKesiswaan() && !hasRole('waka')) {
+  if (requireKesiswaan && !isKesiswaan()) {
     isAuthorized = false;
   }
 

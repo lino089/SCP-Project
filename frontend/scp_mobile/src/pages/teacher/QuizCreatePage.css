@@ -1,0 +1,644 @@
+/* ============================================================
+ * Mobile — Halaman penuh pembuatan kuis (SCP)
+ * Token: mengikuti tokens.css (kuning #FFDE00, radius 8/6/4)
+ * ============================================================ */
+
+.qc-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--topbar-height) - var(--bottom-nav-height));
+  background: var(--color-bg-app);
+}
+
+.qc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--page-gutter) 8px;
+}
+
+.qc-back {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.qc-head__text h1 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.qc-head__text p {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+/* stepper tipis */
+.qc-steps {
+  display: flex;
+  gap: 5px;
+  padding: 0 var(--page-gutter) 10px;
+}
+
+.qc-step {
+  height: 3px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--color-border-subtle);
+  transition: background-color var(--transition-fast);
+}
+
+.qc-step--on {
+  background: var(--color-brand);
+}
+
+.qc-step--done {
+  background: var(--color-text-primary);
+}
+
+.qc-body {
+  flex: 1;
+  padding: 0 var(--page-gutter) 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qc-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qc-card--flat {
+  padding: 10px 12px;
+  background: var(--color-surface-subtle);
+}
+
+.qc-card h2 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.qc-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qc-count {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-badge);
+  padding: 2px 7px;
+  color: var(--color-text-secondary);
+}
+
+.qc-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.qc-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 9px;
+  line-height: 1.45;
+}
+
+.qc-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.qc-textarea {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.qc-textarea:focus {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+.qc-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* tab metode */
+.qc-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.qc-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 36px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.qc-tab.on {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #000;
+}
+
+/* daftar soal */
+.qc-qlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qc-qitem {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 9px;
+  background: var(--color-surface);
+}
+
+.qc-qitem--warn {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+
+.qc-qitem__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.qc-qnum {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.qc-qtype {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-badge);
+  padding: 1px 5px;
+  color: var(--color-text-secondary);
+}
+
+.qc-qpoints {
+  font-family: var(--font-family-mono);
+  font-size: 9.5px;
+  color: var(--color-text-muted);
+}
+
+.qc-qactions {
+  margin-left: auto;
+  display: flex;
+  gap: 5px;
+}
+
+.qc-qactions button {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+}
+
+.qc-qactions button.danger {
+  color: var(--color-danger-fg);
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.qc-qtext {
+  font-size: 12px;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+.qc-qwarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--color-warning-fg);
+  line-height: 1.4;
+}
+
+.qc-qedit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.qc-qedit-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.qc-qedit-actions button.save {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #000;
+}
+
+.qc-add-q {
+  margin-top: 2px;
+}
+
+/* footer sticky */
+.qc-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--page-gutter) calc(10px + var(--safe-area-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.qc-foot > * {
+  flex: 1;
+}
+
+/* sheet manual */
+.qc-sheet {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  display: flex;
+  align-items: flex-end;
+  z-index: 50;
+}
+
+.qc-sheet__panel {
+  width: 100%;
+  max-height: 88dvh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  padding: 14px var(--page-gutter) calc(16px + var(--safe-area-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qc-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qc-sheet__head h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.qc-sheet__head button {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+}
+
+.qc-sheet__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.qc-sheet__actions > * {
+  flex: 1;
+}
+
+/* toast */
+.qc-toast {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  padding: 9px 12px;
+  border-radius: var(--radius-input);
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.qc-toast--success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-fg);
+}
+
+.qc-toast--error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-fg);
+}
+/* --- kartu metode ------------------------------------------- */
+.qc-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.qc-method {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--color-surface-subtle);
+  text-align: left;
+  width: 100%;
+}
+
+.qc-method--on {
+  border-color: var(--color-brand);
+  background: #FFFDF0;
+}
+
+.qc-method__radio {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+
+.qc-method--on .qc-method__radio {
+  border: 4px solid var(--color-text-primary);
+}
+
+.qc-method__text b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.qc-method__text span {
+  display: block;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+/* baris hitung komposisi */
+.qc-calc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success-fg);
+  line-height: 1.4;
+}
+
+.qc-calc--bad {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-fg);
+}
+
+/* --- filter chip ------------------------------------------- */
+.qc-filters {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.qc-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.qc-filter {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.qc-filter.on {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-inverse-text) ;
+}
+
+.qc-filter--warn {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.qc-filter--warn.on {
+  background: var(--color-warning-fg);
+  border-color: var(--color-warning-fg);
+  color: var(--color-inverse-text) ;
+}
+
+/* --- checklist syarat terbit -------------------------------- */
+.qc-reqs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+}
+
+.qc-req {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.qc-req > span:first-child {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.qc-req.ok > span:first-child {
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success-fg);
+}
+
+.qc-req.bad > span:first-child {
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-fg);
+}
+
+.qc-req.bad {
+  color: var(--color-warning-fg);
+}
+
+/* --- tombol buka detail ------------------------------------- */
+.qc-qopen {
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-badge);
+  padding: 3px 8px;
+}
+
+/* --- detail butir soal (sheet) ------------------------------ */
+.qc-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-detail-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.qc-detail-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  background: var(--color-surface-subtle);
+  line-height: 1.4;
+}
+
+.qc-detail-opt.on {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-fg);
+  font-weight: 600;
+}
+
+.qc-detail-opt em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.qc-detail-rubric {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.qc-detail-rubric b {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.qc-detail-rubric p {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+  line-height: 1.45;
+  font-style: italic;
+}

@@ -29,7 +29,7 @@
 .teacher-journal__title-group h1 {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -37,7 +37,7 @@
 
 .teacher-journal__subtitle {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin: 0.35rem 0 0;
   line-height: 1.5;
 }
@@ -53,10 +53,10 @@
 .teacher-journal__kesiswaan-banner {
   margin-bottom: 1.5rem;
   padding: 1rem 1.25rem;
-  background-color: #fffdf0;
-  color: #1e293b;
+  background-color: var(--color-surface) ;
+  color: var(--color-text-primary) ;
   border: 1px solid #fef08a;
-  border-left: 4px solid #ffde00;
+  border-left: 4px solid var(--color-accent);
   border-radius: 0.5rem;
   display: flex;
   flex-direction: column;
@@ -75,7 +75,7 @@
 .teacher-journal__kesiswaan-banner-title {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #854d0e;
+  color: var(--color-status-warning-fg);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -105,10 +105,10 @@
 
 /* Standby Sesi Card */
 .teacher-journal__standby-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 1.5rem;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   max-width: 860px;
   box-shadow: none;
   transition: all 0.2s ease;
@@ -126,7 +126,7 @@
   flex-direction: column;
   gap: 1rem;
   padding-bottom: 1.25rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
 }
 
 @media (min-width: 640px) {
@@ -160,7 +160,7 @@
 .teacher-journal__standby-title {
   font-size: clamp(18px, 4.3vw, 24px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   margin: 0;
   line-height: 1.25;
@@ -169,9 +169,9 @@
 .teacher-journal__class-badge {
   padding: 0.25rem 0.65rem;
   border-radius: 0.375rem;
-  background-color: #f3f4f6;
-  color: #111827;
-  border: 1px solid #e5e7eb;
+  background-color: var(--color-surface-hover) ;
+  color: var(--color-text-primary) ;
+  border: 1px solid var(--color-border);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -180,21 +180,21 @@
 .teacher-journal__cycle-pill {
   padding: 0.25rem 0.5rem;
   border-radius: 0.375rem;
-  background-color: #f1f5f9;
-  color: #475569;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-secondary) ;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .teacher-journal__duration-pill {
   padding: 0.25rem 0.65rem;
   border-radius: 0.375rem;
-  background-color: #eff6ff;
-  color: #1d4ed8;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-badge-blue-text) ;
   font-size: 0.75rem;
   font-weight: 700;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--color-status-info-bg);
 }
 
 .teacher-journal__standby-pulse {
@@ -208,18 +208,18 @@
   width: 0.625rem;
   height: 0.625rem;
   border-radius: 9999px;
-  background-color: #10b981;
+  background-color: var(--color-success);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .teacher-journal__pulse-dot--completed {
-  background-color: #10b981;
+  background-color: var(--color-success);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
 }
 
 .teacher-journal__pulse-dot--warning {
-  background-color: #f59e0b;
+  background-color: var(--color-warning);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
 }
 
@@ -260,14 +260,14 @@
   gap: 0.875rem;
   padding: 0.875rem 1rem;
   border-radius: 0.75rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   transition: all 0.15s ease;
 }
 
 .teacher-journal__info-tile:hover {
-  border-color: #cbd5e1;
-  background-color: #f1f5f9;
+  border-color: var(--color-border) ;
+  background-color: var(--color-badge-blue-bg) ;
 }
 
 .teacher-journal__tile-icon {
@@ -290,14 +290,14 @@
   font-size: 0.6875rem;
   text-transform: uppercase;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   letter-spacing: 0.04em;
 }
 
 .teacher-journal__tile-value {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   margin-top: 0.1rem;
   line-height: 1.35;
 }
@@ -306,14 +306,14 @@
 .teacher-journal__completed-notice {
   margin-top: 1.25rem;
   padding: 0.875rem 1rem;
-  background-color: #ecfdf5;
+  background-color: var(--color-success-bg) ;
   border: 1px solid #a7f3d0;
   border-radius: 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.625rem;
   font-size: 0.75rem;
-  color: #065f46;
+  color: var(--color-success) ;
   font-weight: 500;
   line-height: 1.4;
 }
@@ -322,7 +322,7 @@
 .teacher-journal__actions-bar {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-surface-hover);
   display: flex;
   flex-direction: column-reverse;
   gap: 0.75rem;
@@ -347,16 +347,16 @@
 .teacher-journal__task-box {
   margin-top: 1rem;
   padding: 0.875rem 1rem;
-  background-color: #fffbeb;
-  border: 1px solid #fde68a;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
   border-radius: 0.5rem;
   font-size: 0.75rem;
-  color: #78350f;
+  color: var(--color-warning) ;
 }
 
 .teacher-journal__task-box-title {
   font-weight: 700;
-  color: #92400e;
+  color: var(--color-warning) ;
   margin-bottom: 0.35rem;
   display: block;
 }
@@ -365,7 +365,7 @@
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.45;
-  color: #78350f;
+  color: var(--color-warning) ;
   margin: 0;
 }
 
@@ -386,27 +386,27 @@
 }
 
 .teacher-journal__count-chip--hadir {
-  background-color: #ecfdf5;
-  color: #065f46;
-  border-color: #a7f3d0;
+  background-color: var(--color-success-bg) ;
+  color: var(--color-success) ;
+  border-color: var(--color-success) ;
 }
 
 .teacher-journal__count-chip--sakit {
-  background-color: #eff6ff;
-  color: #1e40af;
-  border-color: #bfdbfe;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-badge-blue-text) ;
+  border-color: var(--color-badge-blue-bg) ;
 }
 
 .teacher-journal__count-chip--izin {
-  background-color: #fffbeb;
-  color: #92400e;
-  border-color: #fde68a;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border-color: var(--color-warning) ;
 }
 
 .teacher-journal__count-chip--alpa {
-  background-color: #fef2f2;
-  color: #991b1b;
-  border-color: #fecaca;
+  background-color: var(--color-error-bg) ;
+  color: var(--color-error) ;
+  border-color: var(--color-error) ;
 }
 
 /* Segmented Attendance Buttons */
@@ -414,10 +414,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  background-color: #f1f5f9;
+  background-color: var(--color-badge-blue-bg) ;
   padding: 0.2rem;
   border-radius: 0.375rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .teacher-journal__status-btn {
@@ -426,40 +426,40 @@
   border-radius: 0.25rem;
   border: none;
   background: transparent;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   cursor: pointer;
   transition: all 0.15s ease;
   font-weight: 500;
 }
 
 .teacher-journal__status-btn:hover {
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .teacher-journal__status-btn--active-hadir {
   background-color: #059669;
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .teacher-journal__status-btn--active-sakit {
   background-color: #2563eb;
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .teacher-journal__status-btn--active-izin {
   background-color: #d97706;
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .teacher-journal__status-btn--active-alpa {
   background-color: #dc2626;
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
@@ -469,8 +469,8 @@
   position: relative;
   border-radius: 0.5rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  background-color: #f8fafc;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface) ;
 }
 
 .teacher-journal__photo-img {
@@ -486,7 +486,7 @@
   left: 10px;
   background-color: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(4px);
-  color: #10b981;
+  color: var(--color-success) ;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
@@ -501,15 +501,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 0.85rem;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   font-size: 0.75rem;
-  color: #475569;
-  border-top: 1px solid #f1f5f9;
+  color: var(--color-text-secondary) ;
+  border-top: 1px solid var(--color-surface-hover);
 }
 
 /* Camera Launch Box (Idle State) */
 .teacher-journal__camera-box {
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--color-border);
   border-radius: 0.75rem;
   padding: 1.5rem 1rem;
   background-color: #fafbfc;
@@ -523,16 +523,16 @@
 }
 
 .teacher-journal__camera-box:hover {
-  border-color: #94a3b8;
-  background-color: #f8fafc;
+  border-color: var(--color-text-muted);
+  background-color: var(--color-surface) ;
 }
 
 .teacher-journal__camera-icon-wrap {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: #eff6ff;
-  color: #2563eb;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-badge-blue-text) ;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -541,13 +541,13 @@
 .teacher-journal__camera-title {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   margin: 0;
 }
 
 .teacher-journal__camera-desc {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   max-width: 380px;
   line-height: 1.45;
   margin: 0;
@@ -558,9 +558,9 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.6875rem;
-  color: #b45309;
-  background-color: #fffbeb;
-  border: 1px solid #fde68a;
+  color: var(--color-warning) ;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
   padding: 0.35rem 0.65rem;
   border-radius: 4px;
   margin-top: 0.25rem;
@@ -571,7 +571,7 @@
   position: relative;
   width: 100%;
   height: 240px;
-  background-color: #0f172a;
+  background-color: var(--color-text-primary);
   border-radius: 0.75rem;
   overflow: hidden;
   display: flex;
@@ -604,7 +604,7 @@
   align-items: center;
   gap: 0.4rem;
   background-color: rgba(220, 38, 38, 0.85);
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   font-size: 0.6875rem;
   font-weight: 700;
   padding: 0.2rem 0.5rem;
@@ -617,7 +617,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   animation: pulse-live 1s infinite;
 }
 
@@ -636,7 +636,7 @@
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #ffffff;
+  color: var(--color-on-dark) ;
   padding: 0.3rem 0.5rem;
   border-radius: 4px;
   font-size: 0.6875rem;
@@ -667,9 +667,9 @@
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background-color: #FFDE00;
-  border: 3px solid #ffffff;
-  color: #000000;
+  background-color: var(--color-accent) ;
+  border: 3px solid var(--color-card);
+  color: var(--color-text-primary) ;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -680,7 +680,7 @@
 
 .teacher-journal__shutter-btn:hover {
   transform: scale(1.05);
-  background-color: #FFE63B;
+  background-color: var(--color-accent-hover) ;
 }
 
 .teacher-journal__shutter-btn:active {
@@ -705,15 +705,15 @@
   flex-wrap: wrap;
   margin-bottom: 1.5rem;
   padding: 0.875rem 1.25rem;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
 }
 
 .teacher-journal__summary-title {
   font-size: 0.8125rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -728,8 +728,8 @@
 }
 
 .teacher-journal__session-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.875rem;
   padding: 1.25rem 1.5rem;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -738,7 +738,7 @@
 }
 
 .teacher-journal__session-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--color-border) ;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
 }
 
@@ -752,21 +752,21 @@
 }
 
 .teacher-journal__session-card--upcoming {
-  border-left: 4px solid #94a3b8;
-  background-color: #fafafa;
+  border-left: 4px solid var(--color-text-muted);
+  background-color: var(--color-surface) ;
 }
 
 .teacher-journal__session-card--expired {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid var(--color-error);
   background-color: #fff8f8;
 }
 
 .teacher-journal__session-card--completed {
-  border-left: 4px solid #10b981;
+  border-left: 4px solid var(--color-success);
 }
 
 .teacher-journal__session-card--exempted {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--color-warning);
 }
 
 .teacher-journal__session-card-header {
@@ -814,7 +814,7 @@
 .teacher-journal__session-card-title {
   font-size: 1.0625rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.015em;
   margin: 0;
   display: flex;
@@ -828,14 +828,14 @@
   align-items: center;
   gap: 0.75rem;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   flex-wrap: wrap;
 }
 
 .teacher-journal__session-card-desc {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-secondary) ;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -852,7 +852,7 @@
 .teacher-journal__working-section {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
-  border-top: 2px dashed #e2e8f0;
+  border-top: 2px dashed var(--color-border);
 }
 
 .teacher-journal__working-header {
@@ -861,8 +861,8 @@
   gap: 0.75rem;
   margin-bottom: 1.5rem;
   padding: 1rem 1.25rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
 }
 

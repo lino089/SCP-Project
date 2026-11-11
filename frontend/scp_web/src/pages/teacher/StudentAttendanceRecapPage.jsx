@@ -15,6 +15,7 @@ import {
   GraduationCap,
   ArrowUpDown,
   BookOpen,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import attendanceRecapApi from '../../services/attendanceRecapApi';
@@ -60,7 +61,7 @@ export default function StudentAttendanceRecapPage() {
   const [sortBy, setSortBy] = useState('name_asc'); // 'name_asc' | 'alpa_desc' | 'attendance_asc'
 
   // State Tab Halaman
-  const [activeTab, setActiveTab] = useState('all_students'); // 'all_students' | 'at_risk' | 'class_comparisons'
+  const [activeTab, setActiveTab] = useState('all_students'); // 'all_students' | 'at_risk'
 
   // State Data Rekap
   const [summaryData, setSummaryData] = useState(null);
@@ -224,7 +225,8 @@ export default function StudentAttendanceRecapPage() {
 
   const kpi = summaryData?.kpi || {
     total_students: 0,
-    class_attendance_rate: 100,
+    total_sessions: 0,
+    class_attendance_rate: null,
     total_hadir: 0,
     total_sakit: 0,
     total_izin: 0,
@@ -232,16 +234,18 @@ export default function StudentAttendanceRecapPage() {
     at_risk_count: 0,
   };
 
+  const hasSessions = (kpi?.total_sessions ?? (kpi.total_hadir + kpi.total_sakit + kpi.total_izin + kpi.total_alpa)) > 0;
+
   const studentsList = summaryData?.students || [];
   const atRiskStudents = useMemo(() => {
     return studentsList.filter((s) => s.risk_level === 'danger' || s.risk_level === 'warning');
   }, [studentsList]);
 
-  const classComparisons = summaryData?.class_comparisons || [];
   const isMultiClassActive = Boolean(summaryData?.is_multi_class);
 
   // Label Tingkat Kehadiran Kelas
   const getRateBadgeVariant = (rate) => {
+    if (rate === null || rate === undefined) return 'default';
     if (rate >= 90) return 'success';
     if (rate >= 85) return 'warning';
     return 'danger';
@@ -266,11 +270,6 @@ export default function StudentAttendanceRecapPage() {
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold flex items-center gap-1">
                 <Users size={13} />
                 <span>Tim Kesiswaan</span>
-              </span>
-            )}
-            {roleContext?.is_vice_principal && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">
-                Waka Kurikulum
               </span>
             )}
           </div>
@@ -494,12 +493,24 @@ export default function StudentAttendanceRecapPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Tingkat Kehadiran"
-          value={`${kpi.class_attendance_rate}%`}
-          badge={kpi.class_attendance_rate >= 90 ? 'Baik' : kpi.class_attendance_rate >= 85 ? 'Waspada' : 'Kritis'}
-          badgeVariant={getRateBadgeVariant(kpi.class_attendance_rate)}
-          variant={getRateBadgeVariant(kpi.class_attendance_rate)}
+          value={hasSessions && kpi.class_attendance_rate !== null ? `${kpi.class_attendance_rate}%` : '-'}
+          badge={
+            hasSessions && kpi.class_attendance_rate !== null
+              ? kpi.class_attendance_rate >= 90
+                ? 'Baik'
+                : kpi.class_attendance_rate >= 85
+                ? 'Waspada'
+                : 'Kritis'
+              : 'Belum Ada KBM'
+          }
+          badgeVariant={hasSessions && kpi.class_attendance_rate !== null ? getRateBadgeVariant(kpi.class_attendance_rate) : 'default'}
+          variant={hasSessions && kpi.class_attendance_rate !== null ? getRateBadgeVariant(kpi.class_attendance_rate) : 'default'}
           accentBorder
-          description="Rasio kehadiran pada periode aktif"
+          description={
+            hasSessions && kpi.class_attendance_rate !== null
+              ? 'Rasio kehadiran pada periode aktif'
+              : 'Belum ada sesi KBM tercatat pada periode ini'
+          }
         />
 
         <StatCard
@@ -536,6 +547,21 @@ export default function StudentAttendanceRecapPage() {
         />
       </div>
 
+      {/* Banner Informasi bila belum ada sesi KBM tercatat */}
+      {!isLoading && studentsList.length > 0 && !hasSessions && (
+        <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-blue-900 text-xs flex items-start gap-3 shadow-sm">
+          <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sm text-blue-950">
+              Belum Ada Sesi Pertemuan KBM Tercatat
+            </p>
+            <p className="text-xs text-blue-800 mt-0.5">
+              Guru pengampu belum mengisi atau menyelesaikan Jurnal Mengajar untuk kelas ini pada periode yang dipilih. Data kehadiran (H, S, I, A) akan otomatis diperbarui secara real-time saat guru menyelesaikan sesi KBM.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 4. Tab Navigasi Halaman */}
       <div className="border-b border-gray-200">
         <nav className="flex space-x-6">
@@ -567,29 +593,11 @@ export default function StudentAttendanceRecapPage() {
             <AlertTriangle size={16} />
             <span>Siswa Sering Tidak Hadir</span>
             {kpi.at_risk_count > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">
                 {kpi.at_risk_count}
               </span>
             )}
           </button>
-
-          {isMultiClassActive && classComparisons.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('class_comparisons')}
-              className={`py-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'class_comparisons'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <GraduationCap size={16} />
-              <span>Komparasi Antar-Kelas</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-bold">
-                {classComparisons.length}
-              </span>
-            </button>
-          )}
         </nav>
       </div>
 
@@ -696,44 +704,56 @@ export default function StudentAttendanceRecapPage() {
 
                         <td className="py-3 px-3 text-center">
                           <div className="flex flex-col items-center">
-                            <span
-                              className={`font-bold ${
-                                st.attendance_rate >= 90
-                                  ? 'text-emerald-700'
-                                  : st.attendance_rate >= 85
-                                  ? 'text-amber-700'
-                                  : 'text-rose-700'
-                              }`}
-                            >
-                              {st.attendance_rate}%
-                            </span>
-                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  st.attendance_rate >= 90
-                                    ? 'bg-emerald-500'
-                                    : st.attendance_rate >= 85
-                                    ? 'bg-amber-500'
-                                    : 'bg-rose-500'
-                                }`}
-                                style={{ width: `${Math.min(100, st.attendance_rate)}%` }}
-                              />
-                            </div>
+                            {st.total_sessions > 0 && st.attendance_rate !== null && st.attendance_rate !== undefined ? (
+                              <>
+                                <span
+                                  className={`font-bold ${
+                                    st.attendance_rate >= 90
+                                      ? 'text-emerald-700'
+                                      : st.attendance_rate >= 85
+                                      ? 'text-amber-700'
+                                      : 'text-rose-700'
+                                  }`}
+                                >
+                                  {st.attendance_rate}%
+                                </span>
+                                <div className="w-16 h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      st.attendance_rate >= 90
+                                        ? 'bg-emerald-500'
+                                        : st.attendance_rate >= 85
+                                        ? 'bg-amber-500'
+                                        : 'bg-rose-500'
+                                    }`}
+                                    style={{ width: `${Math.min(100, st.attendance_rate)}%` }}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <span className="font-semibold text-gray-400">-</span>
+                            )}
                           </div>
                         </td>
 
                         <td className="py-3 px-3 text-center">
-                          {isDanger ? (
-                            <Badge variant="danger" dot>
-                              Kritis
-                            </Badge>
-                          ) : isWarning ? (
-                            <Badge variant="warning" dot>
-                              Waspada
-                            </Badge>
+                          {st.total_sessions > 0 ? (
+                            isDanger ? (
+                              <Badge variant="danger" dot>
+                                Kritis
+                              </Badge>
+                            ) : isWarning ? (
+                              <Badge variant="warning" dot>
+                                Waspada
+                              </Badge>
+                            ) : (
+                              <Badge variant="success" dot>
+                                Baik
+                              </Badge>
+                            )
                           ) : (
-                            <Badge variant="success" dot>
-                              Baik
+                            <Badge variant="default">
+                              Belum Ada KBM
                             </Badge>
                           )}
                         </td>
@@ -915,105 +935,6 @@ export default function StudentAttendanceRecapPage() {
                       );
                     })
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: Komparasi Antar-Kelas (Khusus Tim Kesiswaan / Waka saat multi-kelas) */}
-      {activeTab === 'class_comparisons' && isMultiClassActive && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-sm text-gray-900">
-                  Peringkat &amp; Evaluasi Kehadiran Antar-Kelas Binaan
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Diurutkan berdasarkan kelas yang paling membutuhkan perhatian kesiswaan.
-                </p>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider">
-                  <tr>
-                    <th className="py-3 px-3 w-12 text-center">No</th>
-                    <th className="py-3 px-3">Nama Rombel / Kelas</th>
-                    <th className="py-3 px-3 text-center">Tingkat</th>
-                    <th className="py-3 px-3 text-center">Total Siswa</th>
-                    <th className="py-3 px-3 text-center">% Kehadiran</th>
-                    <th className="py-3 px-3 text-center text-rose-700 font-bold">Total Alpa</th>
-                    <th className="py-3 px-3 text-center text-blue-700">Sakit</th>
-                    <th className="py-3 px-3 text-center text-amber-700">Izin</th>
-                    <th className="py-3 px-3 text-center text-rose-700 font-bold">Siswa At-Risk</th>
-                    <th className="py-3 px-3 text-center w-36">Aksi Filter</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {classComparisons.map((c, idx) => (
-                    <tr key={c.class_id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-3 text-center text-gray-400 font-medium">
-                        {idx + 1}
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-gray-900 text-sm">
-                        {c.class_name}
-                      </td>
-                      <td className="py-3 px-3 text-center font-medium text-gray-600">
-                        Kelas {c.level}
-                      </td>
-                      <td className="py-3 px-3 text-center font-medium text-gray-700">
-                        {c.total_students} Siswa
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span
-                          className={`font-bold ${
-                            c.attendance_rate >= 90
-                              ? 'text-emerald-700'
-                              : c.attendance_rate >= 85
-                              ? 'text-amber-700'
-                              : 'text-rose-700'
-                          }`}
-                        >
-                          {c.attendance_rate}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-center font-bold text-rose-600">
-                        {c.total_alpa}
-                      </td>
-                      <td className="py-3 px-3 text-center font-medium text-blue-600">
-                        {c.total_sakit}
-                      </td>
-                      <td className="py-3 px-3 text-center font-medium text-amber-600">
-                        {c.total_izin}
-                      </td>
-                      <td className="py-3 px-3 text-center font-bold text-rose-700">
-                        {c.at_risk_count > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px]">
-                            {c.at_risk_count} Siswa
-                          </span>
-                        ) : (
-                          <span className="text-emerald-600 font-semibold">0</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedClassId(String(c.class_id));
-                            setActiveTab('all_students');
-                          }}
-                          className="text-xs text-blue-600 hover:text-blue-800"
-                        >
-                          Fokus Kelas Ini
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             </div>

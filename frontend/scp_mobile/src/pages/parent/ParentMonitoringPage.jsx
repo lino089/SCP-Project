@@ -415,7 +415,7 @@ export default function ParentMonitoringPage() {
               ? 'Riwayat Presensi KBM Ananda'
               : activeTab === 'permissions'
               ? 'Riwayat Surat Izin Ananda'
-              : 'Hasil Evaluasi Kuis AI'}
+              : 'Hasil Evaluasi Kuis'}
           </h2>
 
           <DataTable

@@ -19,8 +19,8 @@
   width: 56px;
   height: 56px;
   border-radius: var(--radius-circle);
-  background-color: #FEF3C7;
-  color: #D97706;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
   margin-bottom: var(--space-4);
 }
 
@@ -28,7 +28,7 @@
   font-family: var(--font-family-mono);
   font-size: 13px;
   font-weight: 600;
-  color: #92400E;
+  color: var(--color-warning) ;
   margin-bottom: var(--space-1);
 }
 

@@ -9,8 +9,8 @@
 
 /* Child Information Header Card */
 .parent-child-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
@@ -41,14 +41,14 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: #F1F5F9;
-  border: 1px solid #CBD5E1;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
   font-weight: 700;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   flex-shrink: 0;
 }
 
@@ -62,14 +62,14 @@
 .parent-child-name {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.01em;
   margin: 0;
 }
 
 .parent-child-meta {
   font-size: 13px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   margin-top: 0.25rem;
 }
 
@@ -79,10 +79,10 @@
   gap: 0.5rem;
   padding: 0.4rem 0.85rem;
   border-radius: 6px;
-  background-color: #F8FAFC;
-  border: 1px solid #E2E8F0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 /* Tabs */
@@ -110,8 +110,8 @@
 }
 
 .parent-stat-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
@@ -126,7 +126,7 @@
 .parent-stat-label {
   font-size: 12px;
   font-weight: 600;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 .parent-stat-dot {
@@ -136,7 +136,7 @@
 }
 
 .parent-stat-dot--hadir {
-  background-color: #10B981;
+  background-color: var(--color-success);
 }
 
 .parent-stat-dot--sakit {
@@ -144,17 +144,17 @@
 }
 
 .parent-stat-dot--izin {
-  background-color: #F59E0B;
+  background-color: var(--color-warning);
 }
 
 .parent-stat-dot--alpa {
-  background-color: #EF4444;
+  background-color: var(--color-error);
 }
 
 .parent-stat-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   margin-top: 0.35rem;
   display: flex;
   align-items: baseline;
@@ -164,19 +164,19 @@
 .parent-stat-unit {
   font-size: 13px;
   font-weight: 400;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 .parent-stat-desc {
   font-size: 11px;
-  color: #94A3B8;
+  color: var(--color-text-muted) ;
   margin-top: 0.25rem;
 }
 
 /* Tables Section */
 .parent-table-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
@@ -189,13 +189,13 @@
 .parent-table-title {
   font-size: 15px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   margin: 0;
 }
 
 .parent-table-subtitle {
   font-size: 12px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   margin-top: 0.2rem;
 }
 
@@ -205,19 +205,19 @@
   gap: 0.35rem;
   padding: 0.3rem 0.6rem;
   border-radius: 4px;
-  background-color: #F8FAFC;
-  border: 1px solid #CBD5E1;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   font-size: 11px;
   font-weight: 500;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .parent-doc-btn:hover {
-  background-color: #ffde00;
-  border-color: #cbd5e1;
-  color: #000000;
+  background-color: var(--color-accent) ;
+  border-color: var(--color-border) ;
+  color: var(--color-text-primary) ;
 }
 
 /* Document Preview Modal */
@@ -228,8 +228,8 @@
 }
 
 .preview-modal-box {
-  background-color: #F8FAFC;
-  border: 1px dashed #CBD5E1;
+  background-color: var(--color-surface) ;
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   padding: 2rem 1rem;
   display: flex;
@@ -257,15 +257,15 @@
 }
 
 .parent-alert-card--danger {
-  background-color: #FEF2F2;
-  border: 1px solid #FECACA;
-  color: #991B1B;
+  background-color: var(--color-error-bg) ;
+  border: 1px solid var(--color-error);
+  color: var(--color-error) ;
 }
 
 .parent-alert-card--warning {
-  background-color: #FFFBEB;
-  border: 1px solid #FDE68A;
-  color: #92400E;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning) ;
 }
 
 .parent-alert-icon {
@@ -288,8 +288,8 @@
 
 /* Unlinked Parent Account Box */
 .parent-unlinked-box {
-  background-color: #FFFFFF;
-  border: 1px dashed #CBD5E1;
+  background-color: var(--color-card) ;
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   padding: 3rem 1.5rem;
   text-align: center;

@@ -1,7 +1,7 @@
 import api from './api';
 
 /**
- * Service API untuk Modul Kuis AI (Fase 5)
+ * Service API untuk Modul Kuis (Fase 5)
  * Terhubung langsung ke RESTful QuizController Laravel & Google Gemini AIService.
  */
 export const quizApi = {
@@ -39,6 +39,7 @@ export const quizApi = {
 
   // Submissions Siswa & Koreksi Guru
   getQuizSubmissions: (id) => api.get(`/quizzes/${id}/submissions`),
+  startQuiz: (id) => api.post(`/quizzes/${id}/start`),
   submitQuiz: (id, data) => api.post(`/quizzes/${id}/submissions`, data),
   overrideSubmission: (submissionId, data) =>
     api.patch(`/quiz-submissions/${submissionId}`, data),

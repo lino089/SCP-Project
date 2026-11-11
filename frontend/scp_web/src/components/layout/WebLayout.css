@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #FFFFFF;
+  background-color: var(--color-card) ;
 }
 
 .web-app-body {
@@ -10,7 +10,7 @@
   display: flex;
   width: 100%;
   min-height: calc(100vh - 56px);
-  background-color: #FFFFFF;
+  background-color: var(--color-card) ;
   position: relative;
 }
 
@@ -47,7 +47,7 @@
 .web-app-main {
   flex: 1;
   min-width: 0;
-  background-color: #FFFFFF;
+  background-color: var(--color-card) ;
   min-height: calc(100vh - 56px);
   overflow-y: auto;
   box-sizing: border-box;

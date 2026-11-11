@@ -7,8 +7,8 @@
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   min-width: 160px;
@@ -37,7 +37,7 @@
   padding: 7px 10px;
   font-family: var(--font-family);
   font-size: 12.5px;
-  color: #334155;
+  color: var(--color-text-secondary) ;
   background: transparent;
   border: none;
   border-radius: 4px;
@@ -48,6 +48,6 @@
 }
 
 .export-dropdown-item:hover {
-  background-color: #F1F5F9;
-  color: #0F172A;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-primary) ;
 }

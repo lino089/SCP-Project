@@ -14,33 +14,33 @@
   gap: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  color: #4B5563;
-  background-color: #F9FAFB;
-  border: 1px solid #E5E7EB;
+  color: var(--color-text-secondary) ;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   padding: 4px 12px;
   border-radius: 6px;
   margin-bottom: 18px;
 }
 
 .schedule-import-path-link {
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   text-decoration: none;
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
 .schedule-import-path-link:hover {
-  color: #111827;
+  color: var(--color-text-primary) ;
   text-decoration: underline;
 }
 
 .schedule-import-path-active {
-  color: #1D4ED8;
+  color: var(--color-badge-blue-text) ;
   font-weight: 600;
 }
 
 .schedule-import-path-sep {
-  color: #9CA3AF;
+  color: var(--color-text-muted) ;
   font-weight: 400;
 }
 
@@ -57,7 +57,7 @@
 .schedule-import-title {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0 0 4px 0;
@@ -66,7 +66,7 @@
 .schedule-import-subtitle {
   font-size: 13px;
   font-weight: 400;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
 }
 
@@ -78,8 +78,8 @@
 
 /* Active Staging Draft Notification Banner */
 .schedule-draft-banner {
-  background-color: #EFF6FF;
-  border: 1px solid #BFDBFE;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-status-info-bg);
   border-radius: 8px;
   padding: 14px 20px;
   display: flex;
@@ -98,7 +98,7 @@
 
 /* Success Card */
 .review-import-success-card {
-  background-color: #ECFDF5;
+  background-color: var(--color-success-bg) ;
   border: 1px solid #A7F3D0;
   border-radius: 8px;
   padding: 14px 20px;
@@ -117,8 +117,8 @@
 
 /* Prerequisite Checklist Banner - Clean Neutral Flat Card */
 .upload-prerequisite-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 24px;
@@ -130,13 +130,13 @@
 
 .upload-prerequisite-card--ready,
 .upload-prerequisite-card--warning {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
 }
 
 .upload-prerequisite-card--loading {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -156,12 +156,12 @@
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
 }
 
 .upload-prerequisite-desc {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
   line-height: 1.5;
 }
@@ -184,11 +184,11 @@
   justify-content: space-between;
   gap: 12px;
   font-size: 12px;
-  color: #374151;
-  background-color: #F9FAFB;
+  color: var(--color-text-secondary) ;
+  background-color: var(--color-surface) ;
   padding: 10px 14px;
   border-radius: 6px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--color-border);
 }
 
 .upload-prerequisite-note {
@@ -196,25 +196,25 @@
   align-items: flex-start;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid #F3F4F6;
+  border-top: 1px solid var(--color-surface-hover);
 }
 
 .upload-prerequisite-icon-pass {
-  color: #16A34A;
+  color: var(--color-status-success-fg);
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 .upload-prerequisite-icon-fail {
-  color: #DC2626;
+  color: var(--color-error) ;
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 /* Form Sections */
 .upload-form-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -232,13 +232,13 @@
 .upload-section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
   margin: 0;
 }
 
 .upload-section-desc {
   font-size: 13px;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
   line-height: 1.4;
 }
@@ -254,21 +254,21 @@
   font-size: 13px;
   font-weight: 500;
   border-radius: 6px;
-  border: 1px solid #D1D5DB;
-  background-color: #FFFFFF;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-card) ;
+  color: var(--color-text-secondary) ;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .upload-cycle-btn:hover {
   border-color: #9CA3AF;
-  background-color: #F9FAFB;
+  background-color: var(--color-surface) ;
 }
 
 .upload-cycle-btn--active {
   background-color: #111827;
-  color: #FFFFFF;
+  color: var(--color-on-dark) ;
   border-color: #111827;
 }
 
@@ -299,12 +299,12 @@
 .upload-zone-title {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary) ;
 }
 
 .upload-zone-hint {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
 }
 
@@ -313,14 +313,14 @@
   align-items: center;
   gap: 16px;
   padding-top: 12px;
-  border-top: 1px solid #F3F4F6;
+  border-top: 1px solid var(--color-surface-hover);
   flex-wrap: wrap;
 }
 
 /* Progress & Feedback */
 .upload-progress-box {
-  background-color: #F9FAFB;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 20px;
   display: flex;
@@ -337,7 +337,7 @@
 .upload-progress-title {
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
 }
 
 .upload-ready-action-row {
@@ -369,8 +369,8 @@
 }
 
 .review-stat-flat-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 20px;
   display: flex;
@@ -389,13 +389,13 @@
 .review-stat-label {
   font-size: 13px;
   font-weight: 500;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
 }
 
 .review-stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #111827;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.1;
   margin-bottom: 4px;
@@ -403,14 +403,14 @@
 
 .review-stat-desc {
   font-size: 12px;
-  color: #9CA3AF;
+  color: var(--color-text-muted) ;
   margin: 0;
 }
 
 /* Full-Page Table Section */
 .review-import-table-section {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin-bottom: 80px;
@@ -419,7 +419,7 @@
 
 .review-import-table-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -430,13 +430,13 @@
 .review-import-table-title {
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
   margin: 0 0 2px 0;
 }
 
 .review-import-table-desc {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
 }
 
@@ -446,8 +446,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: #FFFFFF;
-  border-top: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border-top: 1px solid var(--color-border);
   padding: 14px 24px;
   display: flex;
   align-items: center;

@@ -4,8 +4,12 @@ import {
   MessageSquare,
   CheckCircle,
   AlertCircle,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import useTheme from '../../hooks/useTheme';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { Button, Input, Badge, Modal } from '../../components/shared';
 import { authApi } from '../../services/api';
@@ -14,6 +18,7 @@ import './Profile.css';
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, logout, updateUserProfile, changePassword, hasRole, isKesiswaan } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   // Email verification state
   const [email, setEmail] = useState(user?.email || '');
@@ -280,6 +285,40 @@ export default function ProfilePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Identity & Role */}
         <div className="lg:col-span-1 space-y-6">
+
+        {/* Kartu Tampilan (Light / Dark / System) */}
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Tampilan</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Pilih tema antarmuka. Preferensi disimpan pada perangkat ini.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: 'light', label: 'Terang', Icon: Sun },
+              { value: 'dark', label: 'Gelap', Icon: Moon },
+              { value: 'system', label: 'Sistem', Icon: Monitor },
+            ].map(({ value, label, Icon }) => {
+              const active = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value)}
+                  aria-pressed={active}
+                  className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-2.5 text-[11px] font-semibold transition-colors ${
+                    active
+                      ? 'border-[var(--color-accent)] bg-[#FFFDF0] text-gray-900'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon size={15} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
           {/* Identity Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center gap-3.5 mb-4">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Clock,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
 import { EmptyState } from '../../components/feedback';
 
 export default function StudentQuizPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [quizzes, setQuizzes] = useState([]);
@@ -252,42 +254,6 @@ export default function StudentQuizPage() {
       return val && String(val).trim().length > 0;
     }).length;
   }, [studentAnswers]);
-
-  // 1. Mulai Kerjakan Kuis
-  const handleStartQuiz = async (quiz) => {
-    try {
-      const res = await quizApi.getQuizDetail(quiz.id);
-      const quizDetail = res?.data || res;
-      const questionsList = quizDetail?.questions || [];
-
-      if (!Array.isArray(questionsList) || questionsList.length === 0) {
-        showToast('Kuis ini belum memiliki butir soal aktif.', 'error');
-        return;
-      }
-
-      setActiveQuiz(quizDetail);
-      setQuestions(questionsList);
-      setCurrentQuestionIdx(0);
-
-      const durationMins = Number(quizDetail.duration_minutes || quizDetail.duration || 30);
-      setTimeLeftSeconds(durationMins * 60);
-
-      // Check draft di sessionStorage
-      const draftKey = `quiz_draft_${user?.id}_${quiz.id}`;
-      const savedDraft = sessionStorage.getItem(draftKey);
-      if (savedDraft) {
-        try {
-          setStudentAnswers(JSON.parse(savedDraft));
-        } catch {
-          setStudentAnswers({});
-        }
-      } else {
-        setStudentAnswers({});
-      }
-    } catch (err) {
-      showToast(err.message || 'Gagal memuat butir soal kuis.', 'error');
-    }
-  };
 
   // 2. Input Jawaban
   const handleAnswerChange = (questionId, value) => {
@@ -679,7 +645,7 @@ export default function StudentQuizPage() {
                     {meta.canTake && (
                       <button
                         type="button"
-                        onClick={() => handleStartQuiz(quiz)}
+                        onClick={() => navigate(`/student/quiz/${quiz.id}`)}
                         className="data-table__action"
                         aria-label={meta.actionLabel}
                       >

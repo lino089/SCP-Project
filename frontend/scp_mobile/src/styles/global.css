@@ -7,6 +7,7 @@
 
 @import "tailwindcss";
 @import './tokens.css';
+@import './theme-dark.css';
 
 /* Tailwind `font-sans` dipetakan ke token tipografi proyek di tokens.css
  * supaya tidak jatuh ke stack default browser (ui-sans-serif/system-ui). */

@@ -13,10 +13,13 @@ import {
   BookOpen,
   FileQuestion,
   Home,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import BottomSheetModal from '../shared/BottomSheetModal';
 import Badge from '../shared/Badge';
 import { useAuth } from '../../hooks/useAuth';
+import useTheme from '../../hooks/useTheme';
 import './MobileMoreDrawer.css';
 
 /**
@@ -26,6 +29,8 @@ import './MobileMoreDrawer.css';
 export default function MobileMoreDrawer({ isOpen = false, onClose }) {
   const navigate = useNavigate();
   const { user, hasRole, isKesiswaan, isWaliKelas, logout } = useAuth();
+
+  const { isDark, toggleTheme } = useTheme();
 
   const handleLogout = async () => {
     onClose?.();
@@ -118,17 +123,17 @@ export default function MobileMoreDrawer({ isOpen = false, onClose }) {
           icon: FileText,
         },
         {
-          label: 'Manajemen Kuis AI',
+          label: 'Kuis',
           desc: 'Buat kuis otomatis dari dokumen PDF/TXT',
           to: '/teacher/quiz',
           icon: FileQuestion,
         },
       ];
 
-      if (isKesiswaan() || isWaliKelas() || hasRole('waka')) {
+      if (isKesiswaan() || isWaliKelas()) {
         items.push({
           label:
-            isKesiswaan() || hasRole('waka')
+            isKesiswaan()
               ? 'Verifikasi Perizinan Siswa'
               : 'Perizinan Siswa (Wali Kelas)',
           desc: 'Tinjau & proses permohonan izin ketidakhadiran siswa',
@@ -186,7 +191,7 @@ export default function MobileMoreDrawer({ isOpen = false, onClose }) {
               icon: FileText,
             },
             {
-              label: 'Pengerjaan Kuis AI',
+              label: 'Kuis',
               desc: 'Gabung kuis dengan PIN & lihat nilai',
               to: '/student/quiz',
               icon: FileQuestion,
@@ -318,6 +323,22 @@ export default function MobileMoreDrawer({ isOpen = false, onClose }) {
               </div>
               <ChevronRight size={16} className="text-[var(--color-text-muted)] shrink-0" />
             </NavLink>
+
+            <button
+              type="button"
+              className="mobile-more-drawer__link"
+              onClick={toggleTheme}
+            >
+              <div className="mobile-more-drawer__link-icon">
+                {isDark ? <Moon size={17} strokeWidth={1.75} /> : <Sun size={17} strokeWidth={1.75} />}
+              </div>
+              <div className="mobile-more-drawer__link-text">
+                <span className="mobile-more-drawer__link-label">Mode Tampilan</span>
+                <span className="mobile-more-drawer__link-desc">
+                  {isDark ? 'Gelap — ketuk untuk mode terang' : 'Terang — ketuk untuk mode gelap'}
+                </span>
+              </div>
+            </button>
 
             <button
               type="button"

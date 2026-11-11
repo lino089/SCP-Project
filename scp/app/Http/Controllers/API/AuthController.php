@@ -92,6 +92,8 @@ class AuthController extends Controller
         $userData = $user->toArray();
         $userData['academic_year'] = $sysConfig?->academic_year ?? '2025/2026 Ganjil';
         $userData['active_cycle'] = $sysConfig?->active_cycle ?? 1;
+        $userData['monday_is_upacara'] = $sysConfig ? (bool) $sysConfig->monday_is_upacara : true;
+        $userData['semester'] = $sysConfig?->semester ?? 'Ganjil';
 
         return response()->json([
             'success' => true,

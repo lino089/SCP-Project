@@ -38,7 +38,7 @@ export default function TeacherSchedulePage() {
   // Academic Settings
   const [activeCycle, setActiveCycle] = useState(() => Number(user?.active_cycle || 1));
   const [selectedCycle, setSelectedCycle] = useState(() => Number(user?.active_cycle || 1));
-  const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [mondayIsUpacara, setMondayIsUpacara] = useState(() => (typeof user?.monday_is_upacara === 'boolean' ? user.monday_is_upacara : true));
   const [periodTemplates, setPeriodTemplates] = useState([]);
 
   // Filter States
@@ -58,18 +58,25 @@ export default function TeacherSchedulePage() {
   useEffect(() => {
     academicSettingApi.getSettings()
       .then((res) => {
-        if (res?.data) {
-          const c = Number(res.data.active_cycle || 1);
+        const sData = res?.data || res;
+        if (sData) {
+          const c = Number(sData.active_cycle || user?.active_cycle || 1);
           setActiveCycle(c);
           setSelectedCycle(c);
-          setMondayIsUpacara(Boolean(res.data.monday_is_upacara));
-          if (Array.isArray(res.data.period_templates)) {
-            setPeriodTemplates(res.data.period_templates);
+          if (typeof sData.monday_is_upacara === 'boolean') {
+            setMondayIsUpacara(sData.monday_is_upacara);
+          }
+          if (Array.isArray(sData.period_templates)) {
+            setPeriodTemplates(sData.period_templates);
           }
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (typeof user?.monday_is_upacara === 'boolean') {
+          setMondayIsUpacara(user.monday_is_upacara);
+        }
+      });
+  }, [user?.active_cycle, user?.monday_is_upacara]);
 
   const fetchSchedules = useCallback(async () => {
     try {

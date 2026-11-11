@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Sparkles,
   Plus,
@@ -12,7 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import quizApi from '../../services/quizApi';
-import { classApi } from '../../services/masterDataApi';
 import {
   Button,
   Badge,
@@ -27,8 +27,8 @@ import { SkeletonCard, EmptyState, ErrorState } from '../../components/feedback'
 import { formatDateIndo } from '../../utils/formatters';
 
 export default function TeacherQuizPage() {
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
-  const [classesList, setClassesList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -44,34 +44,8 @@ export default function TeacherQuizPage() {
   const [toastMessage, setToastMessage] = useState(null);
   const [toastType, setToastType] = useState('success');
 
-  // Modal 1: Buat Kuis Baru (Metadata)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isCreatingQuiz, setIsCreatingQuiz] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    title: '',
-    class_id: '',
-    due_date: '',
-    duration_minutes: 30,
-  });
-
-  // Modal 2: Generator Soal AI / Ekstraksi Dokumen
+  // Kuis terpilih (review soal & hasil siswa)
   const [selectedQuiz, setSelectedQuiz] = useState(null);
-  const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
-  const [genMethod, setGenMethod] = useState('prompt'); // 'prompt' | 'document'
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [genError, setGenError] = useState('');
-
-  // Form Prompt AI
-  const [promptForm, setPromptForm] = useState({
-    prompt: '',
-    total_questions: 5,
-    mc_count: 3,
-    essay_count: 2,
-    difficulty: 'sedang',
-  });
-
-  // Form Dokumen
-  const [uploadedDoc, setUploadedDoc] = useState(null);
 
   // Modal 3: Review & Edit Butir Soal
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -92,16 +66,6 @@ export default function TeacherQuizPage() {
     setToastType(type);
     setTimeout(() => setToastMessage(null), 3500);
   };
-
-  // Load Classes for dropdown
-  useEffect(() => {
-    classApi.getClasses({ per_page: 100 })
-      .then((res) => {
-        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-        setClassesList(list);
-      })
-      .catch(() => {});
-  }, []);
 
   const fetchQuizzes = useCallback(async () => {
     try {
@@ -144,94 +108,6 @@ export default function TeacherQuizPage() {
   };
 
   // Create Quiz Draft
-  const handleCreateQuizSubmit = async (e) => {
-    if (e) e.preventDefault();
-    if (!createForm.title.trim()) return;
-
-    setIsCreatingQuiz(true);
-    try {
-      const res = await quizApi.createQuiz({
-        title: createForm.title.trim(),
-        class_id: Number(createForm.class_id),
-        due_date: createForm.due_date,
-        duration_minutes: Number(createForm.duration_minutes),
-      });
-
-      const newQuiz = res?.data || res;
-      showToast('Draft kuis berhasil dibuat.');
-      setIsCreateModalOpen(false);
-      handleRefresh();
-
-      setSelectedQuiz(newQuiz);
-      setIsGeneratorModalOpen(true);
-    } catch (err) {
-      showToast(err.response?.data?.message || err.message || 'Gagal membuat kuis.', 'error');
-    } finally {
-      setIsCreatingQuiz(false);
-    }
-  };
-
-  // Handle AI Prompt Generation
-  const handleGeneratePrompt = async (e) => {
-    if (e) e.preventDefault();
-    if (!promptForm.prompt.trim()) {
-      setGenError('Instruksi materi prompt wajib diisi.');
-      return;
-    }
-
-    setIsGenerating(true);
-    setGenError('');
-    try {
-      await quizApi.generatePrompt(selectedQuiz.id, {
-        prompt: promptForm.prompt.trim(),
-        total_questions: Number(promptForm.total_questions),
-        mc_count: Number(promptForm.mc_count),
-        essay_count: Number(promptForm.essay_count),
-        difficulty: promptForm.difficulty,
-        question_types: 'combination',
-      });
-
-      showToast('Permintaan pembuatan soal AI diterima. Sedang memproses...');
-      setIsGeneratorModalOpen(false);
-      handleOpenReviewQuestions(selectedQuiz, true);
-    } catch (err) {
-      setGenError(
-        err.response?.data?.message || err.message || 'Gagal generate soal via Gemini AI.'
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Handle Document Extraction
-  const handleExtractDocument = async (e) => {
-    if (e) e.preventDefault();
-    if (!uploadedDoc) {
-      setGenError('Pilih berkas PDF atau TXT materi terlebih dahulu.');
-      return;
-    }
-
-    setIsGenerating(true);
-    setGenError('');
-    try {
-      const formData = new FormData();
-      formData.append('file', uploadedDoc);
-      formData.append('document', uploadedDoc);
-
-      await quizApi.extractDocument(selectedQuiz.id, formData);
-      showToast('Permintaan ekstraksi berkas AI diterima. Sedang memproses...');
-      setIsGeneratorModalOpen(false);
-      handleOpenReviewQuestions(selectedQuiz, true);
-    } catch (err) {
-      setGenError(
-        err.response?.data?.message || err.message || 'Gagal mengekstrak soal dari dokumen.'
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Open Questions Review (dengan dukungan polling jika baru diproses asinkron di queue)
   const handleOpenReviewQuestions = async (quiz, shouldPoll = false) => {
     setSelectedQuiz(quiz);
     setIsReviewModalOpen(true);
@@ -367,7 +243,7 @@ export default function TeacherQuizPage() {
       {/* Header Info */}
       <div className="surface-card p-3.5 shadow-[var(--shadow-card)] flex items-center justify-between">
         <div>
-          <h1 className="text-sm font-bold text-[var(--color-text-primary)]">Manajemen Kuis AI</h1>
+          <h1 className="text-sm font-bold text-[var(--color-text-primary)]">Manajemen Kuis</h1>
           <p className="text-[11px] text-[var(--color-text-muted)]">
             Pembuatan soal berbantuan Google Gemini &amp; evaluasi
           </p>
@@ -375,15 +251,7 @@ export default function TeacherQuizPage() {
         <Button
           size="sm"
           variant="primary"
-          onClick={() => {
-            setCreateForm({
-              title: '',
-              class_id: classesList[0]?.id || '',
-              due_date: '',
-              duration_minutes: 30,
-            });
-            setIsCreateModalOpen(true);
-          }}
+          onClick={() => navigate('/teacher/quiz/create')}
           className="gap-1.5 text-xs font-semibold px-3 py-1.5 bg-[var(--color-warning-bg)] text-[var(--color-text-primary)]"
         >
           <Plus size={14} />
@@ -484,9 +352,13 @@ export default function TeacherQuizPage() {
                       <div className="data-table__actions">
                         <button
                           type="button"
-                          onClick={() => handleOpenReviewQuestions(quiz)}
+                          onClick={() =>
+                            isPublished
+                              ? handleOpenReviewQuestions(quiz)
+                              : navigate(`/teacher/quiz/create?id=${quiz.id}`)
+                          }
                           className="data-table__action"
-                          aria-label="Kelola soal"
+                          aria-label={isPublished ? 'Lihat soal' : 'Lanjutkan pembuatan kuis'}
                         >
                           <FileText size={13} />
                         </button>
@@ -494,12 +366,9 @@ export default function TeacherQuizPage() {
                         {!isPublished && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setSelectedQuiz(quiz);
-                              setIsGeneratorModalOpen(true);
-                            }}
+                            onClick={() => navigate(`/teacher/quiz/create?id=${quiz.id}`)}
                             className="data-table__action"
-                            aria-label="Generator soal AI"
+                            aria-label="Lanjutkan ke sumber soal"
                           >
                             <Sparkles size={13} />
                           </button>
@@ -533,195 +402,6 @@ export default function TeacherQuizPage() {
           />
         )}
       </div>
-
-      {/* MODAL 1: Form Buat Kuis Baru */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Buat Kuis Pembelajaran Baru"
-      >
-        <form onSubmit={handleCreateQuizSubmit} className="space-y-3">
-          <Input
-            label="Judul Kuis"
-            placeholder="Contoh: Evaluasi Bab 3 - Pemrograman Web"
-            value={createForm.title}
-            onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-            required
-          />
-
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-text-primary)] block mb-1">Kelas Sasaran</label>
-            <Select
-              value={createForm.class_id}
-              onChange={(e) => setCreateForm({ ...createForm, class_id: e.target.value })}
-              required
-            >
-              <option value="">Pilih Rombel...</option>
-              {classesList.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="number"
-              min="5"
-              max="180"
-              label="Durasi (Menit)"
-              value={createForm.duration_minutes}
-              onChange={(e) => setCreateForm({ ...createForm, duration_minutes: e.target.value })}
-              required
-            />
-            <Input
-              type="date"
-              label="Tenggat Waktu"
-              value={createForm.due_date}
-              onChange={(e) => setCreateForm({ ...createForm, due_date: e.target.value })}
-            />
-          </div>
-
-          <div className="pt-2 flex gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsCreateModalOpen(false)}
-              className="flex-1"
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isCreatingQuiz}
-              className="flex-1 bg-[var(--color-warning-bg)] text-[var(--color-text-primary)] font-bold"
-            >
-              {isCreatingQuiz ? 'Membuat...' : 'Lanjut ke Soal AI'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* MODAL 2: Generator Soal AI / Dokumen */}
-      <Modal
-        isOpen={isGeneratorModalOpen}
-        onClose={() => setIsGeneratorModalOpen(false)}
-        title="Generator Butir Soal AI"
-      >
-        <div className="space-y-3">
-          {genError && (
-            <div className="p-2.5 bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] text-[var(--color-danger-fg)] text-xs rounded-[14px]">
-              {genError}
-            </div>
-          )}
-
-          <div className="flex bg-[var(--color-surface-subtle)] p-1 rounded-[14px]">
-            <button
-              type="button"
-              onClick={() => setGenMethod('prompt')}
-              className={`flex-1 py-1 rounded-[10px] text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-                genMethod === 'prompt' ? 'bg-[var(--color-warning-bg)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'
-              }`}
-            >
-              <Sparkles size={13} />
-              Prompt AI
-            </button>
-            <button
-              type="button"
-              onClick={() => setGenMethod('document')}
-              className={`flex-1 py-1 rounded-[10px] text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-                genMethod === 'document' ? 'bg-[var(--color-warning-bg)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'
-              }`}
-            >
-              <Upload size={13} />
-              Modul PDF/TXT
-            </button>
-          </div>
-
-          {genMethod === 'prompt' ? (
-            <form onSubmit={handleGeneratePrompt} className="space-y-2.5">
-              <div>
-                <label className="text-xs font-semibold text-[var(--color-text-primary)] block mb-1">
-                  Instruksi Materi Pembelajaran (AI Prompt)
-                </label>
-                <textarea
-                  rows={3}
-                  value={promptForm.prompt}
-                  onChange={(e) => setPromptForm({ ...promptForm, prompt: e.target.value })}
-                  placeholder="Contoh: Buatkan soal pilihan ganda seputar inheritance, polymorphism, dan enkapsulasi pada Java/C#..."
-                  className="w-full text-xs p-2.5 field-area focus:outline-hidden focus:border-[var(--color-brand)]"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[11px] font-semibold text-[var(--color-text-primary)] block mb-1">Total Soal</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={promptForm.total_questions}
-                    onChange={(e) => setPromptForm({ ...promptForm, total_questions: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[var(--color-text-primary)] block mb-1">Jml Pilihan Ganda</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={promptForm.mc_count}
-                    onChange={(e) => setPromptForm({ ...promptForm, mc_count: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[var(--color-text-primary)] block mb-1">Jml Esai</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={promptForm.essay_count}
-                    onChange={(e) => setPromptForm({ ...promptForm, essay_count: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isGenerating}
-                className="w-full text-xs font-bold py-2.5 bg-[var(--color-warning-bg)] text-[var(--color-text-primary)] gap-1.5"
-              >
-                <Sparkles size={15} />
-                {isGenerating ? 'Gemini AI Sedang Menulis Soal...' : 'Generate Soal Sekarang'}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleExtractDocument} className="space-y-2.5">
-              <div className="p-3 bg-[var(--color-info-bg)] border border-[var(--color-info-border)] rounded-[14px] text-xs text-[var(--color-info-fg)] leading-relaxed">
-                AI akan mengekstrak butir-butir soal yang ada di modul/berkas tanpa mengarang soal baru.
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.txt"
-                onChange={(e) => setUploadedDoc(e.target.files?.[0] || null)}
-                className="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-[10px] file:border-0 file:text-xs file:font-semibold file:bg-[var(--color-surface-subtle)] file:text-[var(--color-text-primary)]"
-                required
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isGenerating}
-                className="w-full text-xs font-bold py-2.5 bg-[var(--color-warning-bg)] text-[var(--color-text-primary)] gap-1.5"
-              >
-                <Upload size={15} />
-                {isGenerating ? 'Mengekstrak Soal dari Dokumen...' : 'Ekstrak Soal Dokumen'}
-              </Button>
-            </form>
-          )}
-        </div>
-      </Modal>
 
       {/* MODAL 3: Review Butir Soal */}
       <Modal

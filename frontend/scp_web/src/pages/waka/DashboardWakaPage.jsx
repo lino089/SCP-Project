@@ -23,6 +23,7 @@ import {
 import { academicSettingApi, scheduleApi } from '../../services/scheduleApi';
 import { masterDataSummaryApi } from '../../services/masterDataApi';
 import academicEventApi from '../../services/academicEventApi';
+import { notificationApi } from '../../services/notificationApi';
 import { unwrap, unwrapList } from '../../utils/responseHelper';
 import { todayLocalISO } from '../../utils/dateUtils';
 import './DashboardWaka.css';
@@ -49,8 +50,10 @@ export default function DashboardWakaPage() {
   // Cycle History list
   const [historyList, setHistoryList] = useState([]);
 
-  // Missing journals
+  // Missing journals & Reminder tracking
   const [missingJournals, setMissingJournals] = useState([]);
+  const [sendingReminderId, setSendingReminderId] = useState(null);
+  const [sentReminderIds, setSentReminderIds] = useState(new Set());
 
   // Agenda Kalender Akademik Hari Ini
   const [todayEvents, setTodayEvents] = useState([]);
@@ -151,6 +154,8 @@ export default function DashboardWakaPage() {
         const raw = unwrapList(missingRes.value);
         const formatted = raw.map((item) => ({
           id: item.id,
+          scheduleId: item.id,
+          teacherId: item.teacher_id || item.teacher?.id,
           className: item.school_class?.name || item.className || 'Kelas',
           teacherName: item.teacher?.name || item.teacherName || 'Guru',
           subjectName: item.subject?.name || item.subjectName || 'Mata Pelajaran',
@@ -285,6 +290,30 @@ export default function DashboardWakaPage() {
       setModalError(msg || 'Kata sandi verifikasi tidak valid atau permintaan gagal.');
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  // Mengirim pengingat keterlambatan jurnal ke guru terkait
+  const handleSendReminder = async (journal) => {
+    if (!journal.scheduleId || !journal.teacherId) {
+      showError('Data pengingat jadwal tidak lengkap.');
+      return;
+    }
+
+    try {
+      setSendingReminderId(journal.id);
+      await notificationApi.sendJournalReminder({
+        schedule_id: journal.scheduleId,
+        teacher_id: journal.teacherId,
+      });
+
+      setSentReminderIds((prev) => new Set([...prev, journal.id]));
+      showFeedback(`Pengingat KBM berhasil dikirimkan ke ${journal.teacherName}.`);
+    } catch (err) {
+      console.warn('Gagal mengirim pengingat KBM:', err);
+      showError(err?.response?.data?.message || `Gagal mengirim pengingat ke ${journal.teacherName}.`);
+    } finally {
+      setSendingReminderId(null);
     }
   };
 
@@ -568,11 +597,14 @@ export default function DashboardWakaPage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() =>
-                        showFeedback(`Pengingat KBM berhasil dikirimkan ke ${journal.teacherName}.`)
-                      }
+                      disabled={sendingReminderId === journal.id || sentReminderIds.has(journal.id)}
+                      onClick={() => handleSendReminder(journal)}
                     >
-                      Kirim Pengingat
+                      {sendingReminderId === journal.id
+                        ? 'Mengirim...'
+                        : sentReminderIds.has(journal.id)
+                        ? 'Terkirim ✓'
+                        : 'Kirim Pengingat'}
                     </Button>
                   </div>
                 </div>

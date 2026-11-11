@@ -351,8 +351,8 @@ export default function TeacherLeaveApprovalPage() {
     return (
       <div className="teacher-approval">
         <ForbiddenState
-          title="Akses Terbatas Tim Kesiswaan"
-          message="Halaman Konfirmasi Izin Guru hanya dapat diakses oleh Guru yang memiliki penugasan aktif sebagai Tim Kesiswaan / BK."
+          title="Akses Terbatas: Tim Kesiswaan"
+          message="Halaman Konfirmasi Izin Guru hanya dapat diakses oleh Anggota Tim Kesiswaan/BK yang berwenang memverifikasi perizinan guru."
         />
       </div>
     );

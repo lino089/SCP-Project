@@ -31,6 +31,7 @@ const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPag
 const TeacherLeavePage = lazy(() => import('../pages/teacher/TeacherLeavePage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
+const QuizCreatePage = lazy(() => import('../pages/teacher/QuizCreatePage'));
 
 // Student & Parent Shared Calendar (Fase 3) & Pages (Fase 6)
 const StudentHomePage = lazy(() => import('../pages/student/StudentHomePage'));
@@ -38,6 +39,8 @@ const StudentCalendarPage = lazy(() => import('../pages/student/StudentCalendarP
 const StudentSchedulePage = lazy(() => import('../pages/student/StudentSchedulePage'));
 const StudentPermissionPage = lazy(() => import('../pages/student/StudentPermissionPage'));
 const StudentQuizPage = lazy(() => import('../pages/student/StudentQuizPage'));
+const QuizIntroPage = lazy(() => import('../pages/student/QuizIntroPage'));
+const QuizAttemptPage = lazy(() => import('../pages/student/QuizAttemptPage'));
 
 const ParentMonitoringPage = lazy(() => import('../pages/parent/ParentMonitoringPage'));
 const ParentCalendarPage = lazy(() => import('../pages/parent/ParentCalendarPage'));
@@ -115,13 +118,13 @@ export default function AppRouter() {
               <Route path="/teacher/journal" element={<TeacherJournalPage />} />
               <Route path="/teacher/leave" element={<TeacherLeavePage />} />
               <Route path="/teacher/quiz" element={<TeacherQuizPage />} />
+              <Route path="/teacher/quiz/create" element={<QuizCreatePage />} />
             </Route>
 
             {/* Teacher Permissions Verification (Waka / Kesiswaan / Wali Kelas) */}
             <Route
               element={
                 <RoleRoute
-                  allowedRoles={[ROLES.WAKA]}
                   allowKesiswaan
                   allowWaliKelas
                 />
@@ -142,6 +145,8 @@ export default function AppRouter() {
               <Route path="/student/calendar" element={<StudentCalendarPage />} />
               <Route path="/student/schedule" element={<StudentSchedulePage />} />
               <Route path="/student/quiz" element={<StudentQuizPage />} />
+              <Route path="/student/quiz/:id" element={<QuizIntroPage />} />
+              <Route path="/student/quiz/:id/attempt" element={<QuizAttemptPage />} />
               <Route path="/student/quizzes" element={<StudentQuizPage />} />
               <Route path="/student/permission" element={<StudentPermissionPage />} />
               <Route path="/student/permissions" element={<StudentPermissionPage />} />

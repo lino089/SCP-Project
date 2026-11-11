@@ -167,7 +167,7 @@ export default function ParentMonitoringPage() {
   const tabs = [
     { id: 'attendance', label: 'Rekapitulasi Kehadiran', count: attendances.length },
     { id: 'permissions', label: 'Riwayat Izin & Dispensasi', count: leaveRequests.length },
-    { id: 'quizzes', label: 'Capaian Nilai Kuis AI', count: quizzes.length },
+    { id: 'quizzes', label: 'Capaian Nilai Kuis', count: quizzes.length },
     { id: 'schedule', label: 'Jadwal Belajar Kelas', count: childSchedules.length },
   ];
 

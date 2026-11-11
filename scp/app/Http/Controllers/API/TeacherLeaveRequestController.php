@@ -27,14 +27,20 @@ class TeacherLeaveRequestController extends Controller
     {
         $user = $request->user();
 
+        if ($user->role === 'vice_principal') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Waka Kurikulum tidak memiliki wewenang untuk melihat perizinan guru.',
+            ], 403);
+        }
+
         $query = TeacherLeaveRequest::query()->with([
             'teacher:id,name,nis_nip',
             'approvedBy:id,name,nis_nip',
         ]);
 
-        $isWaka = ($user->role === 'vice_principal');
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
-        $isVerifier = ($isWaka || $isKesiswaan);
+        $isVerifier = $isKesiswaan;
 
         $scope = $request->input('scope');
         $isMine = ($scope === 'mine' || $request->boolean('mine'));
@@ -157,13 +163,19 @@ class TeacherLeaveRequestController extends Controller
             'approvedBy:id,name,nis_nip',
         ])->findOrFail($id);
 
-        $isWaka = ($user->role === 'vice_principal');
+        if ($user->role === 'vice_principal') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Waka Kurikulum tidak memiliki wewenang untuk melihat detail perizinan guru.',
+            ], 403);
+        }
+
         $isOwner = ((int) $leaveRequest->teacher_id === (int) $user->id);
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
 
         $hasAccess = false;
 
-        if ($isOwner || $isWaka) {
+        if ($isOwner) {
             $hasAccess = true;
         } elseif ($leaveRequest->approved_by !== null && (int) $leaveRequest->approved_by === (int) $user->id) {
             // Keputusan 1 Opsi A: Pernah disetujui / diproses sendiri oleh user ini
@@ -329,13 +341,12 @@ class TeacherLeaveRequestController extends Controller
     {
         $user = $request->user();
 
-        $isWaka = ($user->role === 'vice_principal');
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
 
-        if (!$isWaka && !$isKesiswaan) {
+        if (!$isKesiswaan) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya Tim Kesiswaan atau Waka Kurikulum yang berhak memverifikasi perizinan guru.',
+                'message' => 'Akses ditolak. Hanya Tim Kesiswaan yang berhak memverifikasi perizinan guru.',
             ], 403);
         }
 
@@ -409,13 +420,12 @@ class TeacherLeaveRequestController extends Controller
     {
         $user = $request->user();
 
-        $isWaka = ($user->role === 'vice_principal');
         $isKesiswaan = ($user->role === 'teacher' && $user->isKesiswaan());
 
-        if (!$isWaka && !$isKesiswaan) {
+        if (!$isKesiswaan) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya Tim Kesiswaan atau Waka Kurikulum yang berhak memverifikasi perizinan guru.',
+                'message' => 'Akses ditolak. Hanya Tim Kesiswaan yang berhak memverifikasi perizinan guru.',
             ], 403);
         }
 

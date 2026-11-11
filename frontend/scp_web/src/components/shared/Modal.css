@@ -12,8 +12,8 @@
 }
 
 .modal-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
   width: 100%;
@@ -101,8 +101,8 @@
   justify-content: flex-end;
   gap: var(--space-3);
   padding: 14px 20px;
-  border-top: 1px solid #E5E7EB;
-  background-color: #FFFFFF;
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-card) ;
 }
 
 /* Layar kecil: overlay lebih rapat, footer modal boleh wrap */

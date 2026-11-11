@@ -1,12 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Clock,
   FileQuestion,
-  CheckCircle2,
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
-  Send,
   Eye,
   RotateCw,
   HelpCircle,
@@ -23,21 +19,42 @@ import {
 } from '../../components/shared';
 import './StudentQuiz.css';
 
+const formatQuizDueDate = (dueDateStr) => {
+  if (!dueDateStr) return { formatted: '—', tag: null };
+  const d = new Date(dueDateStr);
+  if (isNaN(d.getTime())) return { formatted: dueDateStr, tag: null };
+
+  const now = new Date();
+  const diffHours = (d - now) / (1000 * 60 * 60);
+
+  const formatted = d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }) + ' WIB';
+
+  let tag = null;
+  if (d < now) {
+    tag = { label: 'Telah Lewat', color: 'text-rose-700 bg-rose-50 border-rose-200' };
+  } else if (diffHours <= 24) {
+    tag = { label: 'Tenggat Hari Ini', color: 'text-amber-800 bg-amber-50 border-amber-300' };
+  } else {
+    const days = Math.ceil(diffHours / 24);
+    tag = { label: `Sisa ${days} hari`, color: 'text-slate-600 bg-slate-100 border-slate-200' };
+  }
+
+  return { formatted, tag };
+};
+
 export default function StudentQuizPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
-
-  // Active quiz taking states
-  const [activeQuiz, setActiveQuiz] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [studentAnswers, setStudentAnswers] = useState({}); // { [question_id]: string }
-  const [timeLeftSeconds, setTimeLeftSeconds] = useState(1800); // 30 minutes default
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionComplete, setSubmissionComplete] = useState(false);
 
   // Result inspection state
   const [inspectQuiz, setInspectQuiz] = useState(null);
@@ -53,10 +70,6 @@ export default function StudentQuizPage() {
     setToast({ show: true, message, variant });
     setTimeout(() => setToast({ show: false, message: '', variant: 'success' }), 4000);
   };
-
-  // Timer ref for cleanup
-  const timerRef = useRef(null);
-  const autoSubmitRef = useRef(null);
 
   // Student Info
   const studentInfo = {
@@ -90,137 +103,13 @@ export default function StudentQuizPage() {
     loadQuizzes();
   }, [loadQuizzes]);
 
-  // Timer effect during active quiz
-  useEffect(() => {
-    if (activeQuiz && !submissionComplete) {
-      timerRef.current = setInterval(() => {
-        setTimeLeftSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current);
-            showToast('Waktu pengerjaan kuis telah habis. Jawaban otomatis dikumpulkan.', 'warning');
-            autoSubmitRef.current?.();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [activeQuiz, submissionComplete]);
-
-  // Format seconds to MM:SS
-  const formattedTime = useMemo(() => {
-    const mins = Math.floor(timeLeftSeconds / 60);
-    const secs = timeLeftSeconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }, [timeLeftSeconds]);
-
-  // Count answered questions
-  const answeredCount = useMemo(() => {
-    return Object.keys(studentAnswers).filter((qId) => {
-      const val = studentAnswers[qId];
-      return val && String(val).trim().length > 0;
-    }).length;
-  }, [studentAnswers]);
 
   // --- ACTIONS ---
 
-  // 1. Mulai Mengerjakan Kuis
-  const handleStartQuiz = async (quiz) => {
-    try {
-      const res = await quizApi.getQuizDetail(quiz.id);
-      const quizDetail = res?.data || res;
-      const questionsList = quizDetail?.questions || [];
-      if (Array.isArray(questionsList) && questionsList.length > 0) {
-        setActiveQuiz(quizDetail);
-        setQuestions(questionsList);
-        setCurrentQuestionIdx(0);
-        setSubmissionComplete(false);
-        const durationMins = Number(quizDetail.duration_minutes || quizDetail.duration || 30);
-        setTimeLeftSeconds(durationMins * 60);
 
-        // Check sessionStorage for draft answers
-        const savedDraft = sessionStorage.getItem(`quiz_draft_${quiz.id}`);
-        if (savedDraft) {
-          try {
-            setStudentAnswers(JSON.parse(savedDraft));
-          } catch {
-            setStudentAnswers({});
-          }
-        } else {
-          setStudentAnswers({});
-        }
-      } else {
-        showToast('Kuis ini belum memiliki butir pertanyaan yang aktif.', 'error');
-      }
-    } catch (err) {
-      showToast(err.message || 'Gagal memuat pertanyaan kuis.', 'error');
-    }
-  };
 
-  // Pilih / Input Jawaban
-  const handleAnswerChange = (questionId, value) => {
-    const updated = { ...studentAnswers, [questionId]: value };
-    setStudentAnswers(updated);
-    if (activeQuiz) {
-      sessionStorage.setItem(`quiz_draft_${activeQuiz.id}`, JSON.stringify(updated));
-    }
-  };
 
-  // 2. Kirim Jawaban (Submit Quiz)
-  const handleConfirmSubmit = () => {
-    const total = questions.length;
-    const unanswered = total - answeredCount;
-    let confirmMsg = 'Apakah Anda yakin ingin menyelesaikan dan mengumpulkan kuis ini?';
-    if (unanswered > 0) {
-      confirmMsg = `Perhatian: Masih terdapat ${unanswered} butir soal yang belum dijawab. Yakin ingin mengumpulkan sekarang?`;
-    }
 
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Kumpulkan Jawaban Kuis?',
-      message: confirmMsg,
-      onConfirm: async () => {
-        setConfirmDialog((c) => ({ ...c, isOpen: false }));
-        await executeSubmission();
-      },
-    });
-  };
-
-  const executeSubmission = async () => {
-    setIsSubmitting(true);
-    try {
-      const formattedAnswers = questions.map((q) => {
-        const ans = studentAnswers[q.id] || '';
-        return {
-          question_id: q.id,
-          question_text: q.question_text,
-          question_type: q.question_type,
-          student_answer: ans,
-          answer: ans,
-          selected_option: q.question_type === 'multiple_choice' ? ans : null,
-        };
-      });
-
-      const res = await quizApi.submitQuiz(activeQuiz.id, { answers: formattedAnswers });
-      if (res.status === 202 || res.success) {
-        sessionStorage.removeItem(`quiz_draft_${activeQuiz.id}`);
-        setSubmissionComplete(true);
-        showToast('Jawaban berhasil dikumpulkan! Evaluasi penilaian asinkron sedang diproses AI.', 'success');
-        loadQuizzes();
-      }
-    } catch (err) {
-      showToast(err.message || err.response?.data?.message || 'Gagal mengirimkan jawaban kuis.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  useEffect(() => {
-    autoSubmitRef.current = executeSubmission;
-  });
 
   // 3. Lihat Hasil / Nilai Kuis
   const handleInspectResults = async (quiz) => {
@@ -296,14 +185,27 @@ export default function StudentQuizPage() {
       };
     }
 
-    // 5. Belum Dikerjakan (atau masih ada sisa percobaan)
+    // 5. Sudah ada percobaan pengerjaan sebelumnya tetapi masih ada sisa kuota
+    if (attemptsUsed > 0 && attemptsUsed < maxAttempts) {
+      return {
+        key: 'partially_done',
+        label: `Percobaan ${attemptsUsed} dari ${maxAttempts} Selesai`,
+        variant: 'warning',
+        canTake: true,
+        canViewResult: false,
+        actionLabel: `Kerjakan Percobaan ke-${attemptsUsed + 1}`,
+        note: `Tersisa ${maxAttempts - attemptsUsed} kesempatan lagi`,
+      };
+    }
+
+    // 6. Belum Dikerjakan sama sekali
     return {
       key: 'ready',
       label: 'Belum Dikerjakan',
       variant: 'primary',
       canTake: true,
       canViewResult: false,
-      actionLabel: attemptsUsed > 0 ? `Kerjakan Ulang (${attemptsUsed + 1}/${maxAttempts})` : 'Mulai Kerjakan',
+      actionLabel: 'Mulai Kerjakan',
     };
   }, []);
 
@@ -368,9 +270,19 @@ export default function StudentQuizPage() {
     {
       key: 'dueDate',
       label: 'Batas Pengerjaan',
-      renderCell: (row) => (
-        <span className="font-mono text-xs text-slate-700">{row.due_date}</span>
-      ),
+      renderCell: (row) => {
+        const { formatted, tag } = formatQuizDueDate(row.due_date);
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <span className="font-mono text-xs font-semibold text-slate-800">{formatted}</span>
+            {tag && (
+              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded border ${tag.color}`}>
+                {tag.label}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'attempts',
@@ -424,7 +336,7 @@ export default function StudentQuizPage() {
               variant="primary"
               size="sm"
               icon={FileQuestion}
-              onClick={() => handleStartQuiz(row)}
+              onClick={() => navigate(`/student/quiz/${row.id}`)}
             >
               {info.actionLabel}
             </Button>
@@ -442,9 +354,6 @@ export default function StudentQuizPage() {
       },
     },
   ];
-
-  const currentQ = questions[currentQuestionIdx];
-
   return (
     <div className="student-quiz-page">
       {/* Toast Notification */}
@@ -510,232 +419,7 @@ export default function StudentQuizPage() {
       {/* =========================================================================
           MODAL LEMBAR UJIAN CBT INTERAKTIF SISWA
          ========================================================================= */}
-      {activeQuiz && (
-        <Modal
-          isOpen={Boolean(activeQuiz)}
-          onClose={() => {
-            if (submissionComplete) {
-              setActiveQuiz(null);
-            } else {
-              setConfirmDialog({
-                isOpen: true,
-                title: 'Tutup Lembar Kuis?',
-                message: 'Jawaban yang telah Anda pilih tersimpan dalam draf lokal browser. Anda dapat melanjutkan kembali selama batas waktu belum berakhir.',
-                onConfirm: () => {
-                  setActiveQuiz(null);
-                  setConfirmDialog((c) => ({ ...c, isOpen: false }));
-                },
-              });
-            }
-          }}
-          title={submissionComplete ? 'Hasil Pengumpulan Jawaban' : `Lembar Ujian: ${activeQuiz.title}`}
-          maxWidth="max-w-4xl"
-        >
-          {submissionComplete ? (
-            /* SUBMISSION COMPLETE BANNER */
-            <div className="cbt-complete-view">
-              <CheckCircle2 size={56} className="text-emerald-500 mb-2" />
-              <h2 className="text-lg font-bold text-slate-900">Jawaban Berhasil Dikumpulkan!</h2>
-              <p className="text-xs text-slate-600 max-w-md mt-1 leading-relaxed">
-                Jawaban Anda telah dicatat oleh sistem. Proses penilaian hybrid (pilihan ganda otomatis &amp; evaluasi esai semantik AI) sedang berjalan di antrean latar belakang.
-              </p>
 
-              <div className="cbt-status-note">
-                <AlertCircle size={15} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-900">
-                  <strong>Pemberitahuan Kerahasiaan Nilai:</strong> Nilai akhir dan ulasan jawaban akan dibuka secara transparan setelah Guru Pengampu merilis hasil kuis secara resmi (<em>published_result</em>).
-                </p>
-              </div>
-
-              <div className="mt-4">
-                <Button variant="primary" onClick={() => setActiveQuiz(null)}>
-                  Kembali ke Daftar Kuis
-                </Button>
-              </div>
-            </div>
-          ) : (
-            /* ACTIVE CBT TEST SHEET */
-            <div className="cbt-sheet-container">
-              {/* CBT Top Bar: Progress & Timer */}
-              <div className="cbt-top-bar">
-                <div className="flex items-center gap-3">
-                  <Badge variant="neutral">
-                    Soal <strong className="font-mono">{currentQuestionIdx + 1}</strong> dari <strong className="font-mono">{questions.length}</strong>
-                  </Badge>
-                  <span className="text-xs text-slate-500">
-                    Terjawab: <strong className="font-mono text-emerald-700">{answeredCount}</strong> / {questions.length}
-                  </span>
-                </div>
-
-                <div className={`cbt-timer ${timeLeftSeconds < 300 ? 'cbt-timer--danger' : ''}`}>
-                  <Clock size={15} />
-                  <span className="font-mono font-bold">{formattedTime}</span>
-                </div>
-              </div>
-
-              {/* Question Navigation Matrix */}
-              <div className="cbt-matrix-bar">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                  Navigasi Nomor Soal:
-                </span>
-                <div className="cbt-matrix-grid">
-                  {questions.map((q, idx) => {
-                    const isAnswered = studentAnswers[q.id] && String(studentAnswers[q.id]).trim().length > 0;
-                    const isCurrent = currentQuestionIdx === idx;
-                    return (
-                      <button
-                        key={q.id}
-                        type="button"
-                        className={`cbt-num-btn ${isCurrent ? 'cbt-num-btn--current' : isAnswered ? 'cbt-num-btn--answered' : ''}`}
-                        onClick={() => setCurrentQuestionIdx(idx)}
-                      >
-                        {idx + 1}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Current Question View */}
-              {currentQ && (
-                <div className="cbt-question-box">
-                  <div className="cbt-question-header">
-                    <span className="text-xs font-bold text-slate-900">
-                      Butir Soal Nomor {currentQuestionIdx + 1}
-                    </span>
-                    <Badge variant={currentQ.question_type === 'multiple_choice' ? 'default' : 'warning'}>
-                      {currentQ.question_type === 'multiple_choice' ? 'Pilihan Ganda' : 'Esai Reflektif'} &bull; {currentQ.points || 20} Poin
-                    </Badge>
-                  </div>
-
-                  <p className="cbt-question-text">{currentQ.question_text}</p>
-
-                  {/* Multiple Choice Options */}
-                  {currentQ.question_type === 'multiple_choice' && currentQ.options && (() => {
-                    let parsedOptions = currentQ.options;
-                    if (typeof parsedOptions === 'string') {
-                      try {
-                        parsedOptions = JSON.parse(parsedOptions);
-                      } catch {
-                        parsedOptions = null;
-                      }
-                    }
-                    if (!parsedOptions) return null;
-
-                    if (Array.isArray(parsedOptions)) {
-                      return (
-                        <div className="cbt-options-list">
-                          {parsedOptions.map((opt, optIdx) => {
-                            const letter = ['A', 'B', 'C', 'D', 'E'][optIdx] || String(optIdx);
-                            const isSelected = studentAnswers[currentQ.id] === letter;
-                            return (
-                              <label
-                                key={optIdx}
-                                className={`cbt-option-card ${isSelected ? 'cbt-option-card--selected' : ''}`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`question_${currentQ.id}`}
-                                  value={letter}
-                                  checked={isSelected}
-                                  onChange={() => handleAnswerChange(currentQ.id, letter)}
-                                  className="sr-only"
-                                />
-                                <span className="cbt-option-radio">{letter}</span>
-                                <span className="cbt-option-text">{opt}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="cbt-options-list">
-                        {Object.entries(parsedOptions).map(([letter, optText]) => {
-                          const isSelected = studentAnswers[currentQ.id] === letter;
-                          return (
-                            <label
-                              key={letter}
-                              className={`cbt-option-card ${isSelected ? 'cbt-option-card--selected' : ''}`}
-                            >
-                              <input
-                                type="radio"
-                                name={`question_${currentQ.id}`}
-                                value={letter}
-                                checked={isSelected}
-                                onChange={() => handleAnswerChange(currentQ.id, letter)}
-                                className="sr-only"
-                              />
-                              <span className="cbt-option-radio">{letter}</span>
-                              <span className="cbt-option-text">{optText}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Essay Textarea */}
-                  {currentQ.question_type === 'essay' && (
-                    <div className="cbt-essay-box">
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        Ketikkan Jawaban Esai Anda:
-                      </label>
-                      <textarea
-                        className="cbt-essay-textarea"
-                        rows={5}
-                        placeholder="Uraikan pemahaman dan penjelasan konsep Anda secara terstruktur di sini..."
-                        value={studentAnswers[currentQ.id] || ''}
-                        onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                      />
-                      <span className="text-[11px] text-slate-400 block mt-1 text-right">
-                        {(studentAnswers[currentQ.id] || '').length} karakter
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Navigation Action Buttons */}
-              <div className="cbt-nav-footer">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={ChevronLeft}
-                  disabled={currentQuestionIdx === 0}
-                  onClick={() => setCurrentQuestionIdx((p) => p - 1)}
-                >
-                  Sebelumnya
-                </Button>
-
-                <div className="flex items-center gap-2">
-                  {currentQuestionIdx < questions.length - 1 ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setCurrentQuestionIdx((p) => p + 1)}
-                    >
-                      <span>Selanjutnya</span>
-                      <ChevronRight size={14} />
-                    </Button>
-                  ) : null}
-
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    icon={Send}
-                    onClick={handleConfirmSubmit}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Mengirim...' : 'Selesai & Kumpulkan'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
 
       {/* =========================================================================
           MODAL INSPEKSI NILAI & REVIEW HASIL KUIS SISWA

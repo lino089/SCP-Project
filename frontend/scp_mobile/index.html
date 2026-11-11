@@ -24,6 +24,16 @@
       rel="stylesheet"
     />
     <title>SCP Mobile — Sistem Kemajuan Kelas</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('scp_theme') || 'system';
+          var dark = stored === 'dark' || (stored === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

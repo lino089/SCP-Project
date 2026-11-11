@@ -19,12 +19,12 @@ import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
 
 export default function PermissionVerifyPage() {
   const navigate = useNavigate();
-  const { hasRole, isKesiswaan, isWaliKelas } = useAuth();
+  const { isKesiswaan, isWaliKelas } = useAuth();
 
-  // Wewenang verifikasi
+  // Wewenang verifikasi (Khusus Tim Kesiswaan, Waka dilarang)
   const canVerify = useMemo(() => {
-    return hasRole('waka') || isKesiswaan?.();
-  }, [hasRole, isKesiswaan]);
+    return isKesiswaan?.();
+  }, [isKesiswaan]);
 
   const isAuthorized = useMemo(() => {
     return canVerify || isWaliKelas?.();
@@ -189,7 +189,7 @@ export default function PermissionVerifyPage() {
     return (
       <div className="space-y-4">
         <ForbiddenState
-          message="Halaman ini hanya dapat diakses oleh Wali Kelas, Tim Kesiswaan, atau Waka Kurikulum."
+          message="Halaman ini hanya dapat diakses oleh Wali Kelas atau Tim Kesiswaan."
           onBack={() => navigate('/teacher/dashboard')}
         />
       </div>

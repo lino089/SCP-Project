@@ -27,6 +27,7 @@ const TeacherJournalPage = lazy(() => import('../pages/teacher/TeacherJournalPag
 const TeacherLeavePage = lazy(() => import('../pages/teacher/TeacherLeavePage'));
 const TeacherLeaveApprovalPage = lazy(() => import('../pages/teacher/TeacherLeaveApprovalPage'));
 const TeacherQuizPage = lazy(() => import('../pages/teacher/TeacherQuizPage'));
+const QuizCreatePage = lazy(() => import('../pages/teacher/QuizCreatePage'));
 const PermissionVerifyPage = lazy(() => import('../pages/teacher/PermissionVerifyPage'));
 const StudentAttendanceRecapPage = lazy(() => import('../pages/teacher/StudentAttendanceRecapPage'));
 const StudentHomePage = lazy(() => import('../pages/student/StudentHomePage'));
@@ -34,6 +35,8 @@ const StudentCalendarPage = lazy(() => import('../pages/student/StudentCalendarP
 const StudentSchedulePage = lazy(() => import('../pages/student/StudentSchedulePage'));
 const StudentPermissionPage = lazy(() => import('../pages/student/StudentPermissionPage'));
 const StudentQuizPage = lazy(() => import('../pages/student/StudentQuizPage'));
+const QuizIntroPage = lazy(() => import('../pages/student/QuizIntroPage'));
+const QuizAttemptPage = lazy(() => import('../pages/student/QuizAttemptPage'));
 const ParentMonitoringPage = lazy(() => import('../pages/parent/ParentMonitoringPage'));
 const ParentCalendarPage = lazy(() => import('../pages/parent/ParentCalendarPage'));
 
@@ -85,21 +88,32 @@ export default function AppRouter() {
               <Route path="/web/alumni" element={<AlumniPage />} />
             </Route>
 
-            {/* Teacher Permission Verification & Student Attendance Recap (Kesiswaan, Wali Kelas, or Waka) */}
+            {/* Verifikasi Izin Siswa (Khusus Guru Kesiswaan atau Wali Kelas - Waka dilarang) */}
             <Route
               element={
                 <RoleRoute
-                  allowedRoles={['teacher', 'waka']}
+                  allowedRoles={['teacher']}
                   requireKesiswaanOrWaliKelas
                   redirectTo="/teacher/dashboard"
                 />
               }
             >
               <Route path="/teacher/permissions" element={<PermissionVerifyPage />} />
+            </Route>
+
+            {/* Rekap Kehadiran Siswa (Wali Kelas, Kesiswaan, & Waka Kurikulum) */}
+            <Route
+              element={
+                <RoleRoute
+                  allowedRoles={['teacher', 'waka']}
+                  redirectTo="/teacher/dashboard"
+                />
+              }
+            >
               <Route path="/teacher/attendance-recap" element={<StudentAttendanceRecapPage />} />
             </Route>
 
-            {/* Konfirmasi Izin Guru (Khusus Guru Kesiswaan) */}
+            {/* Konfirmasi Izin Guru (Khusus Guru Kesiswaan - Waka dilarang) */}
             <Route
               element={
                 <RoleRoute
@@ -120,6 +134,7 @@ export default function AppRouter() {
               <Route path="/teacher/journal" element={<TeacherJournalPage />} />
               <Route path="/teacher/leave" element={<TeacherLeavePage />} />
               <Route path="/teacher/quiz" element={<TeacherQuizPage />} />
+              <Route path="/teacher/quiz/create" element={<QuizCreatePage />} />
             </Route>
 
             {/* Student Routes */}
@@ -129,6 +144,7 @@ export default function AppRouter() {
               <Route path="/student/schedule" element={<StudentSchedulePage />} />
               <Route path="/student/permissions" element={<StudentPermissionPage />} />
               <Route path="/student/quiz" element={<StudentQuizPage />} />
+              <Route path="/student/quiz/:id" element={<QuizIntroPage />} />
             </Route>
 
             {/* Parent Routes */}
@@ -136,6 +152,11 @@ export default function AppRouter() {
               <Route path="/parent/monitoring" element={<ParentMonitoringPage />} />
               <Route path="/parent/calendar" element={<ParentCalendarPage />} />
             </Route>
+          </Route>
+
+          {/* FOCUS MODE: Rute Pengerjaan Ujian Siswa (Layar Penuh Terisolasi Tanpa Sidebar & TopBar) */}
+          <Route element={<RoleRoute allowedRoles={['student']} />}>
+            <Route path="/student/quiz/:id/attempt" element={<QuizAttemptPage />} />
           </Route>
         </Route>
 

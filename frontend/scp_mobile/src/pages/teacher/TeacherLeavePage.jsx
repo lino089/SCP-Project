@@ -11,7 +11,7 @@ import journalApi from '../../services/journalApi';
 import { Badge, Button, Modal, Select, Input, DataTable, PaginationBar } from '../../components/shared';
 import { EmptyState, ErrorState } from '../../components/feedback';
 import { getStorageUrl, formatDateIndo } from '../../utils/formatters';
-import { todayLocalISO } from '../../utils/dateUtils';
+import { todayLocalISO, getJakartaDayInfo } from '../../utils/dateUtils';
 
 const REASON_CATEGORIES = [
   { value: 'dinas_luar', label: 'Tugas Dinas Luar / MGMP' },
@@ -110,8 +110,8 @@ export default function TeacherLeavePage() {
     async function loadSchedulesForDate() {
       setIsLoadingSchedules(true);
       try {
-        const d = new Date(targetDate);
-        const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
+        const dayInfo = getJakartaDayInfo(targetDate);
+        const dayOfWeek = dayInfo.dayOfWeek;
         const res = await journalApi.getTeacherSchedules({ day: dayOfWeek });
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
 

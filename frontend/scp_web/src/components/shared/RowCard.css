@@ -1,8 +1,8 @@
 /* RowCard.css - Exness Clean Precision Row-Card Pattern */
 
 .row-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px 18px;
   display: flex;
@@ -16,8 +16,8 @@
 }
 
 .row-card--hoverable:hover {
-  border-color: #D1D5DB;
-  background-color: #FAFAFA;
+  border-color: var(--color-border) ;
+  background-color: var(--color-surface) ;
 }
 
 .row-card--clickable {
@@ -42,14 +42,14 @@
 .row-card__title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.01em;
 }
 
 .row-card__subtitle {
   font-size: 13px;
   font-weight: 400;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 @media (max-width: 640px) {
@@ -64,6 +64,6 @@
     width: 100%;
     justify-content: space-between;
     padding-top: 6px;
-    border-top: 1px dashed #F1F5F9;
+    border-top: 1px dashed var(--color-surface-hover);
   }
 }

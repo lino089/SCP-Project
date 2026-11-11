@@ -93,13 +93,16 @@ export default function StudentAttendanceDetailModal({
   const history = data?.history || [];
   const studentInfo = data?.student || student;
 
-  const getRateBadge = (rate) => {
+  const getRateBadge = (rate, totalSessions) => {
+    if (!totalSessions || rate === null || rate === undefined) {
+      return { variant: 'default', label: 'Belum Ada Sesi KBM' };
+    }
     if (rate >= 90) return { variant: 'success', label: `${rate}% (Sangat Baik)` };
     if (rate >= 85) return { variant: 'warning', label: `${rate}% (Waspada)` };
     return { variant: 'danger', label: `${rate}% (Kritis)` };
   };
 
-  const rateInfo = summary ? getRateBadge(summary.attendance_rate) : null;
+  const rateInfo = summary ? getRateBadge(summary.attendance_rate, summary.total_sessions) : null;
 
   return (
     <Modal

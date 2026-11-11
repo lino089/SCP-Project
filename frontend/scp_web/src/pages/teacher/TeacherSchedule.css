@@ -29,7 +29,7 @@
 .teacher-schedule__title-group h1 {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -37,7 +37,7 @@
 
 .teacher-schedule__subtitle {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin: 0.35rem 0 0;
   line-height: 1.5;
 }
@@ -62,15 +62,15 @@
 }
 
 .teacher-schedule__alert--warning {
-  background-color: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning) ;
 }
 
 .teacher-schedule__alert--success {
-  background-color: #ecfdf5;
+  background-color: var(--color-success-bg) ;
   border: 1px solid #a7f3d0;
-  color: #065f46;
+  color: var(--color-success) ;
 }
 
 .teacher-schedule__alert--leave {
@@ -86,14 +86,14 @@
   border: none;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #b91c1c;
+  color: var(--color-error) ;
   text-decoration: underline;
   cursor: pointer;
   padding: 0;
 }
 
 .teacher-schedule__alert-btn:hover {
-  color: #991b1b;
+  color: var(--color-error) ;
 }
 
 /* Ceremony & Break Dividers */
@@ -106,7 +106,7 @@
 
 .teacher-schedule__divider-line {
   height: 1px;
-  background-color: #e2e8f0;
+  background-color: var(--color-border);
   flex: 1;
 }
 
@@ -116,11 +116,11 @@
   gap: 0.375rem;
   padding: 0.3rem 0.75rem;
   border-radius: 9999px;
-  background-color: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-border);
   font-size: 0.75rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 /* Daily Slot Group */
@@ -138,13 +138,13 @@
   padding: 0 0.25rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
 }
 
 .teacher-schedule__cards-box {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   overflow: hidden;
   box-shadow: none;
 }
@@ -154,7 +154,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
   transition: background-color 0.15s ease;
 }
 
@@ -163,7 +163,7 @@
 }
 
 .teacher-schedule__card-item:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
 }
 
 @media (min-width: 640px) {
@@ -185,14 +185,14 @@
   width: 4.5rem;
   height: 2.5rem;
   border-radius: 0.375rem;
-  background-color: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 0.8125rem;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   flex-shrink: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -200,13 +200,13 @@
 .teacher-schedule__subject-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   line-height: 1.3;
 }
 
 .teacher-schedule__subject-meta {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-top: 0.2rem;
   display: flex;
   align-items: center;
@@ -223,18 +223,18 @@
 .teacher-schedule__room-pill {
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
-  background-color: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-border);
   font-size: 0.75rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 /* Weekly Matrix Table View */
 .teacher-schedule__matrix-container {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   overflow-x: auto;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -248,15 +248,15 @@
 }
 
 .teacher-schedule__matrix-table th {
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
   padding: 0.75rem 1rem;
   font-weight: 600;
   font-size: 0.75rem;
-  color: #475569;
+  color: var(--color-text-secondary) ;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #e2e8f0;
-  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
 }
 
 .teacher-schedule__matrix-table th:last-child {
@@ -265,8 +265,8 @@
 
 .teacher-schedule__matrix-table td {
   padding: 0.625rem 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
-  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   vertical-align: top;
   height: 4.5rem;
 }
@@ -276,9 +276,9 @@
 }
 
 .teacher-schedule__matrix-cell {
-  background-color: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-left: 3px solid #0f172a;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-text-primary);
   border-radius: 0.375rem;
   padding: 0.5rem;
   height: 100%;
@@ -289,20 +289,20 @@
 }
 
 .teacher-schedule__matrix-cell--active {
-  border-left-color: #FFDE00;
-  background-color: #fffdf0;
+  border-left-color: var(--color-accent) ;
+  background-color: var(--color-surface) ;
 }
 
 .teacher-schedule__matrix-cell-class {
   font-weight: 700;
   font-size: 0.75rem;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .teacher-schedule__matrix-cell-subject {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #334155;
+  color: var(--color-text-secondary) ;
   line-height: 1.25;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -312,6 +312,6 @@
 
 .teacher-schedule__matrix-cell-room {
   font-size: 0.6875rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-top: auto;
 }

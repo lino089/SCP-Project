@@ -45,7 +45,7 @@ export default function StudentSchedulePage() {
 
   const [selectedCycle, setSelectedCycle] = useState(() => Number(user?.active_cycle || 1));
   const [selectedDay, setSelectedDay] = useState(currentDayOfWeek);
-  const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [mondayIsUpacara, setMondayIsUpacara] = useState(() => (typeof user?.monday_is_upacara === 'boolean' ? user.monday_is_upacara : true));
   const [periodTemplates, setPeriodTemplates] = useState([]);
 
   // Data states
@@ -69,8 +69,11 @@ export default function StudentSchedulePage() {
       if (tplRes?.data && Array.isArray(tplRes.data)) {
         setPeriodTemplates(tplRes.data);
       }
-      if (typeof setRes?.data?.monday_is_upacara === 'boolean') {
-        setMondayIsUpacara(setRes.data.monday_is_upacara);
+      const sData = setRes?.data || setRes;
+      if (typeof sData?.monday_is_upacara === 'boolean') {
+        setMondayIsUpacara(sData.monday_is_upacara);
+      } else if (typeof user?.monday_is_upacara === 'boolean') {
+        setMondayIsUpacara(user.monday_is_upacara);
       }
 
       // Ambil Jadwal Kelas

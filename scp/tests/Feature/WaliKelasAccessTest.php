@@ -370,13 +370,36 @@ class WaliKelasAccessTest extends TestCase
     }
 
     /**
-     * S09. Wali kelas ditolak (HTTP 403) jika mencoba memverifikasi (approve/reject) izin siswa.
+     * S09. Wali kelas berhak menyetujui (approve) izin siswa dari kelas binaannya,
+     * tetapi ditolak (HTTP 403) jika mencoba memverifikasi izin siswa dari kelas lain.
      */
-    public function test_homeroom_teacher_cannot_approve_student_leave_request(): void
+    public function test_homeroom_teacher_can_approve_student_leave_request_for_their_class(): void
     {
         $leaveBinaan = LeaveRequest::create([
             'student_id' => $this->studentInBinaan->id,
             'applicant_id' => $this->studentInBinaan->id,
+            'class_id' => $this->classBinaan->id,
+            'type' => 'tidak_masuk',
+            'category' => 'sakit',
+            'start_date' => '2026-11-01',
+            'end_date' => '2026-11-02',
+            'status_approval' => 'pending',
+        ]);
+
+        $studentLain = User::create([
+            'name' => 'Siswa Kelas Lain Leave',
+            'email' => 'siswa_leave_lain@example.com',
+            'nis_nip' => '5099',
+            'role' => 'student',
+            'class_id' => $this->classLain->id,
+            'password' => Hash::make('password123'),
+            'must_change_password' => false,
+        ]);
+
+        $leaveLain = LeaveRequest::create([
+            'student_id' => $studentLain->id,
+            'applicant_id' => $studentLain->id,
+            'class_id' => $this->classLain->id,
             'type' => 'tidak_masuk',
             'category' => 'sakit',
             'start_date' => '2026-11-01',
@@ -386,12 +409,23 @@ class WaliKelasAccessTest extends TestCase
 
         Sanctum::actingAs($this->waliKelas);
 
+        // 1. Wali kelas menyetujui izin siswa dari kelas binaan -> Berhasil (HTTP 200)
         $response = $this->patchJson('/api/leave-requests/' . $leaveBinaan->id, [
             'status' => 'approved',
         ]);
 
-        $response->assertStatus(403);
-        $this->assertEquals('pending', $leaveBinaan->fresh()->status_approval);
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true);
+        $this->assertEquals('approved', $leaveBinaan->fresh()->status_approval);
+        $this->assertEquals($this->waliKelas->id, $leaveBinaan->fresh()->verified_by);
+
+        // 2. Wali kelas memverifikasi siswa kelas lain -> Ditolak (HTTP 403)
+        $responseLain = $this->patchJson('/api/leave-requests/' . $leaveLain->id, [
+            'status' => 'approved',
+        ]);
+
+        $responseLain->assertStatus(403);
+        $this->assertEquals('pending', $leaveLain->fresh()->status_approval);
     }
 
     /**

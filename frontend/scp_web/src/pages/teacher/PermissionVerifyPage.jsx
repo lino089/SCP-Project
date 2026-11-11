@@ -25,17 +25,20 @@ import './PermissionVerify.css';
 
 export default function PermissionVerifyPage() {
   const navigate = useNavigate();
-  const { user, hasRole, isKesiswaan, isWaliKelas } = useAuth();
+  const { user, isKesiswaan, isWaliKelas } = useAuth();
 
-  // Wewenang verifikasi resmi: Waka Kurikulum atau Guru Kesiswaan
-  const canVerify = useMemo(() => {
-    return hasRole('waka') || isKesiswaan();
-  }, [hasRole, isKesiswaan]);
+  // Wewenang verifikasi per baris izin: Guru Kesiswaan atau Wali Kelas untuk kelas binaannya (Waka dilarang)
+  const canVerifyRow = useCallback((row) => {
+    if (!row) return false;
+    if (isKesiswaan()) return true;
+    const classId = row.class_id || row.student?.class_id;
+    return isWaliKelas(classId);
+  }, [isKesiswaan, isWaliKelas]);
 
-  // Hak akses halaman: Waka, Kesiswaan, atau Wali Kelas
+  // Hak akses halaman: Kesiswaan atau Wali Kelas (Waka dilarang)
   const isAuthorized = useMemo(() => {
-    return canVerify || isWaliKelas();
-  }, [canVerify, isWaliKelas]);
+    return isKesiswaan() || isWaliKelas();
+  }, [isKesiswaan, isWaliKelas]);
 
   // State Perizinan Siswa
   const [permissionList, setPermissionList] = useState([]);
@@ -121,9 +124,10 @@ export default function PermissionVerifyPage() {
     { id: 'rejected', label: 'Ditolak', count: studentCounts.rejected },
   ];
 
-  const handleUpdateStudentStatus = async (id, newStatus) => {
-    if (!canVerify) {
-      alert('Akses ditolak. Hanya Tim Kesiswaan atau Waka yang berhak memverifikasi izin siswa.');
+  const handleUpdateStudentStatus = async (id, newStatus, targetRow = null) => {
+    const row = targetRow || permissionList.find((p) => p.id === id);
+    if (row && !canVerifyRow(row)) {
+      alert('Akses ditolak. Anda hanya berhak memverifikasi izin siswa dari kelas yang Anda ampu.');
       return;
     }
     setIsProcessingAction(true);
@@ -240,8 +244,8 @@ export default function PermissionVerifyPage() {
           return <span className="text-[11px] text-gray-400 font-medium">Telah Diproses</span>;
         }
 
-        // Proteksi Otorisasi: Wali Kelas bersifat READ-ONLY
-        if (!canVerify) {
+        // Proteksi Otorisasi: Hanya tampil jika guru berwenang atas baris siswa ini
+        if (!canVerifyRow(row)) {
           return (
             <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
               Menunggu Kesiswaan
@@ -256,9 +260,9 @@ export default function PermissionVerifyPage() {
               className="permission-verify__action-btn-approve"
               title="Setujui permohonan izin ini"
               disabled={isProcessingAction}
-              onClick={() => handleUpdateStudentStatus(row.id, 'approved')}
+              onClick={() => handleUpdateStudentStatus(row.id, 'approved', row)}
             >
-              <Check size={13} />
+              <Check size={13} strokeWidth={2.5} />
               <span>Setujui</span>
             </button>
             <button
@@ -266,9 +270,9 @@ export default function PermissionVerifyPage() {
               className="permission-verify__action-btn-reject"
               title="Tolak permohonan izin ini"
               disabled={isProcessingAction}
-              onClick={() => handleUpdateStudentStatus(row.id, 'rejected')}
+              onClick={() => handleUpdateStudentStatus(row.id, 'rejected', row)}
             >
-              <X size={13} />
+              <X size={13} strokeWidth={2.5} />
               <span>Tolak</span>
             </button>
           </div>
@@ -283,7 +287,7 @@ export default function PermissionVerifyPage() {
       <div className="permission-verify">
         <ForbiddenState
           title="Akses Verifikasi Ditolak (403 Forbidden)"
-          message="Hanya Guru Kesiswaan (Piket), Waka Kurikulum, atau Wali Kelas yang memiliki wewenang mengakses halaman verifikasi perizinan siswa."
+          message="Hanya Guru Kesiswaan (Piket) atau Wali Kelas yang memiliki wewenang mengakses halaman verifikasi perizinan siswa."
           actionText="Kembali ke Dashboard"
           onAction={() => navigate('/teacher/dashboard')}
         />
@@ -298,16 +302,22 @@ export default function PermissionVerifyPage() {
         <div className="permission-verify__title-group">
           <h1>Verifikasi &amp; Pemantauan Perizinan Siswa</h1>
           <p className="permission-verify__subtitle">
-            {canVerify
+            {isKesiswaan()
               ? 'Validasi permohonan dispensasi keluar dan surat keterangan sakit/izin siswa secara real-time.'
-              : 'Pemantauan status perizinan siswa kelas binaan secara real-time (Mode Wali Kelas).'}
+              : isWaliKelas()
+              ? 'Verifikasi dan persetujuan permohonan izin siswa kelas binaan secara real-time (Mode Wali Kelas).'
+              : 'Pemantauan status perizinan siswa kelas binaan secara real-time.'}
           </p>
         </div>
 
         <div className="permission-verify__header-badges">
-          {canVerify ? (
+          {isKesiswaan() ? (
             <Badge variant="warning" dot>
-              Wewenang Kesiswaan &amp; Waka
+              Wewenang Kesiswaan
+            </Badge>
+          ) : isWaliKelas() ? (
+            <Badge variant="success" dot>
+              Wali Kelas (Verifikator)
             </Badge>
           ) : (
             <Badge variant="info" dot>
@@ -321,11 +331,11 @@ export default function PermissionVerifyPage() {
       </div>
 
       {/* Banner Khusus Wali Kelas */}
-      {!canVerify && isWaliKelas() && (
-        <div className="mb-5 p-3.5 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5 text-xs text-blue-900">
-          <AlertCircle size={16} strokeWidth={1.5} className="text-blue-600 shrink-0 mt-0.5" />
+      {isWaliKelas() && !hasRole('waka') && !isKesiswaan() && (
+        <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2.5 text-xs text-emerald-900">
+          <Check size={16} strokeWidth={2} className="text-emerald-600 shrink-0 mt-0.5" />
           <div>
-            <strong>Informasi Wewenang Wali Kelas:</strong> Anda memiliki akses pemantauan terhadap perizinan siswa di rombel binaan Anda. Persetujuan atau penolakan resmi permohonan dispensasi diproses oleh Tim Kesiswaan / Guru Piket.
+            <strong>Wewenang Wali Kelas:</strong> Anda memiliki hak verifikasi resmi untuk menyetujui atau menolak permohonan izin siswa pada rombel binaan Anda. Persetujuan izin otomatis menyinkronkan data presensi KBM siswa.
           </div>
         </div>
       )}
@@ -472,14 +482,14 @@ export default function PermissionVerifyPage() {
               Tutup
             </Button>
 
-            {canVerify && previewDoc?.status_approval === 'pending' && (
+            {previewDoc && canVerifyRow(previewDoc) && previewDoc?.status_approval === 'pending' && (
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={isProcessingAction}
                   className="text-red-600 border-red-300 hover:bg-red-50"
-                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'rejected')}
+                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'rejected', previewDoc)}
                 >
                   <X size={13} className="mr-1" /> Tolak Permohonan
                 </Button>
@@ -488,7 +498,7 @@ export default function PermissionVerifyPage() {
                   size="sm"
                   disabled={isProcessingAction}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
-                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'approved')}
+                  onClick={() => handleUpdateStudentStatus(previewDoc.id, 'approved', previewDoc)}
                 >
                   <Check size={13} className="mr-1" /> Setujui Izin
                 </Button>

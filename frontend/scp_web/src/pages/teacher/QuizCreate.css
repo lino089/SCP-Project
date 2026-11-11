@@ -1,0 +1,580 @@
+/* ============================================================
+ * Quiz Create Page — halaman penuh pembuatan kuis (Website SCP)
+ * Memakai token global Website SCP (kuning #FFDE00, radius 4/6/8)
+ * ============================================================ */
+
+.quiz-create-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: var(--page-gutter-y) var(--page-gutter-x) 32px;
+  box-sizing: border-box;
+}
+
+/* --- header ------------------------------------------------- */
+.quiz-create-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.quiz-create-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.quiz-create-crumb-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.quiz-create-crumb-link:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+.quiz-create-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.quiz-create-sub {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* --- stepper ------------------------------------------------ */
+.quiz-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.quiz-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.quiz-step__dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+
+.quiz-step.on {
+  color: var(--color-text-primary);
+}
+
+.quiz-step.on .quiz-step__dot {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-primary) ;
+  font-weight: 700;
+}
+
+.quiz-step.done {
+  color: var(--color-text-secondary);
+}
+
+.quiz-step.done .quiz-step__dot {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-on-dark) ;
+}
+
+.quiz-step__line {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  margin-left: 4px;
+}
+
+/* --- grid --------------------------------------------------- */
+.quiz-create-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 268px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .quiz-create-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quiz-create-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quiz-create-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.quiz-create-card__hint {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  margin: -8px 0 0;
+  line-height: 1.5;
+}
+
+/* --- daftar kelas ------------------------------------------- */
+.quiz-class-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.quiz-class-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.quiz-class-item--on {
+  background: rgba(255, 222, 0, 0.14);
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.quiz-class-check {
+  width: 14px;
+  height: 14px;
+  accent-color: #000;
+}
+
+.quiz-class-name {
+  flex: 1;
+}
+
+.quiz-class-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--color-accent);
+  color: var(--color-text-primary) ;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.quiz-create-warn {
+  padding: 10px 12px;
+  border: 1px solid #FBE3A5;
+  background: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border-radius: var(--radius-md);
+  font-size: 11.5px;
+}
+
+/* --- aside ringkasan ---------------------------------------- */
+.quiz-create-aside {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quiz-create-aside__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 2px;
+}
+
+.quiz-sum-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--color-border-light);
+}
+
+.quiz-sum-row b {
+  color: var(--color-text-primary);
+  font-weight: 700;
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-sum-row--muted {
+  border-bottom: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+/* --- aksi --------------------------------------------------- */
+.quiz-create-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.quiz-create-actions--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.quiz-create-actions--stack > * {
+  width: 100%;
+}
+
+.quiz-create-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg) ;
+  border: 1px solid #C9EFDD;
+  color: var(--color-success) ;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* --- tab metode --------------------------------------------- */
+.quiz-gen-tabs {
+  margin-bottom: 0;
+}
+
+.quiz-review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* --- panel soal manual -------------------------------------- */
+.quiz-manual-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+  padding: 16px;
+  z-index: 40;
+}
+
+.quiz-manual-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.quiz-manual-panel__head h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.quiz-manual-panel__head button {
+  background: none;
+  border: 0;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.quiz-manual-panel__head button:hover {
+  background: var(--color-surface-hover);
+}
+
+/* --- toast -------------------------------------------------- */
+.quiz-create-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
+  max-width: 360px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+.quiz-create-toast--success {
+  background: var(--color-success-bg) ;
+  border-color: #C9EFDD;
+  color: var(--color-success) ;
+}
+
+.quiz-create-toast--error {
+  background: var(--color-error-bg) ;
+  border-color: var(--color-error) ;
+  color: #C21D1D;
+}
+/* --- kartu metode sumber soal ------------------------------- */
+.quiz-methods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .quiz-methods {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quiz-method {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quiz-method:hover {
+  background: var(--color-surface-hover);
+}
+
+.quiz-method--on {
+  border-color: var(--color-accent);
+  background: var(--color-surface) ;
+  box-shadow: 0 0 0 2px rgba(255, 222, 0, 0.25);
+}
+
+.quiz-method__check {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 8px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  color: var(--color-on-dark) ;
+}
+
+.quiz-method--on .quiz-method__check {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+}
+
+.quiz-method__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+}
+
+.quiz-method--on .quiz-method__icon {
+  background: var(--color-accent);
+  color: var(--color-text-primary) ;
+}
+
+.quiz-method b {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.quiz-method__desc {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.quiz-create-note {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  margin: 0;
+}
+
+/* hasil hitung komposisi */
+.composition-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-success) ;
+  background: var(--color-success-bg) ;
+  border: 1px solid #C9EFDD;
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+
+/* --- filter butir soal -------------------------------------- */
+.quiz-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.quiz-filter {
+  font: 600 11.5px var(--font-family);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.quiz-filter:hover {
+  background: var(--color-surface-hover);
+}
+
+.quiz-filter--on {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-on-dark) ;
+}
+
+.quiz-filter--warn {
+  border-color: #FBE3A5;
+  background: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+}
+
+.quiz-filter--warn.quiz-filter--on {
+  background: #B45309;
+  border-color: #B45309;
+  color: var(--color-on-dark) ;
+}
+
+/* --- checklist syarat terbit -------------------------------- */
+.quiz-req {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.quiz-req__dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.quiz-req--ok .quiz-req__dot {
+  background: var(--color-success-bg) ;
+  border: 1px solid #C9EFDD;
+  color: var(--color-success) ;
+}
+
+.quiz-req--bad .quiz-req__dot {
+  background: var(--color-warning-bg) ;
+  border: 1px solid #FBE3A5;
+  color: var(--color-warning) ;
+}
+
+.quiz-req--bad {
+  color: var(--color-warning) ;
+}
+
+.quiz-create-blocked {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}

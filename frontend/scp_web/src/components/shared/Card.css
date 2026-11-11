@@ -1,6 +1,6 @@
 .card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: none;
   display: flex;
@@ -14,32 +14,32 @@
 }
 
 .card--hoverable:hover {
-  border-color: #CBD5E1;
+  border-color: var(--color-border) ;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--color-surface-hover);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  background-color: #FFFFFF;
+  background-color: var(--color-card) ;
 }
 
 .card-title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.01em;
 }
 
 .card-subtitle {
   margin: 2px 0 0 0;
   font-size: 12px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 .card-body {
@@ -49,8 +49,8 @@
 
 .card-footer {
   padding: 12px 20px;
-  border-top: 1px solid #F1F5F9;
-  background-color: #FAFAFA;
+  border-top: 1px solid var(--color-surface-hover);
+  background-color: var(--color-surface) ;
   display: flex;
   align-items: center;
   justify-content: flex-end;

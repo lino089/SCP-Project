@@ -16,19 +16,19 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background-color: #ECFDF5;
+  background-color: var(--color-success-bg) ;
   border: 1px solid #A7F3D0;
   border-radius: 6px;
-  color: #065F46;
+  color: var(--color-success) ;
   font-size: 13px;
   font-weight: 500;
   animation: slide-in 0.2s ease;
 }
 
 .schedule-toast--error {
-  background-color: #FEF2F2;
-  border-color: #FECACA;
-  color: #991B1B;
+  background-color: var(--color-error-bg) ;
+  border-color: var(--color-error) ;
+  color: var(--color-error) ;
 }
 
 @keyframes slide-in {
@@ -60,7 +60,7 @@
 .schedule-header__title {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -69,7 +69,7 @@
 .schedule-header__subtitle {
   font-size: 13px;
   font-weight: 400;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
 }
 
@@ -82,15 +82,15 @@
 
 /* Pre-condition Gate Alert */
 .schedule-precondition-card {
-  background-color: #FFFBEB;
-  border: 1px solid #FDE68A;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
   border-radius: 8px;
   padding: 14px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  color: #92400E;
+  color: var(--color-warning) ;
   font-size: 13px;
   flex-wrap: wrap;
 }
@@ -103,8 +103,8 @@
 
 /* Conflict Alert */
 .schedule-conflict-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px 18px;
   display: flex;
@@ -122,8 +122,8 @@
 
 /* Monday Ceremony Setting Card */
 .schedule-ceremony-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 20px;
   display: flex;
@@ -156,13 +156,13 @@
 .schedule-ceremony-card__label {
   font-size: 12px;
   font-weight: 500;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
 }
 
 .schedule-ceremony-card__title {
   font-size: 18px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.01em;
   margin: 2px 0 0 0;
 }
@@ -170,7 +170,7 @@
 .schedule-ceremony-card__desc {
   font-size: 13px;
   font-weight: 400;
-  color: #6B7280;
+  color: var(--color-text-muted) ;
   margin: 0;
   line-height: 1.4;
 }
@@ -184,8 +184,8 @@
 
 /* Filters Card */
 .schedule-filters-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 20px;
   box-shadow: none;
@@ -211,7 +211,7 @@
 .schedule-filter-label {
   font-size: 12px;
   font-weight: 600;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 /* Legend bar */
@@ -220,9 +220,9 @@
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   padding-top: 10px;
-  border-top: 1px solid #F3F4F6;
+  border-top: 1px solid var(--color-surface-hover);
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -246,19 +246,19 @@
 }
 
 .legend-swatch--active {
-  background-color: #F3F4F6;
-  border: 1px solid #D1D5DB;
+  background-color: var(--color-surface-hover) ;
+  border: 1px solid var(--color-border);
 }
 
 .legend-swatch--conflict {
-  background-color: #FEE2E2;
-  border: 1px solid #EF4444;
+  background-color: var(--color-error-bg) ;
+  border: 1px solid var(--color-error);
 }
 
 /* Matrix Table */
 .schedule-matrix-container {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow-x: auto;
   box-shadow: none;
@@ -271,14 +271,14 @@
 }
 
 .schedule-matrix thead th {
-  background-color: #F9FAFB;
-  border-bottom: 1px solid #E5E7EB;
-  border-right: 1px solid #E5E7EB;
+  background-color: var(--color-surface) ;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   padding: 10px 14px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   letter-spacing: 0.05em;
   text-align: left;
 }
@@ -288,8 +288,8 @@
 }
 
 .schedule-matrix tbody td {
-  border-bottom: 1px solid #F3F4F6;
-  border-right: 1px solid #F3F4F6;
+  border-bottom: 1px solid var(--color-surface-hover);
+  border-right: 1px solid var(--color-surface-hover);
   padding: 6px;
   vertical-align: top;
   min-width: 130px;
@@ -301,10 +301,10 @@
 }
 
 .schedule-slot-cell {
-  background-color: #F9FAFB;
+  background-color: var(--color-surface) ;
   min-width: 110px !important;
   width: 110px;
-  border-right: 1px solid #E5E7EB !important;
+  border-right: 1px solid var(--color-border) !important;
 }
 
 .schedule-slot-header {
@@ -316,12 +316,12 @@
 .schedule-slot-num {
   font-size: 12px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
 }
 
 .schedule-slot-time {
   font-size: 11px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
 }
 
 /* Empty Cell */
@@ -341,7 +341,7 @@
   justify-content: center;
   gap: 4px;
   font-size: 12px;
-  color: #9CA3AF;
+  color: var(--color-text-muted) ;
   border: 1px dashed transparent;
   border-radius: 4px;
   background: transparent;
@@ -350,9 +350,9 @@
 }
 
 .schedule-cell__empty-btn:hover {
-  background-color: #F9FAFB;
-  border-color: #D1D5DB;
-  color: #4B5563;
+  background-color: var(--color-surface) ;
+  border-color: var(--color-border) ;
+  color: var(--color-text-secondary) ;
 }
 
 /* Schedule Card (Inside Cell) */
@@ -363,8 +363,8 @@
 }
 
 .schedule-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 8px 10px;
   cursor: pointer;
@@ -377,11 +377,11 @@
 
 .schedule-card:hover {
   border-color: #9CA3AF;
-  background-color: #F9FAFB;
+  background-color: var(--color-surface) ;
 }
 
 .schedule-card--conflict {
-  border-color: #FCA5A5;
+  border-color: var(--color-status-danger-bg);
   background-color: #FFF5F5;
 }
 
@@ -403,7 +403,7 @@
 .schedule-card__subject {
   font-size: 12px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -412,7 +412,7 @@
 .schedule-card__time {
   font-size: 10px;
   font-family: monospace;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   font-weight: 500;
   white-space: nowrap;
   letter-spacing: -0.02em;
@@ -421,7 +421,7 @@
 
 .schedule-card__teacher {
   font-size: 11px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -438,8 +438,8 @@
 .schedule-card__info-tag {
   font-size: 10px;
   font-weight: 500;
-  color: #4B5563;
-  background-color: #F3F4F6;
+  color: var(--color-text-secondary) ;
+  background-color: var(--color-surface-hover) ;
   padding: 1px 5px;
   border-radius: 3px;
 }
@@ -489,8 +489,8 @@
 }
 
 .schedule-class-section {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: none;
@@ -503,8 +503,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  background-color: #F8FAFC;
-  border-bottom: 1px solid #E2E8F0;
+  background-color: var(--color-surface) ;
+  border-bottom: 1px solid var(--color-border);
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -525,14 +525,14 @@
 .schedule-class-title {
   font-size: 16px;
   font-weight: 700;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   margin: 0;
   letter-spacing: -0.01em;
 }
 
 .schedule-class-subtitle {
   font-size: 12px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   font-weight: 400;
 }
 
@@ -546,11 +546,11 @@
 .schedule-class-stat-badge {
   font-size: 11px;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-secondary) ;
   background-color: #EDF2F7;
   padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
 }
 
 /* Continuation Slot (Multi-Period Session) */
@@ -561,22 +561,22 @@
   align-items: center;
   justify-content: center;
   padding: 6px 10px;
-  background-color: #F8FAFC;
-  border: 1px dashed #CBD5E1;
+  background-color: var(--color-surface) ;
+  border: 1px dashed var(--color-border);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.12s ease;
 }
 
 .schedule-continuation-block:hover {
-  background-color: #F1F5F9;
-  border-color: #94A3B8;
+  background-color: var(--color-badge-blue-bg) ;
+  border-color: var(--color-text-muted);
 }
 
 .schedule-continuation-text {
   font-size: 11px;
   font-style: italic;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   text-align: center;
   line-height: 1.3;
 }
@@ -588,12 +588,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94A3B8;
+  color: var(--color-text-muted) ;
   font-family: monospace;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.15em;
-  background-color: #F9FAFB;
+  background-color: var(--color-surface) ;
   user-select: none;
 }
 
@@ -604,27 +604,27 @@
   align-items: center;
   justify-content: center;
   padding: 48px 24px;
-  background-color: #FFFFFF;
-  border: 1px dashed #CBD5E1;
+  background-color: var(--color-card) ;
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   text-align: center;
   gap: 12px;
 }
 
 .schedule-empty-icon {
-  color: #94A3B8;
+  color: var(--color-text-muted) ;
 }
 
 .schedule-empty-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-text-primary) ;
   margin: 0;
 }
 
 .schedule-empty-desc {
   font-size: 13px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   max-width: 420px;
   margin: 0;
 }
@@ -634,20 +634,20 @@
    ========================================================================== */
 .schedule-morning-row {
   background-color: rgba(248, 250, 252, 0.5);
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .schedule-morning-cell {
   padding: 8px 10px;
   vertical-align: top;
-  border-right: 1px solid #F1F5F9;
+  border-right: 1px solid var(--color-surface-hover);
 }
 
 .schedule-morning-card {
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid #E2E8F0;
-  background-color: #F8FAFC;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface) ;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -655,27 +655,27 @@
 }
 
 .schedule-morning-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--color-border) ;
 }
 
 .schedule-morning-card--upacara {
-  background-color: #FEF3C7;
-  border-color: #FDE68A;
+  background-color: var(--color-warning-bg) ;
+  border-color: var(--color-warning) ;
 }
 
 .schedule-morning-card--upacara:hover {
-  background-color: #FDE68A;
+  background-color: var(--color-warning);
   border-color: #FCD34D;
 }
 
 .schedule-morning-card--regular {
-  background-color: #F8FAFC;
-  border-color: #E2E8F0;
+  background-color: var(--color-surface) ;
+  border-color: var(--color-border) ;
 }
 
 .schedule-morning-card--regular:hover {
-  background-color: #F1F5F9;
-  border-color: #CBD5E1;
+  background-color: var(--color-badge-blue-bg) ;
+  border-color: var(--color-border) ;
 }
 
 .schedule-morning-card__header {
@@ -698,20 +698,20 @@
 
 .schedule-morning-badge--upacara {
   background-color: #FEF08A;
-  color: #78350F;
+  color: var(--color-warning) ;
   border: 1px solid #FACC15;
 }
 
 .schedule-morning-badge--regular {
-  background-color: #E2E8F0;
-  color: #334155;
-  border: 1px solid #CBD5E1;
+  background-color: var(--color-border);
+  color: var(--color-text-secondary) ;
+  border: 1px solid var(--color-border);
 }
 
 .schedule-morning-time {
   font-size: 10px;
   font-family: monospace;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   font-weight: 500;
 }
 
@@ -722,15 +722,15 @@
 }
 
 .schedule-morning-card--upacara .schedule-morning-title {
-  color: #78350F;
+  color: var(--color-warning) ;
 }
 
 .schedule-morning-card--regular .schedule-morning-title {
-  color: #1E293B;
+  color: var(--color-text-primary) ;
 }
 
 .schedule-morning-desc {
   font-size: 10px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   line-height: 1.3;
 }

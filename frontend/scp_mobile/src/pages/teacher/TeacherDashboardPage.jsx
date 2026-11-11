@@ -119,6 +119,49 @@ export default function TeacherDashboardPage() {
     return { todayJp, weeklyJp };
   }, [todaySchedules, weeklySchedules]);
 
+
+  // Sebaran beban per hari (Senin–Sabtu) dari jadwal mingguan
+  const weekLoad = useMemo(() => {
+    const labels = { 1: 'Sen', 2: 'Sel', 3: 'Rab', 4: 'Kam', 5: 'Jum', 6: 'Sab' };
+    const days = [1, 2, 3, 4, 5, 6].map((day) => ({
+      day,
+      label: labels[day],
+      jp: 0,
+      isToday: Number(dateInfo.dayOfWeek) === day,
+    }));
+
+    weeklySchedules.forEach((item) => {
+      const row = days.find((d) => d.day === Number(item.day_of_week));
+      if (row) row.jp += Number(item.duration_periods || 2);
+    });
+
+    const maxJp = Math.max(...days.map((d) => d.jp), 1);
+    const activeDays = days.filter((d) => d.jp > 0).length;
+    const totalJp = days.reduce((acc, d) => acc + d.jp, 0);
+    const busiest = days.reduce((a, b) => (b.jp > a.jp ? b : a), days[0]);
+
+    return {
+      days,
+      maxJp,
+      busiest,
+      hasData: totalJp > 0,
+      avgJp: activeDays > 0 ? (totalJp / activeDays).toFixed(1).replace('.', ',') : '0',
+    };
+  }, [weeklySchedules, dateInfo.dayOfWeek]);
+
+  // Jadwal hari kerja berikutnya (maks. 2 sesi)
+  const nextSchedules = useMemo(() => {
+    const names = { 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 7: 'Minggu' };
+    const today = Number(dateInfo.dayOfWeek);
+    for (let offset = 1; offset <= 7; offset += 1) {
+      const targetDay = ((today - 1 + offset) % 7) + 1;
+      const items = weeklySchedules.filter((x) => Number(x.day_of_week) === targetDay);
+      if (items.length === 0) continue;
+      return { dayLabel: names[targetDay], items: items.slice(0, 2) };
+    }
+    return null;
+  }, [weeklySchedules, dateInfo.dayOfWeek]);
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -258,7 +301,7 @@ export default function TeacherDashboardPage() {
               <Sparkles size={15} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[var(--color-text-primary)]">Kuis AI Pembelajaran</p>
+              <p className="text-xs font-bold text-[var(--color-text-primary)]">Kuis Pembelajaran</p>
               <p className="text-[11px] text-[var(--color-text-secondary)]">Generate &amp; koreksi</p>
             </div>
           </button>
@@ -388,6 +431,97 @@ export default function TeacherDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Sebaran Beban Mengajar Minggu Ini */}
+      {weekLoad.hasData && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="section-label">Sebaran Beban Minggu Ini</h2>
+            <span className="text-[11px] font-mono text-[var(--color-text-muted)]">
+              {jpSummary.weeklyJp} JP
+            </span>
+          </div>
+          <div className="surface-card p-3">
+            <div className="grid grid-cols-6 gap-1.5 items-end">
+              {weekLoad.days.map((day) => (
+                <div key={day.day} className="flex flex-col items-center gap-1">
+                  <span
+                    className={`text-[10px] font-mono ${
+                      day.isToday
+                        ? 'font-bold text-[var(--color-text-primary)]'
+                        : 'text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    {day.jp}
+                  </span>
+                  <span className="w-full h-[64px] flex items-end rounded bg-[var(--color-surface-subtle)] overflow-hidden">
+                    <span
+                      className={`w-full rounded ${
+                        day.isToday ? 'bg-[var(--color-brand)]' : 'bg-[var(--color-border-strong)]'
+                      }`}
+                      style={{
+                        height: `${Math.max(day.jp > 0 ? 6 : 0, Math.round((day.jp / weekLoad.maxJp) * 100))}%`,
+                      }}
+                    />
+                  </span>
+                  <span
+                    className={`text-[9px] font-semibold ${
+                      day.isToday
+                        ? 'text-[var(--color-text-primary)]'
+                        : 'text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    {day.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 pt-2 border-t border-[var(--color-border-light)] text-[10px] text-[var(--color-text-muted)]">
+              Terpadat{' '}
+              <b className="text-[var(--color-text-primary)]">
+                {weekLoad.busiest.label} ({weekLoad.busiest.jp} JP)
+              </b>{' '}
+              &middot; rata-rata {weekLoad.avgJp} JP/hari
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Jadwal Berikutnya */}
+      {nextSchedules && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="section-label">Jadwal Berikutnya</h2>
+            <span className="text-[11px] text-[var(--color-text-muted)]">{nextSchedules.dayLabel}</span>
+          </div>
+          <div className="surface-card divide-y divide-[var(--color-border-light)]">
+            {nextSchedules.items.map((item, idx) => (
+              <div key={item.id || idx} className="p-3 flex items-start gap-2.5">
+                <span className="text-[10px] font-mono font-semibold text-[var(--color-text-secondary)] min-w-[58px] pt-0.5">
+                  {
+                    resolveSlotTime(
+                      item.day_of_week,
+                      item.period_number,
+                      item.duration_periods,
+                      mondayIsUpacara,
+                      periodTemplates
+                    ).timeText
+                  }
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--color-text-primary)] truncate">
+                    {item.subject?.name || 'Mata Pelajaran'}
+                  </p>
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                    {item.school_class?.name || item.schoolClass?.name || 'Rombel'} &middot;{' '}
+                    {item.room?.name || 'Ruang Belajar'} &middot; {item.duration_periods || 2} JP
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

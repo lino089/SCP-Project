@@ -10,9 +10,11 @@ use App\Models\Classes;
 use App\Models\Quiz;
 use App\Models\QuizQuestion;
 use App\Models\QuizSubmission;
+use App\Models\QuizAttempt;
 use App\Services\AIService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -102,6 +104,7 @@ class QuizController extends Controller
             'class_ids.*' => ['integer', 'exists:classes,id'],
             'due_date' => ['required', 'date', 'after:now'],
             'max_attempts' => ['required', 'integer', 'min:1'],
+            'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:300'],
         ]);
 
         $targetClassIds = [];
@@ -146,6 +149,7 @@ class QuizController extends Controller
             'status' => 'draft_review',
             'due_date' => $validated['due_date'],
             'max_attempts' => $validated['max_attempts'],
+            'duration_minutes' => $validated['duration_minutes'] ?? 30,
         ]);
 
         $quiz->load(['teacher:id,name,nis_nip', 'schoolClass:id,name,level']);
@@ -619,6 +623,7 @@ class QuizController extends Controller
             'class_id' => ['sometimes', 'required', 'integer', 'exists:classes,id'],
             'due_date' => ['sometimes', 'required', 'date'],
             'max_attempts' => ['sometimes', 'required', 'integer', 'min:1'],
+            'duration_minutes' => ['sometimes', 'integer', 'min:1', 'max:300'],
             'status' => ['sometimes', 'required', 'string', Rule::in(['draft_review', 'published', 'published_result'])],
         ]);
 
@@ -690,19 +695,22 @@ class QuizController extends Controller
     /**
      * Pengumpulan Jawaban Siswa (Multi-Attempt & Batas Due Date) -> Penilaian Asinkron.
      */
-    public function submit(Request $request, $id): JsonResponse
+    /**
+     * Memulai attempt kuis siswa: mencatat started_at dan batas expired di server.
+     */
+    public function start(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         if ($user->role !== 'student') {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya siswa yang dapat mengumpulkan jawaban kuis.',
+                'message' => 'Akses ditolak. Hanya siswa yang dapat memulai kuis.',
             ], 403);
         }
 
-        $quiz = Quiz::with('questions')->findOrFail($id);
+        $quiz = Quiz::withCount('questions')->findOrFail($id);
 
-        if ($quiz->class_id !== $user->class_id) {
+        if ((int) $quiz->class_id !== (int) $user->class_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Kuis ini bukan untuk kelas Anda.',
@@ -716,13 +724,152 @@ class QuizController extends Controller
             ], 422);
         }
 
-        // Validasi Deadline
-        if (now()->greaterThan($quiz->due_date)) {
+        if ($quiz->questions_count === 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Batas waktu pengerjaan kuis telah berakhir.',
+                'message' => 'Kuis ini belum memiliki butir soal.',
             ], 422);
         }
+
+        $now = now();
+
+        if ($now->greaterThan($quiz->due_date)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Batas waktu pengumpulan kuis telah berakhir.',
+            ], 422);
+        }
+
+        $attempts = QuizAttempt::where('quiz_id', $quiz->id)
+            ->where('student_id', $user->id)
+            ->count();
+
+        if ($attempts >= (int) $quiz->max_attempts) {
+            return response()->json([
+                'success' => false,
+                'message' => "Batas percobaan kuis telah habis (maksimal {$quiz->max_attempts} kali).",
+            ], 422);
+        }
+
+        $active = QuizAttempt::where('quiz_id', $quiz->id)
+            ->where('student_id', $user->id)
+            ->whereNull('submitted_at')
+            ->latest('id')
+            ->first();
+
+        if ($active && ! $active->isExpired()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Melanjutkan pengerjaan kuis yang sedang berjalan.',
+                'data' => $this->serializeAttempt($active, $quiz),
+            ]);
+        }
+
+        if ($active && $active->isExpired()) {
+            // attempt lama hangus & belum dikumpulkan → tutup agar tidak dihitung ulang
+            $active->update(['submitted_at' => $now]);
+        }
+
+        $duration = (int) ($quiz->duration_minutes ?: 30);
+        $expiresAt = $now->copy()->addMinutes($duration);
+        if ($expiresAt->greaterThan($quiz->due_date)) {
+            $expiresAt = $quiz->due_date->copy();
+        }
+
+        $attempt = QuizAttempt::create([
+            'quiz_id' => $quiz->id,
+            'student_id' => $user->id,
+            'attempt_number' => $attempts + 1,
+            'started_at' => $now,
+            'expires_at' => $expiresAt,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kuis dimulai. Waktu pengerjaan berjalan.',
+            'data' => $this->serializeAttempt($attempt, $quiz),
+        ], 201);
+    }
+
+    private function serializeAttempt(QuizAttempt $attempt, Quiz $quiz): array
+    {
+        $remaining = max(0, now()->diffInSeconds($attempt->expires_at, false));
+
+        return [
+            'attempt_id' => $attempt->id,
+            'attempt_number' => $attempt->attempt_number,
+            'started_at' => $attempt->started_at?->toIso8601String(),
+            'expires_at' => $attempt->expires_at?->toIso8601String(),
+            'remaining_seconds' => (int) $remaining,
+            'server_time' => now()->toIso8601String(),
+            'duration_minutes' => (int) ($quiz->duration_minutes ?: 30),
+            'questions_count' => $quiz->questions()->count(),
+        ];
+    }
+
+    public function submit(Request $request, $id): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->role !== 'student') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Hanya siswa yang dapat mengumpulkan jawaban kuis.',
+            ], 403);
+        }
+
+        $quiz = Quiz::with('questions')->findOrFail($id);
+
+        if ((int) $quiz->class_id !== (int) $user->class_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Kuis ini bukan untuk kelas Anda.',
+            ], 403);
+        }
+
+        if ($quiz->status !== 'published') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kuis tidak aktif atau belum dibuka.',
+            ], 422);
+        }
+
+        $now = now();
+
+        // Attempt aktif (dibuat oleh endpoint start). Bila belum ada, buat sekarang
+        // agar pengumpulan tetap sah dan aturan kelengkapan dapat ditegakkan.
+        $attempt = QuizAttempt::where('quiz_id', $quiz->id)
+            ->where('student_id', $user->id)
+            ->whereNull('submitted_at')
+            ->latest('id')
+            ->first();
+
+        if (! $attempt) {
+            if ($now->greaterThan($quiz->due_date)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batas waktu pengerjaan kuis telah berakhir.',
+                ], 422);
+            }
+
+            $duration = (int) ($quiz->duration_minutes ?: 30);
+            $expiresAt = $now->copy()->addMinutes($duration);
+            if ($expiresAt->greaterThan($quiz->due_date)) {
+                $expiresAt = $quiz->due_date->copy();
+            }
+
+            $attempt = QuizAttempt::create([
+                'quiz_id' => $quiz->id,
+                'student_id' => $user->id,
+                'attempt_number' => QuizAttempt::where('quiz_id', $quiz->id)
+                    ->where('student_id', $user->id)
+                    ->count() + 1,
+                'started_at' => $now,
+                'expires_at' => $expiresAt,
+            ]);
+        }
+
+        $isAutoSubmit = $request->boolean('auto_submitted') || $request->boolean('is_auto_submit');
+        $isExpired = $now->greaterThan($attempt->expires_at) || ($isAutoSubmit && $now->copy()->addSeconds(15)->greaterThan($attempt->expires_at));
 
         // Validasi Max Attempts
         $currentAttempts = QuizSubmission::where('quiz_id', $quiz->id)
@@ -744,30 +891,98 @@ class QuizController extends Controller
             'answers.*.selected_option' => ['nullable', 'string'],
         ]);
 
+        // --- Validasi kelengkapan jawaban (tidak bisa dilewati dari frontend) ---
+        $questionIds = $quiz->questions->pluck('id')->map(fn ($qid) => (int) $qid)->all();
+
+        $answeredIds = collect($validated['answers'])
+            ->filter(function ($row) {
+                $value = $row['student_answer'] ?? $row['answer'] ?? $row['selected_option'] ?? null;
+                return $value !== null && trim((string) $value) !== '';
+            })
+            ->pluck('question_id')
+            ->map(fn ($qid) => (int) $qid)
+            ->unique()
+            ->all();
+
+        $missing = array_values(array_diff($questionIds, $answeredIds));
+
+        if (! empty($missing) && ! $isExpired) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Masih ada ' . count($missing) . ' soal yang belum dijawab. Lengkapi sebelum mengumpulkan.',
+                'missing_questions' => $missing,
+                'unanswered_count' => count($missing),
+            ], 422);
+        }
+
+        // Saat waktu habis: jawaban terisi dipertahankan, soal kosong dianggap tidak dijawab.
+        $answers = collect($validated['answers'])->keyBy(fn ($row) => (int) $row['question_id']);
+
+        if ($isExpired) {
+            $answers = collect($questionIds)->map(function ($qid) use ($answers) {
+                $row = $answers->get($qid);
+                $value = $row['student_answer'] ?? $row['answer'] ?? $row['selected_option'] ?? '';
+
+                return [
+                    'question_id' => $qid,
+                    'student_answer' => (string) ($row['student_answer'] ?? $value),
+                    'answer' => (string) ($row['answer'] ?? $value),
+                    'selected_option' => $row['selected_option'] ?? null,
+                ];
+            });
+        }
+
         $attemptNumber = $currentAttempts + 1;
 
-        $submission = QuizSubmission::create([
-            'quiz_id' => $quiz->id,
-            'student_id' => $user->id,
-            'attempt_number' => $attemptNumber,
-            'answers_payload' => $validated['answers'],
-            'grading_status' => 'pending',
-            'ai_score' => null,
-            'ai_feedback' => null,
-        ]);
+        try {
+            $submission = DB::transaction(function () use ($quiz, $user, $attempt, $answers, $attemptNumber, $now) {
+                $lockedAttempt = QuizAttempt::where('id', $attempt->id)->lockForUpdate()->first();
+                if ($lockedAttempt && $lockedAttempt->submitted_at !== null) {
+                    throw new \RuntimeException('Percobaan kuis ini sudah dikumpulkan sebelumnya.');
+                }
 
-        // Dispatch job penilaian evaluasi AI secara asinkron ke antrean queue
-        GradeQuizSubmissionJob::dispatch($submission->id);
+                $sub = QuizSubmission::create([
+                    'quiz_id' => $quiz->id,
+                    'student_id' => $user->id,
+                    'attempt_number' => $attemptNumber,
+                    'answers_payload' => $answers->values()->all(),
+                    'grading_status' => 'pending',
+                    'ai_score' => null,
+                    'ai_feedback' => null,
+                ]);
+
+                if ($lockedAttempt) {
+                    $lockedAttempt->update(['submitted_at' => $now]);
+                }
+
+                return $sub;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        // Dispatch job penilaian evaluasi AI secara asinkron ke antrean queue / background
+        try {
+            GradeQuizSubmissionJob::dispatchAfterResponse($submission->id);
+        } catch (\Throwable $e) {
+            GradeQuizSubmissionJob::dispatch($submission->id);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Jawaban kuis berhasil dikumpulkan dan sedang dinilai oleh sistem evaluasi AI.',
+            'message' => $isExpired
+                ? 'Waktu pengerjaan habis. Jawaban dikumpulkan otomatis.'
+                : 'Jawaban kuis berhasil dikumpulkan dan sedang dinilai oleh sistem evaluasi AI.',
             'data' => [
                 'submission_id' => $submission->id,
                 'quiz_id' => $quiz->id,
                 'student_id' => $user->id,
                 'attempt_number' => $attemptNumber,
                 'grading_status' => 'pending',
+                'auto_submitted' => $isExpired,
             ],
         ], 202);
     }
@@ -777,7 +992,7 @@ class QuizController extends Controller
      */
     public function submissions($id, Request $request): JsonResponse
     {
-        $quiz = Quiz::findOrFail($id);
+        $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
 
         if ($quiz->teacher_id !== $user->id && $user->role !== 'vice_principal' && $user->role !== 'waka') {
@@ -793,6 +1008,52 @@ class QuizController extends Controller
             ->orderBy('attempt_number')
             ->get();
 
+        $questions = $quiz->questions->keyBy('id');
+
+        $enrichedSubmissions = $submissions->map(function ($sub) use ($questions) {
+            $rawAnswers = $sub->answers_payload;
+            $answersMap = [];
+            if (is_array($rawAnswers)) {
+                foreach ($rawAnswers as $ans) {
+                    if (isset($ans['question_id'])) {
+                        $answersMap[$ans['question_id']] = $ans['student_answer'] ?? $ans['answer'] ?? $ans['selected_option'] ?? '';
+                    }
+                }
+            }
+
+            $answersList = [];
+            foreach ($questions as $qId => $q) {
+                $studentAns = trim((string) ($answersMap[$qId] ?? ''));
+                $isCorrect = false;
+                $points = 0;
+
+                if ($q->question_type === 'multiple_choice') {
+                    $isCorrect = (strtoupper($studentAns) === strtoupper(trim($q->correct_answer)));
+                    $points = $isCorrect ? 100 : 0;
+                }
+
+                $answersList[] = [
+                    'question_id' => $q->id,
+                    'question_type' => $q->question_type,
+                    'question_text' => $q->question_text,
+                    'options' => $q->options,
+                    'student_answer' => $studentAns !== '' ? $studentAns : '(Tidak dijawab)',
+                    'correct_answer' => $q->correct_answer,
+                    'is_correct' => $isCorrect,
+                    'points_awarded' => $points,
+                    'ai_feedback' => null,
+                ];
+            }
+
+            $subData = $sub->toArray();
+            $subData['answers'] = $answersList;
+            $subData['submitted_at'] = $sub->created_at ? $sub->created_at->toIso8601String() : null;
+            $subData['formatted_submitted_at'] = $sub->created_at ? $sub->created_at->format('d M Y, H:i \W\I\B') : '-';
+            $subData['teacher_feedback'] = $sub->ai_feedback;
+
+            return $subData;
+        });
+
         return response()->json([
             'success' => true,
             'message' => 'Data submission siswa berhasil diambil.',
@@ -800,8 +1061,8 @@ class QuizController extends Controller
                 'quiz_id' => $quiz->id,
                 'title' => $quiz->title,
                 'status' => $quiz->status,
-                'total_submissions' => $submissions->count(),
-                'submissions' => $submissions,
+                'total_submissions' => $enrichedSubmissions->count(),
+                'submissions' => $enrichedSubmissions,
             ],
         ], 200);
     }
@@ -824,21 +1085,30 @@ class QuizController extends Controller
         $validated = $request->validate([
             'score' => ['required', 'numeric', 'min:0', 'max:100'],
             'feedback' => ['nullable', 'string', 'max:1000'],
+            'teacher_feedback' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $feedbackText = $request->input('teacher_feedback') ?? $request->input('feedback') ?? $submission->ai_feedback;
 
         $submission->update([
             'ai_score' => round((float) $validated['score'], 2),
-            'ai_feedback' => $validated['feedback'] ?? $submission->ai_feedback,
+            'ai_feedback' => $feedbackText,
             'is_overridden' => true,
             'overridden_by' => $user->id,
             'overridden_at' => now(),
             'grading_status' => 'graded',
         ]);
 
+        $fresh = $submission->fresh(['student:id,name,nis_nip', 'overrider:id,name']);
+        $freshData = $fresh->toArray();
+        $freshData['teacher_feedback'] = $fresh->ai_feedback;
+        $freshData['submitted_at'] = $fresh->created_at ? $fresh->created_at->toIso8601String() : null;
+        $freshData['formatted_submitted_at'] = $fresh->created_at ? $fresh->created_at->format('d M Y, H:i \W\I\B') : '-';
+
         return response()->json([
             'success' => true,
             'message' => 'Nilai kuis berhasil di-override oleh guru.',
-            'data' => $submission->fresh(['student:id,name,nis_nip', 'overrider:id,name']),
+            'data' => $freshData,
         ], 200);
     }
 
@@ -847,7 +1117,7 @@ class QuizController extends Controller
      */
     public function mySubmission($id, Request $request): JsonResponse
     {
-        $quiz = Quiz::findOrFail($id);
+        $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
 
         $studentId = null;
@@ -893,7 +1163,52 @@ class QuizController extends Controller
             ->orderBy('attempt_number')
             ->get();
 
-        $bestScore = $submissions->max('ai_score');
+        $questions = $quiz->questions->keyBy('id');
+        $enrichedSubmissions = $submissions->map(function ($sub) use ($questions) {
+            $rawAnswers = $sub->answers_payload;
+            $answersMap = [];
+            if (is_array($rawAnswers)) {
+                foreach ($rawAnswers as $ans) {
+                    if (isset($ans['question_id'])) {
+                        $answersMap[$ans['question_id']] = $ans['student_answer'] ?? $ans['answer'] ?? $ans['selected_option'] ?? '';
+                    }
+                }
+            }
+
+            $answersList = [];
+            foreach ($questions as $qId => $q) {
+                $studentAns = trim((string) ($answersMap[$qId] ?? ''));
+                $isCorrect = false;
+                $points = 0;
+
+                if ($q->question_type === 'multiple_choice') {
+                    $isCorrect = (strtoupper($studentAns) === strtoupper(trim($q->correct_answer)));
+                    $points = $isCorrect ? 100 : 0;
+                }
+
+                $answersList[] = [
+                    'question_id' => $q->id,
+                    'question_type' => $q->question_type,
+                    'question_text' => $q->question_text,
+                    'options' => $q->options,
+                    'student_answer' => $studentAns !== '' ? $studentAns : '(Tidak dijawab)',
+                    'correct_answer' => $q->correct_answer,
+                    'is_correct' => $isCorrect,
+                    'points_awarded' => $points,
+                    'ai_feedback' => null,
+                ];
+            }
+
+            $subData = $sub->toArray();
+            $subData['answers'] = $answersList;
+            $subData['submitted_at'] = $sub->created_at ? $sub->created_at->toIso8601String() : null;
+            $subData['formatted_submitted_at'] = $sub->created_at ? $sub->created_at->format('d M Y, H:i \W\I\B') : '-';
+            $subData['teacher_feedback'] = $sub->ai_feedback;
+
+            return $subData;
+        });
+
+        $bestScore = $enrichedSubmissions->max('ai_score');
 
         return response()->json([
             'success' => true,
@@ -902,9 +1217,9 @@ class QuizController extends Controller
                 'quiz_id' => $quiz->id,
                 'title' => $quiz->title,
                 'best_score' => $bestScore,
-                'attempts_used' => $submissions->count(),
+                'attempts_used' => $enrichedSubmissions->count(),
                 'max_attempts' => $quiz->max_attempts,
-                'submissions' => $submissions,
+                'submissions' => $enrichedSubmissions,
             ],
         ], 200);
     }

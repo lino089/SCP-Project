@@ -43,8 +43,8 @@
 
 /* Success Result Card */
 .promotion-success-card {
-  background-color: var(--success-50, #f0fdf4);
-  border: 1px solid var(--success-200, #bbf7d0);
+  background-color: var(--success-50, var(--color-status-success-bg));
+  border: 1px solid var(--success-200, var(--color-success));
   border-radius: var(--radius-md, 8px);
   padding: 1rem 1.25rem;
   display: flex;
@@ -72,8 +72,8 @@
   display: flex;
   flex-direction: column;
   padding: 0.35rem 0.75rem;
-  background-color: #fff;
-  border: 1px solid var(--neutral-200, #e2e8f0);
+  background-color: var(--color-card) ;
+  border: 1px solid var(--neutral-200, var(--color-border));
   border-radius: var(--radius-sm, 6px);
   text-align: center;
 }
@@ -94,8 +94,8 @@
 /* Main Sections */
 .promotion-section {
   margin-bottom: 2rem;
-  background-color: #fff;
-  border: 1px solid var(--neutral-200, #e2e8f0);
+  background-color: var(--color-card) ;
+  border: 1px solid var(--neutral-200, var(--color-border));
   border-radius: var(--radius-lg, 10px);
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
@@ -155,9 +155,9 @@
   padding: 0.35rem 0.6rem;
   font-size: 0.75rem;
   font-family: inherit;
-  border: 1px solid var(--neutral-300, #cbd5e1);
+  border: 1px solid var(--neutral-300, var(--color-border));
   border-radius: 6px;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   color: var(--neutral-800, #1e293b);
   outline: none;
   cursor: pointer;
@@ -165,7 +165,7 @@
 }
 
 .promotion-date-input:focus {
-  border-color: #0f172a;
+  border-color: var(--color-text-primary);
 }
 
 .promotion-stats-badge {
@@ -175,8 +175,8 @@
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--neutral-700, #334155);
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   white-space: nowrap;
 }
@@ -210,16 +210,16 @@
   width: 100%;
   padding: 0.45rem 2rem 0.45rem 2.25rem;
   font-size: 0.8125rem;
-  border: 1px solid var(--neutral-300, #cbd5e1);
+  border: 1px solid var(--neutral-300, var(--color-border));
   border-radius: 6px;
   outline: none;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   color: var(--neutral-900, #0f172a);
   transition: border-color 0.15s ease;
 }
 
 .promotion-search-input:focus {
-  border-color: #0f172a;
+  border-color: var(--color-text-primary);
 }
 
 .promotion-search-shortcut {
@@ -229,8 +229,8 @@
   font-size: 0.6875rem;
   font-family: monospace;
   color: var(--neutral-400, #94a3b8);
-  background-color: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-border);
   border-radius: 3px;
   pointer-events: none;
 }
@@ -255,9 +255,9 @@
   min-width: 0;
   padding: 0.45rem 0.75rem;
   font-size: 0.8125rem;
-  border: 1px solid var(--neutral-300, #cbd5e1);
+  border: 1px solid var(--neutral-300, var(--color-border));
   border-radius: 6px;
-  background-color: #fff;
+  background-color: var(--color-card) ;
   color: var(--neutral-700, #334155);
   outline: none;
   cursor: pointer;
@@ -265,7 +265,7 @@
 }
 
 .promotion-filter-select:focus {
-  border-color: #0f172a;
+  border-color: var(--color-text-primary);
 }
 
 /* Segmented Tabs (Semua, Kelas X, Kelas XI, Kelas XII) */
@@ -274,11 +274,11 @@
   flex-wrap: wrap;
   max-width: 100%;
   align-items: center;
-  background-color: #f1f5f9;
+  background-color: var(--color-badge-blue-bg) ;
   padding: 3px;
   border-radius: 6px;
   gap: 2px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .promotion-tab-btn {
@@ -299,7 +299,7 @@
 }
 
 .promotion-tab-btn--active {
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   color: var(--neutral-900, #0f172a);
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -314,8 +314,8 @@
 }
 
 .promotion-class-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -326,8 +326,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  background-color: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-card) ;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
@@ -338,14 +338,14 @@
   gap: 0.5rem;
   font-size: 0.8125rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: 0.02em;
 }
 
 .promotion-class-bar {
   width: 3px;
   height: 18px;
-  background-color: #0f172a;
+  background-color: var(--color-text-primary);
   border-radius: 2px;
   display: inline-block;
 }
@@ -384,20 +384,20 @@
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.55rem;
-  background-color: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: 0.02em;
 }
 
 .promotion-target-badge--success {
-  background-color: var(--success-50, #f0fdf4);
+  background-color: var(--success-50, var(--color-status-success-bg));
   border-color: var(--success-300, #86efac);
-  color: var(--success-700, #15803d);
+  color: var(--success-700, var(--color-status-success-fg));
 }
 
 /* Cohort Educational Note Banner */
@@ -407,8 +407,8 @@
   gap: 0.5rem;
   padding: 0.625rem 0.875rem;
   margin: 0.75rem 0 1rem 0;
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-status-info-bg);
   border-radius: 6px;
   font-size: 0.75rem;
   line-height: 1.45;
@@ -416,8 +416,8 @@
 }
 
 .promotion-cohort-note--graduated {
-  background-color: #f0fdf4;
-  border-color: #bbf7d0;
+  background-color: var(--color-status-success-bg);
+  border-color: var(--color-success);
   color: #14532d;
 }
 
@@ -440,8 +440,8 @@
 }
 
 .promotion-custom-table thead tr {
-  border-bottom: 1px solid #e2e8f0;
-  background-color: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-card) ;
 }
 
 .promotion-custom-table thead th {
@@ -453,7 +453,7 @@
 }
 
 .promotion-custom-table tbody tr {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
   transition: background-color 0.12s ease;
 }
 
@@ -462,7 +462,7 @@
 }
 
 .promotion-custom-table tbody tr:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
 }
 
 .promotion-custom-table tbody td {
@@ -479,30 +479,30 @@
 .promotion-nis-badge {
   display: inline-block;
   padding: 0.2rem 0.5rem;
-  background-color: #f1f5f9;
+  background-color: var(--color-badge-blue-bg) ;
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  color: var(--color-text-secondary) ;
+  border: 1px solid var(--color-border);
 }
 
 .promotion-jurusan-badge {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 .promotion-student-name {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .promotion-status-text {
@@ -514,8 +514,8 @@
   padding: 0.625rem 1rem;
   font-size: 0.75rem;
   color: var(--neutral-400, #94a3b8);
-  background-color: #ffffff;
-  border-top: 1px solid #f1f5f9;
+  background-color: var(--color-card) ;
+  border-top: 1px solid var(--color-surface-hover);
 }
 
 /* Checkbox Component */
@@ -526,7 +526,7 @@
   cursor: pointer;
   user-select: none;
   font-size: 0.8125rem;
-  color: #334155;
+  color: var(--color-text-secondary) ;
 }
 
 .promotion-checkbox-input {
@@ -540,19 +540,19 @@
 
 .promotion-checkbox-text {
   font-size: 0.78125rem;
-  color: #334155;
+  color: var(--color-text-secondary) ;
   transition: color 0.15s ease;
 }
 
 .promotion-checkbox-label:hover .promotion-checkbox-text {
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 /* Loading & Skeletons */
 .promotion-table-loading {
-  background-color: #fff;
+  background-color: var(--color-card) ;
   border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--neutral-200, #e2e8f0);
+  border: 1px solid var(--neutral-200, var(--color-border));
   overflow: hidden;
   padding: 0.5rem;
 }
@@ -563,14 +563,14 @@
   align-items: flex-start;
   gap: 0.875rem;
   padding: 1rem 1.25rem;
-  background-color: #fffbeb;
-  border: 1px solid #fde68a;
+  background-color: var(--color-warning-bg) ;
+  border: 1px solid var(--color-warning);
   border-radius: var(--radius-md, 8px);
   margin-bottom: 1.5rem;
 }
 
 .promotion-warning-icon {
-  color: #d97706;
+  color: var(--color-warning) ;
   flex-shrink: 0;
   margin-top: 0.125rem;
 }
@@ -582,13 +582,13 @@
 .promotion-warning-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #78350f;
+  color: var(--color-warning) ;
   margin: 0 0 0.25rem 0;
 }
 
 .promotion-warning-desc {
   font-size: 0.8125rem;
-  color: #92400e;
+  color: var(--color-warning) ;
   line-height: 1.45;
   margin: 0 0 0.625rem 0;
 }
@@ -602,9 +602,9 @@
 .promotion-unmapped-tag {
   display: inline-block;
   padding: 0.2rem 0.5rem;
-  background-color: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border: 1px solid var(--color-warning);
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.6875rem;
@@ -622,8 +622,8 @@
 .promotion-target-select {
   height: 32px;
   padding: 0 1.85rem 0 0.6rem;
-  background-color: #ffffff;
-  border: 1px solid var(--neutral-300, #cbd5e1);
+  background-color: var(--color-card) ;
+  border: 1px solid var(--neutral-300, var(--color-border));
   border-radius: var(--radius-sm, 6px);
   font-size: 0.75rem;
   font-weight: 600;
@@ -642,12 +642,12 @@
 }
 
 .promotion-target-select:focus {
-  border-color: #0f172a;
+  border-color: var(--color-text-primary);
   box-shadow: 0 0 0 1px #0f172a;
 }
 
 .promotion-target-select:disabled {
-  background-color: #f8fafc;
-  color: #94a3b8;
+  background-color: var(--color-surface) ;
+  color: var(--color-text-muted) ;
   cursor: not-allowed;
 }

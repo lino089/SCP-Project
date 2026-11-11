@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import './tokens.css';
+@import './theme-dark.css';
 
 @layer base {
   *, *::before, *::after {
@@ -87,9 +88,9 @@ kbd {
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
-  color: #64748b;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  color: var(--color-text-secondary) ;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   user-select: none;
@@ -105,14 +106,14 @@ kbd {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background-color: #94A3B8;
+  background-color: var(--color-text-muted);
 }
 
-.status-dot--success { background-color: #10B981; }
-.status-dot--warning { background-color: #F59E0B; }
-.status-dot--danger  { background-color: #EF4444; }
+.status-dot--success { background-color: var(--color-success); }
+.status-dot--warning { background-color: var(--color-warning); }
+.status-dot--danger  { background-color: var(--color-error); }
 .status-dot--info    { background-color: #3B82F6; }
-.status-dot--neutral { background-color: #94A3B8; }
+.status-dot--neutral { background-color: var(--color-text-muted); }
 
 .status-dot--pulse {
   position: relative;
@@ -133,17 +134,17 @@ kbd {
 }
 
 /* Accent Borders */
-.accent-border-top--success { border-top: 3px solid #10B981 !important; }
-.accent-border-top--warning { border-top: 3px solid #F59E0B !important; }
-.accent-border-top--danger  { border-top: 3px solid #EF4444 !important; }
+.accent-border-top--success { border-top: 3px solid var(--color-success) !important; }
+.accent-border-top--warning { border-top: 3px solid var(--color-warning) !important; }
+.accent-border-top--danger  { border-top: 3px solid var(--color-error) !important; }
 .accent-border-top--info    { border-top: 3px solid #3B82F6 !important; }
-.accent-border-top--neutral { border-top: 3px solid #94A3B8 !important; }
+.accent-border-top--neutral { border-top: 3px solid var(--color-text-muted) !important; }
 
-.accent-border-left--success { border-left: 3px solid #10B981 !important; }
-.accent-border-left--warning { border-left: 3px solid #F59E0B !important; }
-.accent-border-left--danger  { border-left: 3px solid #EF4444 !important; }
+.accent-border-left--success { border-left: 3px solid var(--color-success) !important; }
+.accent-border-left--warning { border-left: 3px solid var(--color-warning) !important; }
+.accent-border-left--danger  { border-left: 3px solid var(--color-error) !important; }
 .accent-border-left--info    { border-left: 3px solid #3B82F6 !important; }
-.accent-border-left--neutral { border-left: 3px solid #94A3B8 !important; }
+.accent-border-left--neutral { border-left: 3px solid var(--color-text-muted) !important; }
 
 /* Section Heading Standard */
 .section-label-enterprise {

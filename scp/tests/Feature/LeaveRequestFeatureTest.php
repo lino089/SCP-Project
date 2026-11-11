@@ -506,11 +506,12 @@ class LeaveRequestFeatureTest extends TestCase
         $resSecond->assertStatus(422);
     }
 
-    public function test_regular_teacher_and_wali_kelas_cannot_verify_leave_request(): void
+    public function test_homeroom_teacher_can_verify_their_class_but_other_classes_and_regular_teacher_cannot(): void
     {
-        $leave = LeaveRequest::create([
+        $leaveClassA = LeaveRequest::create([
             'student_id' => $this->student1->id,
             'applicant_id' => $this->student1->id,
+            'class_id' => $this->classA->id,
             'type' => 'tidak_masuk',
             'category' => 'sakit',
             'start_date' => '2026-10-25',
@@ -518,14 +519,31 @@ class LeaveRequestFeatureTest extends TestCase
             'status_approval' => 'pending',
         ]);
 
-        // Wali Kelas mencoba verifikasi
-        Sanctum::actingAs($this->teacherWaliKelas);
-        $resWali = $this->patchJson("/api/leave-requests/{$leave->id}", ['status' => 'approved']);
-        $resWali->assertStatus(403);
+        $leaveClassB = LeaveRequest::create([
+            'student_id' => $this->student2->id,
+            'applicant_id' => $this->student2->id,
+            'class_id' => $this->classB->id,
+            'type' => 'tidak_masuk',
+            'category' => 'sakit',
+            'start_date' => '2026-10-25',
+            'end_date' => '2026-10-26',
+            'status_approval' => 'pending',
+        ]);
 
-        // Guru Reguler mencoba verifikasi
+        // 1. Wali Kelas memverifikasi siswa di kelas binaannya (Class A) -> 200 Berhasil
+        Sanctum::actingAs($this->teacherWaliKelas);
+        $resWaliOwn = $this->patchJson("/api/leave-requests/{$leaveClassA->id}", ['status' => 'approved']);
+        $resWaliOwn->assertStatus(200);
+        $this->assertEquals('approved', $leaveClassA->fresh()->status_approval);
+
+        // 2. Wali Kelas mencoba memverifikasi siswa di kelas lain (Class B) -> 403 Ditolak
+        $resWaliOther = $this->patchJson("/api/leave-requests/{$leaveClassB->id}", ['status' => 'approved']);
+        $resWaliOther->assertStatus(403);
+        $this->assertEquals('pending', $leaveClassB->fresh()->status_approval);
+
+        // 3. Guru Reguler mencoba verifikasi -> 403 Ditolak
         Sanctum::actingAs($this->teacherReguler);
-        $resReguler = $this->patchJson("/api/leave-requests/{$leave->id}", ['status' => 'approved']);
+        $resReguler = $this->patchJson("/api/leave-requests/{$leaveClassB->id}", ['status' => 'approved']);
         $resReguler->assertStatus(403);
     }
 

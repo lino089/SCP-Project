@@ -32,8 +32,32 @@ export default class ErrorBoundary extends React.Component {
     window.location.reload();
   };
 
-  handleGoHome = () => {
-    window.location.href = '/';
+  getDashboardRoute = () => {
+    try {
+      const savedUser = localStorage.getItem('scp_user');
+      const token = localStorage.getItem('scp_token');
+      if (!savedUser || !token) {
+        return '/login';
+      }
+      const user = JSON.parse(savedUser);
+      const role = user?.role === 'vice_principal' ? 'waka' : user?.role;
+
+      if (role === 'waka') return '/web/dashboard';
+      if (role === 'teacher') return '/teacher/dashboard';
+      if (role === 'student') return '/student/home';
+      if (role === 'parent') return '/parent/monitoring';
+    } catch {
+      // fallback jika parsing data user terkendala
+    }
+    return '/login';
+  };
+
+  handleGoDashboard = () => {
+    try {
+      sessionStorage.removeItem('scp_active_quiz_attempt');
+    } catch {}
+
+    window.location.href = this.getDashboardRoute();
   };
 
   toggleDetails = () => {
@@ -57,7 +81,7 @@ export default class ErrorBoundary extends React.Component {
             </h1>
 
             <p className="error-boundary-desc">
-              Terjadi kesalahan pada komponen antarmuka yang menyebabkan halaman tidak dapat dimuat secara normal. Anda dapat memuat ulang peramban atau kembali ke beranda sistem.
+              Terjadi kesalahan pada komponen antarmuka yang menyebabkan halaman tidak dapat dimuat secara normal. Anda dapat memuat ulang peramban atau kembali ke dashboard sistem.
             </p>
 
             <div className="error-boundary-actions">
@@ -73,10 +97,10 @@ export default class ErrorBoundary extends React.Component {
               <button
                 type="button"
                 className="error-boundary-btn error-boundary-btn--secondary"
-                onClick={this.handleGoHome}
+                onClick={this.handleGoDashboard}
               >
                 <Home size={16} />
-                <span>Kembali ke Beranda</span>
+                <span>Kembali ke Dashboard</span>
               </button>
             </div>
 

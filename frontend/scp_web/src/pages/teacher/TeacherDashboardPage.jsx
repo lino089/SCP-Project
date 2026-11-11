@@ -10,7 +10,7 @@ import {
   PlayCircle,
   Eye,
   RotateCw,
-  GraduationCap,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { journalApi } from '../../services/journalApi';
@@ -21,6 +21,8 @@ import { resolveSlotTime } from '../../utils/timetableHelper';
 import { unwrap, unwrapList } from '../../utils/responseHelper';
 import { getJakartaDayInfo, getJakartaTimeString } from '../../utils/dateUtils';
 import './TeacherDashboard.css';
+
+const WEEK_DAY_LABELS = { 1: 'Sen', 2: 'Sel', 3: 'Rab', 4: 'Kam', 5: 'Jum', 6: 'Sab', 7: 'Min' };
 
 export default function TeacherDashboardPage() {
   const { user, isWaliKelas, isKesiswaan, hasRole } = useAuth();
@@ -156,6 +158,37 @@ export default function TeacherDashboardPage() {
     };
   }, [todaySchedules, weeklySchedules, missingJournals, teacherLeaves, dateInfo.todayIso]);
 
+
+  // Sebaran beban mengajar per hari (Senin–Sabtu) dari jadwal mingguan
+  const weekLoad = useMemo(() => {
+    const days = [1, 2, 3, 4, 5, 6].map((day) => ({
+      day,
+      label: WEEK_DAY_LABELS[day],
+      jp: 0,
+      isToday: Number(dateInfo.dayOfWeek) === day,
+    }));
+
+    weeklySchedules.forEach((item) => {
+      const row = days.find((d) => d.day === Number(item.day_of_week));
+      if (!row) return;
+      row.jp += Number(item.duration_periods || 2);
+    });
+
+    const maxJp = Math.max(...days.map((d) => d.jp), 1);
+    const activeDays = days.filter((d) => d.jp > 0).length;
+    const totalJp = days.reduce((acc, d) => acc + d.jp, 0);
+    const busiest = days.reduce((a, b) => (b.jp > a.jp ? b : a), days[0]);
+
+    return {
+      days,
+      maxJp,
+      activeDays,
+      busiest,
+      avgJp: activeDays > 0 ? (totalJp / activeDays).toFixed(1).replace('.', ',') : '0',
+      hasData: totalJp > 0,
+    };
+  }, [weeklySchedules, dateInfo.dayOfWeek]);
+
   // Helper format waktu KBM
   const formatScheduleTime = (item) => {
     if (item.resolved_times?.start_time && item.resolved_times?.end_time) {
@@ -183,11 +216,6 @@ export default function TeacherDashboardPage() {
             {teacherProfile.isKesiswaanRole && (
               <span className="teacher-dashboard__role-badge teacher-dashboard__role-badge--kesiswaan">
                 Tim Kesiswaan
-              </span>
-            )}
-            {teacherProfile.isWali && (
-              <span className="teacher-dashboard__role-badge teacher-dashboard__role-badge--wali">
-                Wali Kelas {teacherProfile.homeroomClassName}
               </span>
             )}
           </div>
@@ -278,20 +306,17 @@ export default function TeacherDashboardPage() {
           </p>
         </div>
 
-        {/* Card 4: Status Kehadiran / Izin */}
+        {/* Card 4: Informasi Putaran Jadwal */}
         <div className="teacher-dashboard__stat-card">
           <div className="teacher-dashboard__stat-top">
-            <span className="teacher-dashboard__stat-title">Status Mengajar</span>
-            <span className="teacher-dashboard__stat-indicator teacher-dashboard__stat-indicator--neutral" />
+            <span className="teacher-dashboard__stat-title">Putaran Aktif</span>
+            <span className="teacher-dashboard__stat-indicator teacher-dashboard__stat-indicator--info" />
           </div>
           <div className="teacher-dashboard__stat-body">
-            <span className="teacher-dashboard__stat-value text-base font-bold text-gray-900">
-              {stats.todayLeave ? 'Sedang Izin' : 'Aktif KBM'}
-            </span>
+            <span className="teacher-dashboard__stat-value font-mono">{activeCycle}</span>
+            <span className="teacher-dashboard__stat-unit">Putaran (Berjalan)</span>
           </div>
-          <p className="teacher-dashboard__stat-desc">
-            {stats.todayLeave ? 'Tercatat di sistem perizinan' : 'Siap melaksanakan KBM di kelas'}
-          </p>
+          <p className="teacher-dashboard__stat-desc">Sistem rotasi KBM minggu berjalan</p>
         </div>
       </div>
 
@@ -316,13 +341,14 @@ export default function TeacherDashboardPage() {
           3. LAYOUT UTAMA: JADWAL KBM HARI INI & INFORMASI PENDUKUNG
          ========================================================================= */}
       <div className="teacher-dashboard__main-grid">
-        {/* Kolom Kiri: Jadwal Mengajar Khusus Hari Ini */}
-        <div className="teacher-dashboard__section-card">
-          <div className="teacher-dashboard__section-header">
-            <h2 className="teacher-dashboard__section-title">
-              <Clock size={18} className="text-slate-800" />
-              <span>Jadwal Mengajar Hari Ini</span>
-            </h2>
+        {/* Kolom Kiri: Jadwal Hari Ini + Jadwal Berikutnya */}
+        <div className="teacher-dashboard__col">
+          <div className="teacher-dashboard__section-card teacher-dashboard__section-card--fill">
+            <div className="teacher-dashboard__section-header">
+              <h2 className="teacher-dashboard__section-title">
+                <Clock size={18} className="text-slate-800" />
+                <span>Jurnal Mengajar Hari Ini</span>
+              </h2>
             <div className="flex items-center gap-2">
               <span className="teacher-dashboard__section-badge font-mono">
                 {dateInfo.dayName}, {dateInfo.formattedDate}
@@ -451,11 +477,11 @@ export default function TeacherDashboardPage() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Kolom Kanan: Peringatan Jurnal & Info Penugasan */}
-        <div className="space-y-4">
-          {/* Card: Peringatan Jurnal Belum Terisi */}
-          <div className="teacher-dashboard__section-card">
+        {/* Kolom Kanan: Kepatuhan Jurnal + Sebaran Beban Mingguan */}
+        <div className="teacher-dashboard__col">
+<div className="teacher-dashboard__section-card">
             <div className="teacher-dashboard__section-header">
               <h2 className="teacher-dashboard__section-title">
                 <FileText size={18} className="text-amber-600" />
@@ -469,12 +495,14 @@ export default function TeacherDashboardPage() {
             </div>
 
             {missingJournals.length === 0 ? (
-              <div className="py-6 px-4 text-center flex flex-col items-center">
-                <CheckCircle2 size={32} className="text-emerald-500 mb-2" />
-                <h4 className="text-xs font-bold text-gray-800">Semua Jurnal Terisi Rapi</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">
-                  Tidak ada tanggungan jurnal KBM yang terlewat pada jadwal Anda.
-                </p>
+              <div className="teacher-dashboard__journal-ok">
+                <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                <div>
+                  <span className="teacher-dashboard__journal-ok-title">Semua Jurnal Terisi Rapi</span>
+                  <span className="teacher-dashboard__journal-ok-sub">
+                    Tidak ada tanggungan jurnal KBM yang terlewat pada jadwal Anda.
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="teacher-dashboard__missing-list">
@@ -491,9 +519,7 @@ export default function TeacherDashboardPage() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() =>
-                        navigate('/teacher/journal', { state: { schedule: item } })
-                      }
+                      onClick={() => navigate('/teacher/journal', { state: { schedule: item } })}
                     >
                       Isi Sekarang
                     </Button>
@@ -503,30 +529,42 @@ export default function TeacherDashboardPage() {
             )}
           </div>
 
-          {/* Card: Informasi Tugas & Akademik */}
-          <div className="teacher-dashboard__section-card">
-            <div className="teacher-dashboard__section-header">
-              <h2 className="teacher-dashboard__section-title">
-                <GraduationCap size={18} className="text-blue-600" />
-                <span>Informasi Akademik</span>
-              </h2>
-            </div>
-            <div className="space-y-2 text-xs text-gray-700">
-              <div className="p-2.5 bg-gray-50 rounded border border-gray-200">
-                <span className="text-gray-500 block text-[11px]">Sistem Putaran Jadwal:</span>
-                <strong className="text-gray-900 font-semibold">Putaran {activeCycle} (Berjalan)</strong>
+          {weekLoad.hasData && (
+            <div className="teacher-dashboard__section-card">
+              <div className="teacher-dashboard__section-header">
+                <h2 className="teacher-dashboard__section-title">
+                  <BarChart3 size={18} className="text-slate-800" />
+                  <span>Sebaran Beban Mengajar Minggu Ini</span>
+                </h2>
+                <span className="teacher-dashboard__section-badge font-mono">
+                  {stats.weeklyJp} JP &middot; {weekLoad.activeDays} hari
+                </span>
               </div>
-              {teacherProfile.isWali && (
-                <div className="p-2.5 bg-blue-50/70 rounded border border-blue-200">
-                  <span className="text-blue-600 block text-[11px] font-semibold">Tanggung Jawab Wali Kelas:</span>
-                  <strong className="text-blue-950 font-bold">{teacherProfile.homeroomClassName}</strong>
-                  <p className="text-[11px] text-blue-800 mt-1">
-                    Anda dapat memantau jadwal dan kehadiran siswa rombel binaan Anda melalui menu Jadwal &amp; Monitoring.
-                  </p>
-                </div>
-              )}
+
+              <div className="teacher-dashboard__load-bars" role="img" aria-label="Sebaran jam pelajaran per hari dalam minggu ini">
+                {weekLoad.days.map((day) => (
+                  <div
+                    key={day.day}
+                    className={`teacher-dashboard__load-col ${day.isToday ? 'is-today' : ''}`}
+                  >
+                    <span className="teacher-dashboard__load-val font-mono">{day.jp}</span>
+                    <span className="teacher-dashboard__load-track">
+                      <span
+                        className="teacher-dashboard__load-bar"
+                        style={{ height: `${Math.max(day.jp > 0 ? 6 : 0, Math.round((day.jp / weekLoad.maxJp) * 100))}%` }}
+                      />
+                    </span>
+                    <span className="teacher-dashboard__load-day">{day.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="teacher-dashboard__load-foot">
+                Hari terpadat <strong>{weekLoad.busiest.label} ({weekLoad.busiest.jp} JP)</strong>
+                &nbsp;&middot;&nbsp; rata-rata {weekLoad.avgJp} JP/hari efektif
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

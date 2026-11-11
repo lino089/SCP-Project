@@ -29,7 +29,7 @@
 .permission-verify__title-group h1 {
   font-size: clamp(20px, 4.6vw, 26px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -37,7 +37,7 @@
 
 .permission-verify__subtitle {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin: 0.35rem 0 0;
   line-height: 1.5;
 }
@@ -56,8 +56,8 @@
   font-weight: 600;
   border-radius: 0.375rem;
   border: 1px solid #a7f3d0;
-  background-color: #ecfdf5;
-  color: #047857;
+  background-color: var(--color-success-bg) ;
+  color: var(--color-success) ;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -66,7 +66,7 @@
 }
 
 .permission-verify__action-btn-approve:hover {
-  background-color: #d1fae5;
+  background-color: var(--color-success-bg) ;
   border-color: #6ee7b7;
 }
 
@@ -75,9 +75,9 @@
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: 0.375rem;
-  border: 1px solid #fecaca;
-  background-color: #fef2f2;
-  color: #b91c1c;
+  border: 1px solid var(--color-error);
+  background-color: var(--color-error-bg) ;
+  color: var(--color-error) ;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -86,15 +86,15 @@
 }
 
 .permission-verify__action-btn-reject:hover {
-  background-color: #fee2e2;
-  border-color: #fca5a5;
+  background-color: var(--color-error-bg) ;
+  border-color: var(--color-status-danger-bg);
 }
 
 /* Preview Modal */
 .permission-verify__preview-box {
   padding: 0;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   overflow: hidden;
   text-align: center;
@@ -104,7 +104,7 @@
   position: relative;
   min-height: 240px;
   max-height: 480px;
-  background-color: #0f172a;
+  background-color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -120,8 +120,8 @@
 
 .permission-verify__preview-meta {
   padding: 1rem 1.25rem;
-  background-color: #ffffff;
-  border-top: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border-top: 1px solid var(--color-border);
   text-align: left;
   font-size: 0.8125rem;
 }

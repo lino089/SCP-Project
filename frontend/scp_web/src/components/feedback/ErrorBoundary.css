@@ -9,15 +9,15 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
   box-sizing: border-box;
 }
 
 .error-boundary-card {
   width: 100%;
   max-width: 580px;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 2.25rem 2rem;
   box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
@@ -28,9 +28,9 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background-color: #fef2f2;
-  border: 1px solid #fee2e2;
-  color: #dc2626;
+  background-color: var(--color-error-bg) ;
+  border: 1px solid var(--color-status-danger-bg);
+  color: var(--color-error) ;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,7 +40,7 @@
 .error-boundary-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   margin: 0 0 0.5rem;
   line-height: 1.35;
@@ -48,7 +48,7 @@
 
 .error-boundary-desc {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   line-height: 1.6;
   margin: 0 0 1.75rem;
 }
@@ -81,9 +81,9 @@
 }
 
 .error-boundary-btn--primary {
-  background-color: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
+  background-color: var(--color-text-primary);
+  color: var(--color-on-dark) ;
+  border-color: var(--color-text-primary);
 }
 
 .error-boundary-btn--primary:hover {
@@ -92,28 +92,28 @@
 }
 
 .error-boundary-btn--secondary {
-  background-color: #ffffff;
-  color: #334155;
-  border-color: #cbd5e1;
+  background-color: var(--color-card) ;
+  color: var(--color-text-secondary) ;
+  border-color: var(--color-border) ;
 }
 
 .error-boundary-btn--secondary:hover {
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-primary) ;
 }
 
 /* Technical Details Dropdown */
 .error-boundary-details {
   margin-top: 1.75rem;
   padding-top: 1.25rem;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--color-border);
   text-align: left;
 }
 
 .error-boundary-toggle-btn {
   background: transparent;
   border: none;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
@@ -125,12 +125,12 @@
 }
 
 .error-boundary-toggle-btn:hover {
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .error-boundary-code-box {
   margin-top: 0.75rem;
-  background-color: #0f172a;
+  background-color: var(--color-text-primary);
   color: #e2e8f0;
   padding: 0.875rem 1rem;
   border-radius: 6px;

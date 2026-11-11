@@ -17,11 +17,13 @@ class Quiz extends Model
         'status',
         'due_date',
         'max_attempts',
+        'duration_minutes',
     ];
 
     protected $casts = [
         'due_date' => 'datetime',
         'max_attempts' => 'integer',
+        'duration_minutes' => 'integer',
     ];
 
     protected $appends = [

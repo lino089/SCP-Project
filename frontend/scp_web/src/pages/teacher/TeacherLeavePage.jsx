@@ -19,7 +19,7 @@ import { leaveApi } from '../../services/leaveApi';
 import { journalApi } from '../../services/journalApi';
 import { getStorageUrl, formatDate } from '../../utils/formatters';
 import { unwrapList } from '../../utils/responseHelper';
-import { todayLocalISO } from '../../utils/dateUtils';
+import { todayLocalISO, getJakartaDayInfo } from '../../utils/dateUtils';
 import { Badge, Button, Modal, Select, Table, SearchInput } from '../../components/shared';
 import { EmptyState, ErrorState } from '../../components/feedback';
 import './TeacherLeave.css';
@@ -86,16 +86,16 @@ export default function TeacherLeavePage() {
     if (!dateString) return;
     setIsLoadingSchedules(true);
     try {
-      const dateObj = new Date(dateString);
-      const dayIndex = dateObj.getDay(); // 0: Minggu, 1: Senin, dst.
-      if (dayIndex === 0 || dayIndex === 6) {
+      const dayInfo = getJakartaDayInfo(dateString);
+      // 6: Sabtu, 7: Minggu (tidak ada KBM reguler)
+      if (dayInfo.dayOfWeek === 7 || dayInfo.dayOfWeek === 6) {
         setAvailableSchedules([]);
         setSelectedScheduleIds([]);
         return;
       }
 
       const res = await journalApi.getTeacherSchedules({
-        day: dayIndex,
+        day: dayInfo.dayOfWeek,
         all: 1,
         per_page: 50,
       });

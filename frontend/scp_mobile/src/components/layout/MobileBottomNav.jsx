@@ -81,7 +81,7 @@ export default function MobileBottomNav({ onOpenMore, isMoreOpen = false }) {
         },
         {
           id: 'teacher-quiz',
-          label: 'Kuis AI',
+          label: 'Kuis',
           to: '/teacher/quiz',
           icon: FileQuestion,
         },
@@ -123,7 +123,7 @@ export default function MobileBottomNav({ onOpenMore, isMoreOpen = false }) {
         },
         {
           id: 'student-quiz',
-          label: 'Kuis AI',
+          label: 'Kuis',
           to: '/student/quiz',
           icon: FileQuestion,
         },

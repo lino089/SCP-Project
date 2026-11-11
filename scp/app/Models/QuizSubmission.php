@@ -30,6 +30,15 @@ class QuizSubmission extends Model
         'attempt_number' => 'integer',
     ];
 
+    protected $appends = [
+        'teacher_feedback',
+    ];
+
+    public function getTeacherFeedbackAttribute(): ?string
+    {
+        return $this->ai_feedback;
+    }
+
     public function quiz(): BelongsTo
     {
         return $this->belongsTo(Quiz::class, 'quiz_id');

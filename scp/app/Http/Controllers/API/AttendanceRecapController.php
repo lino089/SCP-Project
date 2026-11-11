@@ -207,7 +207,8 @@ class AttendanceRecapController extends Controller
                     ],
                     'kpi' => [
                         'total_students' => 0,
-                        'class_attendance_rate' => 100.0,
+                        'total_sessions' => 0,
+                        'class_attendance_rate' => null,
                         'total_hadir' => 0,
                         'total_sakit' => 0,
                         'total_izin' => 0,
@@ -231,10 +232,10 @@ class AttendanceRecapController extends Controller
             ->whereIn('attendances.student_id', $studentIds)
             ->select([
                 'attendances.student_id',
-                DB::raw("COUNT(CASE WHEN attendances.status = 'Hadir' THEN 1 END) as hadir_count"),
-                DB::raw("COUNT(CASE WHEN attendances.status = 'Sakit' THEN 1 END) as sakit_count"),
-                DB::raw("COUNT(CASE WHEN attendances.status = 'Izin' THEN 1 END) as izin_count"),
-                DB::raw("COUNT(CASE WHEN attendances.status = 'Alpa' THEN 1 END) as alpa_count"),
+                DB::raw("COUNT(CASE WHEN LOWER(attendances.status) = 'hadir' THEN 1 END) as hadir_count"),
+                DB::raw("COUNT(CASE WHEN LOWER(attendances.status) = 'sakit' THEN 1 END) as sakit_count"),
+                DB::raw("COUNT(CASE WHEN LOWER(attendances.status) = 'izin' THEN 1 END) as izin_count"),
+                DB::raw("COUNT(CASE WHEN LOWER(attendances.status) = 'alpa' THEN 1 END) as alpa_count"),
                 DB::raw("COUNT(*) as total_sessions"),
                 DB::raw("COUNT(CASE WHEN attendances.notes IS NOT NULL AND TRIM(attendances.notes) != '' THEN 1 END) as notes_count"),
             ])
@@ -265,19 +266,24 @@ class AttendanceRecapController extends Controller
             $notesCount = (int)($stat?->notes_count ?? 0);
 
             // Formula Keputusan 1 (Opsi A): Hadir / (Hadir + Sakit + Izin + Alpa) * 100
+            // Jika belum ada sesi KBM tercatat (totalSessions == 0), kembalikan null
             $attendanceRate = $totalSessions > 0
                 ? round(($hadir / $totalSessions) * 100, 1)
-                : 100.0;
+                : null;
 
             // Kategori Keputusan 2 (Opsi A):
             // Kritis (danger): Alpa >= 3 ATAU Kehadiran < 85%
             // Waspada (warning): Alpa 1-2 ATAU Kehadiran 85% - 89.9% ATAU Total (S+I+A) >= 5
             // Aman (safe): Alpa = 0 dan Kehadiran >= 90%
-            $riskLevel = 'safe';
-            if ($alpa >= 3 || ($totalSessions > 0 && $attendanceRate < 85.0)) {
+            // Belum Ada KBM (unrecorded): totalSessions == 0
+            if ($totalSessions === 0) {
+                $riskLevel = 'unrecorded';
+            } elseif ($alpa >= 3 || $attendanceRate < 85.0) {
                 $riskLevel = 'danger';
-            } elseif ($alpa >= 1 || ($totalSessions > 0 && $attendanceRate < 90.0) || ($sakit + $izin + $alpa) >= 5) {
+            } elseif ($alpa >= 1 || $attendanceRate < 90.0 || ($sakit + $izin + $alpa) >= 5) {
                 $riskLevel = 'warning';
+            } else {
+                $riskLevel = 'safe';
             }
 
             $latestNoteObj = $latestNotes->get($st->id);
@@ -319,15 +325,15 @@ class AttendanceRecapController extends Controller
         $studentsData = match ($sortBy) {
             'alpa_desc' => $studentsData->sort(function ($a, $b) {
                 if ($a['alpa'] === $b['alpa']) {
-                    return $a['attendance_rate'] <=> $b['attendance_rate'];
+                    return ($a['attendance_rate'] ?? 0) <=> ($b['attendance_rate'] ?? 0);
                 }
                 return $b['alpa'] <=> $a['alpa'];
             })->values(),
             'attendance_asc' => $studentsData->sort(function ($a, $b) {
                 if ($a['attendance_rate'] === $b['attendance_rate']) {
-                    return $b['alpa'] <=> $a['alpa'];
+                    return ($b['alpa'] ?? 0) <=> ($a['alpa'] ?? 0);
                 }
-                return $a['attendance_rate'] <=> $b['attendance_rate'];
+                return ($a['attendance_rate'] ?? 0) <=> ($b['attendance_rate'] ?? 0);
             })->values(),
             default => $studentsData->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values(),
         };
@@ -339,7 +345,7 @@ class AttendanceRecapController extends Controller
         $sumIzin = $studentsData->sum('izin');
         $sumAlpa = $studentsData->sum('alpa');
         $sumSessions = $sumHadir + $sumSakit + $sumIzin + $sumAlpa;
-        $classRate = $sumSessions > 0 ? round(($sumHadir / $sumSessions) * 100, 1) : 100.0;
+        $classRate = $sumSessions > 0 ? round(($sumHadir / $sumSessions) * 100, 1) : null;
         $atRiskCount = $allStudents->map(function ($st) use ($attStats) {
             $stat = $attStats->get($st->id);
             $hadir = (int)($stat?->hadir_count ?? 0);
@@ -347,60 +353,12 @@ class AttendanceRecapController extends Controller
             $izin = (int)($stat?->izin_count ?? 0);
             $alpa = (int)($stat?->alpa_count ?? 0);
             $total = $hadir + $sakit + $izin + $alpa;
-            $rate = $total > 0 ? ($hadir / $total) * 100 : 100.0;
+            if ($total === 0) {
+                return 0;
+            }
+            $rate = ($hadir / $total) * 100;
             return ($alpa >= 1 || $rate < 90.0 || ($sakit + $izin + $alpa) >= 5) ? 1 : 0;
         })->sum();
-
-        // 8. Komparasi Antar-Kelas jika Kesiswaan membuka "Semua Kelas Binaan"
-        $classComparisons = [];
-        if ($isMultiClass) {
-            $classesMap = Classes::whereIn('id', $targetClassIds)->get(['id', 'name', 'level'])->keyBy('id');
-            $studentsByClass = $allStudents->groupBy('class_id');
-
-            foreach ($targetClassIds as $cId) {
-                $cObj = $classesMap->get($cId);
-                $stList = $studentsByClass->get($cId, collect());
-                $cTotalSt = $stList->count();
-                $cIds = $stList->pluck('id')->toArray();
-
-                $cHadir = 0; $cSakit = 0; $cIzin = 0; $cAlpa = 0; $cAtRisk = 0;
-                foreach ($cIds as $sId) {
-                    $s = $attStats->get($sId);
-                    $h = (int)($s?->hadir_count ?? 0);
-                    $sk = (int)($s?->sakit_count ?? 0);
-                    $iz = (int)($s?->izin_count ?? 0);
-                    $al = (int)($s?->alpa_count ?? 0);
-                    $tot = $h + $sk + $iz + $al;
-                    $r = $tot > 0 ? ($h / $tot) * 100 : 100.0;
-                    if ($al >= 1 || $r < 90.0 || ($sk + $iz + $al) >= 5) {
-                        $cAtRisk++;
-                    }
-                    $cHadir += $h; $cSakit += $sk; $cIzin += $iz; $cAlpa += $al;
-                }
-                $cTotSess = $cHadir + $cSakit + $cIzin + $cAlpa;
-                $cRate = $cTotSess > 0 ? round(($cHadir / $cTotSess) * 100, 1) : 100.0;
-
-                $classComparisons[] = [
-                    'class_id' => $cId,
-                    'class_name' => $cObj?->name ?? "Kelas #{$cId}",
-                    'level' => $cObj?->level ?? 'X',
-                    'total_students' => $cTotalSt,
-                    'attendance_rate' => $cRate,
-                    'total_alpa' => $cAlpa,
-                    'total_sakit' => $cSakit,
-                    'total_izin' => $cIzin,
-                    'at_risk_count' => $cAtRisk,
-                ];
-            }
-
-            // Urutkan kelas dari yang paling membutuhkan perhatian (alpa tertinggi / rate terendah)
-            usort($classComparisons, function ($a, $b) {
-                if ($a['total_alpa'] === $b['total_alpa']) {
-                    return $a['attendance_rate'] <=> $b['attendance_rate'];
-                }
-                return $b['total_alpa'] <=> $a['total_alpa'];
-            });
-        }
 
         $singleClassInfo = null;
         if (!$isMultiClass && !empty($targetClassIds)) {
@@ -419,6 +377,7 @@ class AttendanceRecapController extends Controller
                 ],
                 'kpi' => [
                     'total_students' => $totalStudents,
+                    'total_sessions' => $sumSessions,
                     'class_attendance_rate' => $classRate,
                     'total_hadir' => $sumHadir,
                     'total_sakit' => $sumSakit,
@@ -427,7 +386,6 @@ class AttendanceRecapController extends Controller
                     'at_risk_count' => $atRiskCount,
                 ],
                 'students' => $studentsData,
-                'class_comparisons' => $classComparisons,
             ],
         ], 200);
     }
@@ -488,12 +446,12 @@ class AttendanceRecapController extends Controller
         });
 
         // Summary KPI Siswa
-        $hadir = $attendances->where('status', 'Hadir')->count();
-        $sakit = $attendances->where('status', 'Sakit')->count();
-        $izin = $attendances->where('status', 'Izin')->count();
-        $alpa = $attendances->where('status', 'Alpa')->count();
+        $hadir = $attendances->filter(fn($a) => strcasecmp((string)$a->status, 'Hadir') === 0)->count();
+        $sakit = $attendances->filter(fn($a) => strcasecmp((string)$a->status, 'Sakit') === 0)->count();
+        $izin = $attendances->filter(fn($a) => strcasecmp((string)$a->status, 'Izin') === 0)->count();
+        $alpa = $attendances->filter(fn($a) => strcasecmp((string)$a->status, 'Alpa') === 0)->count();
         $total = $hadir + $sakit + $izin + $alpa;
-        $rate = $total > 0 ? round(($hadir / $total) * 100, 1) : 100.0;
+        $rate = $total > 0 ? round(($hadir / $total) * 100, 1) : null;
 
         return response()->json([
             'success' => true,
@@ -549,11 +507,16 @@ class AttendanceRecapController extends Controller
         $rowNo = 0;
         foreach ($students as $s) {
             $rowNo++;
-            $riskLabel = match ($s['risk_level'] ?? 'safe') {
+            $riskLabel = match ($s['risk_level'] ?? 'unrecorded') {
                 'danger' => 'Kritis (Perhatian Khusus)',
                 'warning' => 'Waspada',
-                default => 'Baik (Aman)',
+                'safe' => 'Baik (Aman)',
+                default => 'Belum Ada KBM',
             };
+
+            $rateText = ($s['total_sessions'] > 0 && isset($s['attendance_rate']) && $s['attendance_rate'] !== null)
+                ? ($s['attendance_rate'] . '%')
+                : '-';
 
             $writer->addRow([
                 'No' => $rowNo,
@@ -566,7 +529,7 @@ class AttendanceRecapController extends Controller
                 'Izin (I)' => $s['izin'] ?? 0,
                 'Alpa (A)' => $s['alpa'] ?? 0,
                 'Total Pertemuan' => $s['total_sessions'] ?? 0,
-                '% Kehadiran' => ($s['attendance_rate'] ?? 100) . '%',
+                '% Kehadiran' => $rateText,
                 'Status Peringatan' => $riskLabel,
                 'Catatan Guru Terbaru' => $s['latest_note'] ?? '-',
                 'Tanggal Catatan' => $s['latest_note_date'] ?? '-',

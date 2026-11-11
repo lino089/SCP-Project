@@ -1,6 +1,6 @@
 .stat-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 18px;
   box-shadow: none;
@@ -15,7 +15,7 @@
 }
 
 .stat-card--hoverable:hover {
-  border-color: #CBD5E1;
+  border-color: var(--color-border) ;
 }
 
 .stat-card-top {
@@ -31,14 +31,14 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   line-height: 1.25;
 }
 
 .stat-card-main-val {
   font-size: 24px;
   font-weight: 600;
-  color: #0F172A;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.025em;
   line-height: 1.2;
   margin-top: 2px;
@@ -51,7 +51,7 @@
 .stat-card-unit {
   font-size: 12px;
   font-weight: 400;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   font-family: var(--font-family);
   letter-spacing: normal;
 }
@@ -59,7 +59,7 @@
 .stat-card-desc {
   font-size: 12px;
   font-weight: 400;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   line-height: 1.45;
   margin: 0;
 }
@@ -69,5 +69,5 @@
   align-items: center;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid #F1F5F9;
+  border-top: 1px solid var(--color-surface-hover);
 }

@@ -9,6 +9,7 @@ use App\Http\Controllers\API\ForgotPasswordController;
 use App\Http\Controllers\API\JournalController;
 use App\Http\Controllers\API\LeaveRequestController;
 use App\Http\Controllers\API\MasterDataSummaryController;
+use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\RecycleBinController;
@@ -104,6 +105,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::patch('/me/password', [ProfileController::class, 'changePassword']);
     Route::post('/me/verify-password', [AuthController::class, 'verifyPassword']);
 
+    // In-App Notifications (Lonceng Notifikasi)
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/remind-journal', [NotificationController::class, 'remindJournal']);
+
     // Master Data Read (Auth - Semua Role Terautentikasi: PRD 9.3 & 9.6)
     Route::get('/master-data/summary', [MasterDataSummaryController::class, 'index']);
     Route::get('/classes', [SchoolClassController::class, 'index']);
@@ -115,6 +122,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'index']);
     Route::get('/period-templates', [AcademicSettingController::class, 'periodTemplates']);
+    Route::get('/academic-settings', [AcademicSettingController::class, 'index']);
 
     // Rekap Kehadiran Siswa & Pengelolaan Kuis (Wali Kelas, Guru, & Waka)
     Route::middleware('role:vice_principal,teacher')->group(function () {
@@ -138,15 +146,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/leave-requests/{id}', [LeaveRequestController::class, 'show']);
     Route::match(['put', 'patch'], '/leave-requests/{id}', [LeaveRequestController::class, 'update']);
 
-    // 9.6b Perizinan Guru (Teacher Leave Requests - Tahap 3)
-    Route::middleware('role:vice_principal,teacher')->group(function () {
+    // 9.6b Perizinan Guru (Teacher Leave Requests - Khusus Guru & Tim Kesiswaan)
+    Route::middleware('role:teacher')->group(function () {
         Route::get('/teacher-leave-requests', [TeacherLeaveRequestController::class, 'index']);
         Route::get('/teacher-leave-requests/{id}', [TeacherLeaveRequestController::class, 'show']);
         Route::patch('/teacher-leave-requests/{id}/approve', [TeacherLeaveRequestController::class, 'approve']);
         Route::patch('/teacher-leave-requests/{id}/reject', [TeacherLeaveRequestController::class, 'reject']);
-    });
-
-    Route::middleware('role:teacher')->group(function () {
         Route::post('/teacher-leave-requests', [TeacherLeaveRequestController::class, 'store']);
     });
 
@@ -156,8 +161,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // 1. Khusus Waka Kurikulum (Setting Akademik & Mutasi Master Data: PRD 9.2 & 9.3)
     Route::middleware('role:vice_principal')->group(function () {
-        // 9.2 Setting Akademik & Riwayat
-        Route::get('/academic-settings', [AcademicSettingController::class, 'index']);
+        // 9.2 Setting Akademik & Riwayat (Mutasi)
         Route::patch('/academic-settings', [AcademicSettingController::class, 'updateCycle']);
         Route::patch('/academic-settings/monday-status', [AcademicSettingController::class, 'updateMondayStatus']);
         Route::patch('/academic-settings/year', [AcademicSettingController::class, 'updateAcademicYear']);
@@ -266,6 +270,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/leave-requests/{id}', [LeaveRequestController::class, 'destroy']);
 
         // 9.8 Pengerjaan & Hasil Kuis
+        Route::post('/quizzes/{id}/start', [QuizController::class, 'start']);
         Route::post('/quizzes/{id}/submissions', [QuizController::class, 'submit']);
         Route::get('/quizzes/{id}/submissions/me', [QuizController::class, 'mySubmission']);
     });

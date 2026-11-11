@@ -16,7 +16,7 @@
 }
 
 .confirm-dialog__icon-wrapper--danger {
-  background-color: #FEE2E2;
+  background-color: var(--color-error-bg) ;
   color: var(--color-error);
 }
 

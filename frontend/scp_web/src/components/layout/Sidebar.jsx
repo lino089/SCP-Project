@@ -263,7 +263,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
             onClick={() => onClose?.()}
           >
             <FileQuestion size={16} strokeWidth={1.5} />
-            <span>Manajemen Kuis AI</span>
+            <span>Kuis</span>
           </NavLink>
 
           {(isKesiswaan() || isWaliKelas() || hasRole('waka')) && (
@@ -393,7 +393,7 @@ export default function Sidebar({ isOpen = false, onClose }) {
             onClick={() => onClose?.()}
           >
             <FileQuestion size={16} strokeWidth={1.5} />
-            <span>Pengerjaan Kuis AI</span>
+            <span>Kuis</span>
           </NavLink>
         </>
       );

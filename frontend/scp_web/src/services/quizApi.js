@@ -1,7 +1,7 @@
 import api from './api';
 
 /**
- * Service API untuk Modul Kuis AI (Fase 5 - Zero Mock)
+ * Service API untuk Modul Kuis (Fase 5 - Zero Mock)
  * Terhubung langsung ke endpoint RESTful QuizController Laravel & Google Gemini AIService.
  */
 
@@ -111,6 +111,10 @@ export const quizApi = {
    * Pengiriman jawaban kuis oleh Siswa (POST /api/quizzes/{id}/submissions)
    * Mengembalikan HTTP 202 Accepted untuk evaluasi asinkron
    */
+  async startQuiz(id) {
+    return await api.post(`/quizzes/${id}/start`);
+  },
+
   async submitQuiz(id, data) {
     return api.post(`/quizzes/${id}/submissions`, data);
   },

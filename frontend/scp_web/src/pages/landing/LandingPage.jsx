@@ -246,10 +246,13 @@ export default function LandingPage() {
           </nav>
 
           <div className="lp-nav__actions">
-            {isAuthenticated && <span className="lp-nav__user">{user?.name || 'Sesi aktif'}</span>}
-
-            <Button variant="primary" size="sm" icon={ArrowRight} onClick={handlePrimaryAction}>
-              {isAuthenticated ? 'Buka Dashboard' : 'Masuk'}
+            <Button
+              variant="primary"
+              size="sm"
+              icon={isAuthenticated ? undefined : ArrowRight}
+              onClick={handlePrimaryAction}
+            >
+              {isAuthenticated ? 'Dashboard' : 'Masuk'}
             </Button>
 
             <button

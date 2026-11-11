@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import './WebLayout.css';
@@ -9,6 +10,31 @@ import './WebLayout.css';
  */
 export default function WebLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { user } = useAuth();
+  const location = useLocation();
+
+  // Route Guard Focus Mode: Jika siswa memiliki sesi pengerjaan kuis aktif,
+  // tahan siswa agar tetap berada di lembar ujian (blokir akses ke rute reguler).
+  if (user?.role === 'student' && typeof window !== 'undefined') {
+    try {
+      const activeRaw = sessionStorage.getItem('scp_active_quiz_attempt');
+      if (activeRaw) {
+        const active = JSON.parse(activeRaw);
+        if (active?.quizId && active?.expiresAt) {
+          const expiresTime = new Date(active.expiresAt).getTime();
+          if (expiresTime > Date.now()) {
+            if (!location.pathname.includes(`/student/quiz/${active.quizId}/attempt`)) {
+              return <Navigate to={`/student/quiz/${active.quizId}/attempt`} replace />;
+            }
+          } else {
+            sessionStorage.removeItem('scp_active_quiz_attempt');
+          }
+        }
+      }
+    } catch {
+      // Abaikan bila parsing JSON invalid
+    }
+  }
 
   // Lock body scroll when mobile sidebar drawer is open
   useEffect(() => {

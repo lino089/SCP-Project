@@ -1,0 +1,285 @@
+/* =========================================================================
+   Dark Mode — override token & remap palet Tailwind (Tailwind v4)
+   Hanya nilai warna. Tidak ada perubahan layout/ukuran/spacing.
+   ========================================================================= */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* --- token inti --- */
+  --color-bg: #0F0F10;
+  --color-card: #1F1F23;
+  --color-on-dark: #FFFFFF;
+  --color-surface: #1F1F23;
+  --color-surface-hover: #2A2A2E;
+  --color-surface-subtle: #232327;
+  --color-border: #2E2E33;
+  --color-border-light: #26262B;
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #7C7C86;
+  --color-accent: #FFD400;
+  --color-accent-hover: #FFE14D;
+  --color-accent-text: #111111;
+  --color-success: #16A34A;
+  --color-success-bg: #0B2E1F;
+  --color-error: #F87171;
+  --color-error-bg: #2A1214;
+  --color-warning: #FBBF24;
+  --color-warning-bg: #2A2110;
+  --color-badge-blue-bg: #232327;
+  --color-badge-blue-text: #C7C7CE;
+  --color-white: #1F1F23;
+  --color-black: #F5F5F5;
+
+  /* --- remap palet Tailwind (bg-white / text-gray-900 / border-gray-200 ...) --- */
+  --color-gray-50: #232327;
+  --color-gray-100: #2A2A2E;
+  --color-gray-200: #2E2E33;
+  --color-gray-300: #3A3A40;
+  --color-gray-400: #7C7C86;
+  --color-gray-500: #A1A1AA;
+  --color-gray-600: #C7C7CE;
+  --color-gray-700: #DCDCE2;
+  --color-gray-800: #EDEDF2;
+  --color-gray-900: #F5F5F5;
+  --color-slate-50: #232327;
+  --color-slate-100: #2A2A2E;
+  --color-slate-200: #2E2E33;
+  --color-slate-300: #3A3A40;
+  --color-slate-400: #7C7C86;
+  --color-slate-500: #A1A1AA;
+  --color-slate-600: #C7C7CE;
+  --color-slate-700: #DCDCE2;
+  --color-slate-800: #EDEDF2;
+  --color-slate-900: #F5F5F5;
+  --color-zinc-50: #232327;
+  --color-zinc-100: #2A2A2E;
+  --color-zinc-200: #2E2E33;
+  --color-zinc-800: #EDEDF2;
+  --color-zinc-900: #F5F5F5;
+  --color-neutral-50: #232327;
+  --color-neutral-100: #2A2A2E;
+  --color-neutral-200: #2E2E33;
+  --color-neutral-300: #3A3A40;
+  --color-neutral-400: #7C7C86;
+  --color-neutral-500: #A1A1AA;
+  --color-neutral-600: #C7C7CE;
+  --color-neutral-700: #DCDCE2;
+  --color-neutral-800: #EDEDF2;
+  --color-neutral-900: #F5F5F5;
+  --color-blue-50: #111C2E;
+  --color-blue-100: #16263C;
+  --color-blue-600: #60A5FA;
+  --color-blue-700: #93C5FD;
+  --color-sky-50: #0C1E33;
+  --color-sky-100: #162B45;
+  --color-sky-200: #1E3A5F;
+  --color-sky-300: #2B578A;
+  --color-sky-400: #38BDF8;
+  --color-sky-500: #0EA5E9;
+  --color-sky-600: #38BDF8;
+  --color-sky-700: #7DD3FC;
+  --color-sky-800: #BAE6FD;
+  --color-sky-900: #E0F2FE;
+  --color-sky-950: #F0F9FF;
+  --color-cyan-50: #0B2228;
+  --color-cyan-100: #112E38;
+  --color-cyan-200: #18414F;
+  --color-cyan-600: #22D3EE;
+  --color-cyan-700: #67E8F9;
+  --color-cyan-800: #A5F3FC;
+  --color-cyan-900: #CFFAFE;
+  --color-cyan-950: #ECFEFF;
+  --color-emerald-50: #0B2E1F;
+  --color-emerald-100: #103827;
+  --color-emerald-500: #34D399;
+  --color-emerald-600: #4ADE80;
+  --color-emerald-700: #6EE7A8;
+  --color-amber-50: #2A2110;
+  --color-amber-100: #332813;
+  --color-amber-200: #4A3712;
+  --color-amber-300: #6B4E14;
+  --color-amber-600: #FBBF24;
+  --color-amber-700: #FCD34D;
+  --color-amber-800: #FDE68A;
+  --color-amber-900: #FEF3C7;
+  --color-red-50: #2A1214;
+  --color-red-100: #331519;
+  --color-red-200: #4C1D1F;
+  --color-red-500: #F87171;
+  --color-red-600: #F87171;
+  --color-red-700: #FCA5A5;
+  --color-rose-50: #2A1214;
+  --color-rose-100: #331519;
+  --color-rose-200: #4C1D1F;
+  --color-rose-300: #662428;
+  --color-rose-400: #FB7185;
+  --color-rose-500: #F43F5E;
+  --color-rose-600: #FB7185;
+  --color-rose-700: #FDA4AF;
+  --color-rose-800: #FECDD3;
+  --color-rose-900: #FFE4E6;
+  --color-rose-950: #FFF1F2;
+  --color-indigo-50: #16182E;
+  --color-indigo-100: #1D2240;
+  --color-indigo-200: #2A315C;
+  --color-indigo-300: #3D4880;
+  --color-indigo-600: #818CF8;
+  --color-indigo-700: #A5B4FC;
+  --color-indigo-800: #C7D2FE;
+  --color-indigo-900: #E0E7FF;
+  --color-indigo-950: #EEF2FF;
+  --color-purple-50: #1F142D;
+  --color-purple-100: #2B1B3E;
+  --color-purple-200: #3D2759;
+  --color-purple-600: #C084FC;
+  --color-purple-700: #D8B4FE;
+  --color-purple-800: #E9D5FF;
+  --color-purple-900: #F3E8FF;
+  --color-purple-950: #FAF5FF;
+  --color-violet-50: #1F142D;
+  --color-violet-100: #2B1B3E;
+  --color-violet-200: #3D2759;
+  --color-violet-600: #C084FC;
+  --color-violet-700: #D8B4FE;
+  --color-violet-800: #E9D5FF;
+  --color-violet-900: #F3E8FF;
+  --color-violet-950: #FAF5FF;
+
+  /* --- token status & state --- */
+  --color-status-success-bg: #0B2E1F;
+  --color-status-success-fg: #4ADE80;
+  --color-status-warning-bg: #2A2110;
+  --color-status-warning-fg: #FBBF24;
+  --color-status-danger-bg: #2A1214;
+  --color-status-danger-fg: #F87171;
+  --color-status-info-bg: #111C2E;
+  --color-status-info-fg: #60A5FA;
+  --color-row-selected-bg: #2A2410;
+  --color-row-hover-bg: #232327;
+  --color-disabled-fg: #4A4A52;
+  --color-placeholder: #7C7C86;
+  --color-skeleton: #26262B;
+  --color-chart-grid: #2E2E33;
+  --color-tooltip-bg: #2A2A2E;
+  --color-tooltip-fg: #F5F5F5;
+
+  /* --- neutral tokens for components & fallback safety (Dark Mode) --- */
+  --neutral-50: #232327;
+  --neutral-100: #2A2A2E;
+  --neutral-200: #2E2E33;
+  --neutral-300: #3A3A40;
+  --neutral-400: #7C7C86;
+  --neutral-500: #A1A1AA;
+  --neutral-600: #C7C7CE;
+  --neutral-700: #DCDCE2;
+  --neutral-800: #EDEDF2;
+  --neutral-900: #F5F5F5;
+  --color-status-success-border: rgba(74, 222, 128, 0.3);
+}
+
+/* Teks putih di atas tombol gelap harus tetap putih */
+[data-theme="dark"] .text-white { color: #F5F5F5; }
+[data-theme="dark"] .hover\:text-white:hover { color: #FFFFFF; }
+[data-theme="dark"] .divide-white > * + * { border-color: #2E2E33; }
+[data-theme="dark"] .border-white { border-color: #F5F5F5; }
+[data-theme="dark"] .placeholder\:text-white::placeholder { color: #7C7C86; }
+
+/* Bayangan lebih lembut di permukaan gelap */
+[data-theme="dark"] .shadow-sm,
+[data-theme="dark"] .shadow,
+[data-theme="dark"] .shadow-md { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+/* Cetak selalu terang */
+@media print {
+  [data-theme="dark"] { --color-surface: #FFFFFF; --color-surface-hover: #F3F4F6; --color-border-light: #F3F4F6; --color-text-secondary: #64748B; --color-text-muted: #94A3B8;
+  }
+}
+
+/* Landing page tetap terang (keputusan D-D) */
+[data-theme="dark"] .lp {
+  color-scheme: light; --color-card: #FFFFFF; --color-surface: #F9FAFB; --color-border: #E5E7EB; --color-border-light: #F3F4F6; --color-text-secondary: #64748B; --color-text-muted: #94A3B8; --color-gray-50: #F9FAFB; --color-gray-100: #F3F4F6;
+  --color-gray-200: #E5E7EB; --color-gray-300: #D1D5DB; --color-gray-400: #9CA3AF;
+  --color-gray-500: #6B7280; --color-gray-600: #4B5563; --color-gray-700: #374151;
+  --color-gray-800: #1F2937; --color-gray-900: #111827;
+  --color-slate-50: #F8FAFC; --color-slate-100: #F1F5F9; --color-slate-200: #E2E8F0;
+  --color-slate-300: #CBD5E1; --color-slate-400: #94A3B8; --color-slate-500: #64748B;
+  --color-slate-600: #475569; --color-slate-700: #334155; --color-slate-800: #1E293B;
+  --color-slate-900: #0F172A;
+  background-color: #FFFFFF;
+  color: #0F172A;
+}
+
+/* --- pengaman: teks di atas aksen selalu gelap --- */
+[data-theme="dark"] .bg-\[\#FFDE00\],
+[data-theme="dark"] .bg-\[\#FFDE00\] * { color: var(--color-accent-text); }
+[data-theme="dark"] .bg-\[\#FFDE00\] svg { color: var(--color-accent-text); }
+
+/* =========================================================================
+   SCOPED DARK MODE COMPONENT OVERRIDES
+   Memperbaiki kontras & warna hardcoded tanpa menyentuh Light Mode sama sekali.
+   ========================================================================= */
+
+/* --- Jadwal & Matriks Jadwal (Mengatasi Gambar Referensi 1) --- */
+[data-theme="dark"] .schedule-class-stat-badge {
+  background-color: var(--color-surface-subtle) !important;
+  color: var(--color-text-secondary) !important;
+  border-color: var(--color-border) !important;
+}
+
+[data-theme="dark"] .schedule-morning-badge--upacara {
+  background-color: rgba(251, 191, 36, 0.18) !important;
+  color: #FCD34D !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+[data-theme="dark"] .schedule-break-pill--break2 {
+  background-color: rgba(96, 165, 250, 0.15) !important;
+  color: #93C5FD !important;
+  border-color: rgba(96, 165, 250, 0.3) !important;
+}
+
+/* --- Kenaikan Kelas & Kelulusan (Mengatasi Gambar Referensi 2) --- */
+[data-theme="dark"] .promotion-cohort-note {
+  background-color: var(--color-status-info-bg) !important;
+  color: var(--color-status-info-fg) !important;
+  border-color: rgba(96, 165, 250, 0.25) !important;
+}
+
+[data-theme="dark"] .promotion-cohort-note strong {
+  color: #93C5FD !important;
+}
+
+[data-theme="dark"] .promotion-cohort-note--graduated {
+  background-color: var(--color-status-success-bg) !important;
+  color: var(--color-status-success-fg) !important;
+  border-color: rgba(74, 222, 128, 0.25) !important;
+}
+
+[data-theme="dark"] .promotion-cohort-note--graduated strong {
+  color: #4ADE80 !important;
+}
+
+[data-theme="dark"] .promotion-target-select {
+  background-color: var(--color-card) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border) !important;
+}
+
+[data-theme="dark"] .promotion-target-select option {
+  background-color: #1F1F23;
+  color: #F5F5F5;
+}
+
+/* --- Alumni Toolbar --- */
+[data-theme="dark"] .alumni-toolbar {
+  background-color: var(--color-surface-subtle) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* --- Teacher Dashboard Chart Load Track --- */
+[data-theme="dark"] .teacher-dashboard__load-track {
+  background-color: var(--color-surface-subtle) !important;
+}
+

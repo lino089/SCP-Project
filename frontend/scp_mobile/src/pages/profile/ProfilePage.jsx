@@ -8,8 +8,12 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import useTheme from '../../hooks/useTheme';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import {
   Card,
@@ -26,6 +30,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, logout, updateUserProfile, changePassword, hasRole, isKesiswaan, isWaliKelas } =
     useAuth();
+  const { theme, setTheme } = useTheme();
 
   // Email Verification State (Derived & Editable)
   const [customEmail, setCustomEmail] = useState(null);
@@ -385,6 +390,43 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-4">
+      {/* Kartu Tampilan (Light / Dark / System) */}
+      <Card>
+        <div className="space-y-3">
+          <div>
+            <h3 className="section-title">Tampilan</h3>
+            <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+              Pilih tema antarmuka. Preferensi disimpan pada perangkat ini.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: 'light', label: 'Terang', Icon: Sun },
+              { value: 'dark', label: 'Gelap', Icon: Moon },
+              { value: 'system', label: 'Sistem', Icon: Monitor },
+            ].map(({ value, label, Icon }) => {
+              const active = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value)}
+                  aria-pressed={active}
+                  className={`flex flex-col items-center gap-1.5 rounded-[var(--radius-input)] border px-2 py-2.5 text-[11px] font-semibold ${
+                    active
+                      ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-[var(--color-text-primary)]'
+                      : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                  }`}
+                >
+                  <Icon size={15} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
+
       {/* 1. Kartu Identitas Pengguna */}
       <Card
         title="Profil Pengguna"

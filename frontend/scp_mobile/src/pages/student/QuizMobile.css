@@ -1,0 +1,427 @@
+/* Mobile — Kuis Siswa: pembukaan & pengerjaan */
+
+.qm-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--topbar-height) - var(--bottom-nav-height));
+  background: var(--color-bg-app);
+  padding: 0 0 12px;
+}
+
+.qm-head,
+.qm-attempt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--page-gutter) 8px;
+}
+
+.qm-attempt-head {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: 10px;
+}
+
+.qm-back {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.qm-head h1 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.qm-head p {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+}
+
+.qm-body {
+  flex: 1;
+  padding: 8px var(--page-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.qm-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.qm-card h3 {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.qm-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.qm-muted {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.qm-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.qm-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-badge);
+  padding: 3px 7px;
+}
+
+.qm-tag--brand {
+  background: #FFFBEA;
+  border-color: #F6E7A8;
+  color: #8A6D00;
+}
+
+.qm-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.qm-info {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+}
+
+.qm-info span {
+  display: block;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.qm-info b {
+  font-size: 11px;
+  color: var(--color-text-primary);
+}
+
+.qm-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.qm-rules li {
+  position: relative;
+  padding-left: 12px;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.qm-rules li::before {
+  content: '•';
+  position: absolute;
+  left: 1px;
+  color: var(--color-brand);
+  font-weight: 800;
+}
+
+.qm-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px var(--page-gutter) calc(9px + var(--safe-area-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.qm-foot > :first-child {
+  flex: 1;
+}
+
+/* pengerjaan */
+.qm-progress {
+  height: 4px;
+  background: var(--color-border-subtle);
+  margin: 0 var(--page-gutter);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.qm-progress span {
+  display: block;
+  height: 100%;
+  background: var(--color-brand);
+  transition: width 0.2s ease;
+}
+
+.qm-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  font-weight: 600;
+  background: #FFFBEA;
+  border: 1px solid #F6E7A8;
+  color: #8A6D00;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.qm-timer--critical {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-fg);
+}
+
+.qm-qtop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qm-qnum {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.qm-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1.5px 5px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+}
+
+.qm-badge--mc {
+  background: var(--color-info-bg);
+  border-color: var(--color-info-border);
+  color: var(--color-info-fg);
+}
+
+.qm-badge--es {
+  background: #F5F3FF;
+  border-color: #E2DAFF;
+  color: #5B21B6;
+}
+
+.qm-points {
+  margin-left: auto;
+  font-family: var(--font-family-mono);
+  font-size: 9.5px;
+  color: var(--color-text-muted);
+}
+
+.qm-qtext {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+}
+
+.qm-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.qm-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: 9px 10px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.qm-option.on {
+  border-color: var(--color-brand);
+  background: #FFFDF0;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.qm-option__l {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-subtle);
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-family: var(--font-family-mono);
+  flex: 0 0 auto;
+}
+
+.qm-option.on .qm-option__l {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-inverse-text) ;
+}
+
+.qm-textarea {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  resize: vertical;
+}
+
+.qm-navbtn {
+  height: 36px;
+  min-width: 40px;
+  padding: 0 8px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  flex: 0 0 auto !important;
+}
+
+.qm-navbtn:disabled {
+  opacity: 0.45;
+}
+
+/* sheet & dialog */
+.qm-sheet {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  display: flex;
+  align-items: flex-end;
+  z-index: 50;
+}
+
+.qm-sheet__panel {
+  width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  padding: 13px var(--page-gutter) calc(16px + var(--safe-area-bottom));
+}
+
+.qm-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-size: 12.5px;
+}
+
+.qm-sheet__head button {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+}
+
+.qm-nums {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+
+.qm-num {
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.qm-num.done {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-inverse-text) ;
+}
+
+.qm-num.cur {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #000;
+}
+
+.qm-num.miss {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-fg);
+}
+
+.qm-dialog {
+  width: calc(100% - 32px);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: 14px;
+}
+
+.qm-dialog h3 {
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.qm-center {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--color-text-secondary);
+}

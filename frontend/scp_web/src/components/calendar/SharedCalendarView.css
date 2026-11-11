@@ -7,9 +7,9 @@
 
 /* Toolbar & Navigasi Bulan */
 .shared-calendar-toolbar {
-  background: #FFFFFF;
+  background: var(--color-card) ;
   padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin-bottom: 16px;
   display: flex;
@@ -39,17 +39,17 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  border: 1px solid #E2E8F0;
-  background: #FFFFFF;
-  color: #475569;
+  border: 1px solid var(--color-border);
+  background: var(--color-card) ;
+  color: var(--color-text-secondary) ;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .shared-calendar-nav-btn:hover:not(:disabled) {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-  color: #0F172A;
+  background: var(--color-surface) ;
+  border-color: var(--color-border) ;
+  color: var(--color-text-primary) ;
 }
 
 .shared-calendar-nav-btn:disabled {
@@ -62,23 +62,23 @@
   font-size: 12px;
   font-weight: 600;
   border-radius: 6px;
-  border: 1px solid #E2E8F0;
-  background: #F8FAFC;
-  color: #334155;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface) ;
+  color: var(--color-text-secondary) ;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .shared-calendar-today-btn:hover {
-  background: #F1F5F9;
-  border-color: #CBD5E1;
-  color: #0F172A;
+  background: var(--color-badge-blue-bg) ;
+  border-color: var(--color-border) ;
+  color: var(--color-text-primary) ;
 }
 
 .shared-calendar-month-title {
   font-size: 16px;
   font-weight: 700;
-  color: #1E293B;
+  color: var(--color-text-primary) ;
   margin-left: 6px;
 }
 
@@ -91,8 +91,8 @@
 
 /* Calendar Grid Wrapper */
 .shared-calendar-grid-wrapper {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: none;
@@ -101,8 +101,8 @@
 .shared-calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  background: #F8FAFC;
-  border-bottom: 1px solid #E2E8F0;
+  background: var(--color-surface) ;
+  border-bottom: 1px solid var(--color-border);
   text-align: center;
 }
 
@@ -110,10 +110,10 @@
   padding: 10px 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-secondary) ;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-right: 1px solid #E2E8F0;
+  border-right: 1px solid var(--color-border);
   box-sizing: border-box;
 }
 
@@ -122,26 +122,26 @@
 }
 
 .shared-calendar-weekday-cell--weekend {
-  color: #EF4444;
+  color: var(--color-error) ;
 }
 
 .shared-calendar-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  background: #FFFFFF;
+  background: var(--color-card) ;
   gap: 0;
 }
 
 .shared-calendar-day-cell {
-  background: #FFFFFF;
+  background: var(--color-card) ;
   min-height: 110px;
   padding: 8px;
   display: flex;
   flex-direction: column;
   transition: background-color 0.1s ease;
   position: relative;
-  border-right: 1px solid #E2E8F0;
-  border-bottom: 1px solid #E2E8F0;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   box-sizing: border-box;
 }
 
@@ -150,21 +150,21 @@
 }
 
 .shared-calendar-day-cell:hover {
-  background: #F8FAFC;
+  background: var(--color-surface) ;
 }
 
 .shared-calendar-day-cell--outside {
-  background: #FAFAFA;
-  color: #94A3B8;
+  background: var(--color-surface) ;
+  color: var(--color-text-muted) ;
 }
 
 .shared-calendar-day-cell--today {
-  background: #fffdf0;
+  background: var(--color-surface) ;
 }
 
 .shared-calendar-day-cell--today .shared-calendar-day-num {
-  background: #ffde00;
-  color: #000000;
+  background: var(--color-accent) ;
+  color: var(--color-text-primary) ;
   border-radius: 9999px;
   width: 24px;
   height: 24px;
@@ -184,11 +184,11 @@
 .shared-calendar-day-num {
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text-secondary) ;
 }
 
 .shared-calendar-day-cell--outside .shared-calendar-day-num {
-  color: #94A3B8;
+  color: var(--color-text-muted) ;
 }
 
 .shared-calendar-add-btn {
@@ -199,7 +199,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  color: #64748B;
+  color: var(--color-text-secondary) ;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -211,8 +211,8 @@
 }
 
 .shared-calendar-add-btn:hover {
-  background: #E2E8F0;
-  color: #0F172A;
+  background: var(--color-border);
+  color: var(--color-text-primary) ;
 }
 
 /* Teacher Status Tag in Calendar Day Cell */
@@ -234,15 +234,15 @@
 }
 
 .shared-calendar-teacher-pill--free {
-  background-color: #DCFCE7;
-  color: #15803D;
-  border: 1px solid #BBF7D0;
+  background-color: var(--color-success-bg) ;
+  color: var(--color-status-success-fg);
+  border: 1px solid var(--color-success);
 }
 
 .shared-calendar-teacher-pill--partial {
-  background-color: #FEF3C7;
-  color: #B45309;
-  border: 1px solid #FDE68A;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border: 1px solid var(--color-warning);
 }
 
 /* Event Chips */
@@ -275,16 +275,16 @@
 }
 
 .shared-calendar-event-chip--holiday {
-  background-color: #FEF2F2;
-  color: #991B1B;
-  border-color: #EF4444;
+  background-color: var(--color-error-bg) ;
+  color: var(--color-error) ;
+  border-color: var(--color-error);
 }
 
 .shared-calendar-event-chip--school_event,
 .shared-calendar-event-chip--class_event {
-  background-color: #FFFBEB;
-  color: #92400E;
-  border-color: #F59E0B;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border-color: var(--color-warning);
 }
 
 .shared-calendar-event-chip--exam {
@@ -301,11 +301,11 @@
   gap: 16px;
   margin-top: 14px;
   padding: 10px 14px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 .shared-calendar-legend-item {
@@ -321,11 +321,11 @@
 }
 
 .shared-calendar-legend-dot--holiday {
-  background-color: #EF4444;
+  background-color: var(--color-error);
 }
 
 .shared-calendar-legend-dot--event {
-  background-color: #F59E0B;
+  background-color: var(--color-warning);
 }
 
 .shared-calendar-legend-dot--exam {
@@ -337,7 +337,7 @@
 }
 
 .shared-calendar-legend-dot--partial {
-  background-color: #F59E0B;
+  background-color: var(--color-warning);
 }
 
 /* Mobile Scroll & Responsive Grid */

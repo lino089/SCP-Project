@@ -12,8 +12,8 @@
 
 /* Header Profil Siswa */
 .student-home__profile-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
@@ -44,14 +44,14 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background-color: #f1f5f9;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-badge-blue-bg) ;
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.125rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   flex-shrink: 0;
 }
 
@@ -65,14 +65,14 @@
 .student-home__student-name {
   font-size: 1.35rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   margin: 0;
 }
 
 .student-home__student-meta {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-top: 0.25rem;
   line-height: 1.5;
 }
@@ -81,12 +81,12 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   padding: 0.5rem 0.875rem;
   border-radius: 6px;
   font-size: 0.75rem;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 /* 4 Kartu Metrik Kehadiran */
@@ -105,8 +105,8 @@
 }
 
 .student-home__stat-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1rem 1.125rem;
   box-shadow: none;
@@ -114,7 +114,7 @@
 }
 
 .student-home__stat-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--color-border) ;
 }
 
 .student-home__stat-card--clickable {
@@ -123,7 +123,7 @@
 
 .student-home__stat-card--clickable:hover {
   background-color: #fafbfc;
-  border-color: #94a3b8;
+  border-color: var(--color-text-muted);
 }
 
 .student-home__stat-top {
@@ -136,7 +136,7 @@
 .student-home__stat-title {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -148,7 +148,7 @@
 }
 
 .student-home__stat-indicator--hadir {
-  background-color: #10b981;
+  background-color: var(--color-success);
 }
 
 .student-home__stat-indicator--sakit {
@@ -156,11 +156,11 @@
 }
 
 .student-home__stat-indicator--izin {
-  background-color: #f59e0b;
+  background-color: var(--color-warning);
 }
 
 .student-home__stat-indicator--alpa {
-  background-color: #ef4444;
+  background-color: var(--color-error);
 }
 
 .student-home__stat-body {
@@ -172,19 +172,19 @@
 .student-home__stat-value {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   line-height: 1;
 }
 
 .student-home__stat-unit {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--color-text-muted) ;
   font-weight: 500;
 }
 
 .student-home__stat-desc {
   font-size: 0.6875rem;
-  color: #94a3b8;
+  color: var(--color-text-muted) ;
   margin-top: 0.35rem;
 }
 
@@ -203,8 +203,8 @@
 }
 
 .student-home__action-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1rem 1.125rem;
   display: flex;
@@ -217,8 +217,8 @@
 }
 
 .student-home__action-card:hover {
-  border-color: #cbd5e1;
-  background-color: #f8fafc;
+  border-color: var(--color-border) ;
+  background-color: var(--color-surface) ;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
@@ -239,25 +239,25 @@
 }
 
 .student-home__action-icon--yellow {
-  background-color: #fef9c3;
-  color: #854d0e;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-status-warning-fg);
 }
 
 .student-home__action-icon--slate {
-  background-color: #f1f5f9;
-  color: #334155;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-secondary) ;
 }
 
 .student-home__action-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   display: block;
 }
 
 .student-home__action-subtitle {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   display: block;
   margin-top: 0.125rem;
 }
@@ -278,8 +278,8 @@
 
 /* Section Card Container */
 .student-home__section-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -291,13 +291,13 @@
   justify-content: space-between;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
 }
 
 .student-home__section-title {
   font-size: 1rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -307,7 +307,7 @@
 .student-home__section-badge {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-secondary) ;
 }
 
 /* Timeline Jadwal Pelajaran */
@@ -323,19 +323,19 @@
   gap: 1rem;
   padding: 0.875rem;
   border-radius: 6px;
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--color-surface-hover);
   background-color: #fafbfc;
   transition: all 0.15s ease;
 }
 
 .student-home__schedule-item:hover {
-  background-color: #ffffff;
-  border-color: #e2e8f0;
+  background-color: var(--color-card) ;
+  border-color: var(--color-border) ;
 }
 
 .student-home__schedule-item--active {
-  background-color: #fffbeb;
-  border-color: #fde68a;
+  background-color: var(--color-warning-bg) ;
+  border-color: var(--color-warning) ;
 }
 
 .student-home__time-col {
@@ -347,12 +347,12 @@
 .student-home__time-slot {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .student-home__period-num {
   font-size: 0.6875rem;
-  color: #94a3b8;
+  color: var(--color-text-muted) ;
   margin-top: 0.125rem;
 }
 
@@ -363,21 +363,21 @@
 .student-home__subject-name {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   line-height: 1.35;
 }
 
 .student-home__teacher-name {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-top: 0.25rem;
 }
 
 .student-home__room-badge {
   font-size: 0.6875rem;
   font-weight: 600;
-  color: #475569;
-  background-color: #f1f5f9;
+  color: var(--color-text-secondary) ;
+  background-color: var(--color-badge-blue-bg) ;
   border-radius: 4px;
   padding: 0.125rem 0.375rem;
   display: inline-block;
@@ -392,15 +392,15 @@
 }
 
 .student-home__quiz-item {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.875rem 1rem;
   transition: all 0.15s ease;
 }
 
 .student-home__quiz-item:hover {
-  border-color: #0f172a;
+  border-color: var(--color-text-primary);
 }
 
 .student-home__quiz-head {
@@ -414,14 +414,14 @@
 .student-home__quiz-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   line-height: 1.35;
   margin: 0;
 }
 
 .student-home__quiz-meta {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-bottom: 0.625rem;
 }
 
@@ -430,7 +430,7 @@
   align-items: center;
   justify-content: space-between;
   padding-top: 0.5rem;
-  border-top: 1px dashed #f1f5f9;
+  border-top: 1px dashed var(--color-surface-hover);
 }
 
 .student-home__quiz-due {
@@ -438,7 +438,7 @@
   align-items: center;
   gap: 0.25rem;
   font-size: 0.6875rem;
-  color: #dc2626;
+  color: var(--color-error) ;
   font-weight: 600;
 }
 
@@ -446,7 +446,7 @@
 .student-home__empty-widget {
   padding: 2rem 1rem;
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-muted) ;
 }
 
 .student-home__empty-icon {
@@ -456,19 +456,19 @@
 
 .student-home__empty-text {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   line-height: 1.5;
   margin: 0;
 }
 
 /* Motivational Learning Quote Box */
 .student-home__quote-box {
-  background-color: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-left: 4px solid #ffde00;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -479,8 +479,8 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background-color: #fef9c3;
-  color: #854d0e;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-status-warning-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -490,14 +490,14 @@
 .student-home__quote-content h4 {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   margin: 0 0 0.25rem;
   letter-spacing: -0.01em;
 }
 
 .student-home__quote-content p {
   font-size: 0.8125rem;
-  color: #4b5563;
+  color: var(--color-text-secondary) ;
   line-height: 1.5;
   margin: 0;
 }

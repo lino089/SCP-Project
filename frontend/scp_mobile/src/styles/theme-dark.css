@@ -1,0 +1,113 @@
+/* Dark Mode — mobile. Hanya nilai warna. */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg-app: #0F0F10;
+  --color-surface: #1F1F23;
+  --color-surface-subtle: #232327;
+  --color-surface-hover: #2A2A2E;
+  --color-zebra: #232327;
+  --color-border-subtle: #2E2E33;
+  --color-border-strong: #3A3A40;
+  --color-border-light: #26262B;
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #7C7C86;
+
+  --color-brand: #FFD400;
+  --color-brand-strong: #FFE14D;
+  --color-brand-pressed: #E6C800;
+  --color-brand-text: #111111;
+  --color-brand-soft: rgba(255, 212, 0, 0.14);
+
+  --color-action: #3B82F6;
+  --color-action-hover: #60A5FA;
+  --color-action-soft: rgba(59, 130, 246, 0.14);
+  --color-action-border: rgba(59, 130, 246, 0.32);
+  --color-action-text: #FFFFFF;
+  --color-inverse-text: #0F0F10;
+
+  --color-danger-strong: #F87171;
+  --color-success-strong: #4ADE80;
+  --color-success-fg: #4ADE80;
+  --color-success-bg: #0B2E1F;
+  --color-success-border: #14532D;
+  --color-danger-fg: #F87171;
+  --color-danger-bg: #2A1214;
+  --color-danger-border: #4C1D1F;
+  --color-warning-fg: #FBBF24;
+  --color-warning-bg: #2A2110;
+  --color-warning-border: #4A3712;
+  --color-info-fg: #60A5FA;
+  --color-info-bg: #111C2E;
+  --color-info-border: #1E3A5F;
+  --color-neutral-fg: #A1A1AA;
+  --color-neutral-bg: #2A2A2E;
+  --color-neutral-border: #2E2E33;
+  --color-overlay: rgba(0, 0, 0, 0.62);
+  --color-overlay-soft: rgba(0, 0, 0, 0.45);
+
+  /* --- neutral tokens for components & fallback safety (Dark Mode) --- */
+  --neutral-50: #232327;
+  --neutral-100: #2A2A2E;
+  --neutral-200: #2E2E33;
+  --neutral-300: #3A3A40;
+  --neutral-400: #7C7C86;
+  --neutral-500: #A1A1AA;
+  --neutral-600: #C7C7CE;
+  --neutral-700: #DCDCE2;
+  --neutral-800: #EDEDF2;
+  --neutral-900: #F5F5F5;
+
+  /* remap palet Tailwind */
+  --color-white: #1F1F23;
+  --color-gray-50: #232327; --color-gray-100: #2A2A2E; --color-gray-200: #2E2E33;
+  --color-gray-300: #3A3A40; --color-gray-400: #7C7C86; --color-gray-500: #A1A1AA;
+  --color-gray-600: #C7C7CE; --color-gray-700: #DCDCE2; --color-gray-800: #EDEDF2;
+  --color-gray-900: #F5F5F5;
+  --color-slate-50: #232327; --color-slate-100: #2A2A2E; --color-slate-200: #2E2E33;
+  --color-slate-300: #3A3A40; --color-slate-400: #7C7C86; --color-slate-500: #A1A1AA;
+  --color-slate-600: #C7C7CE; --color-slate-700: #DCDCE2; --color-slate-800: #EDEDF2;
+  --color-slate-900: #F5F5F5;
+  --color-zinc-50: #232327; --color-zinc-100: #2A2A2E; --color-zinc-200: #2E2E33;
+  --color-zinc-800: #EDEDF2; --color-zinc-900: #F5F5F5;
+  --color-neutral-50: #232327; --color-neutral-100: #2A2A2E; --color-neutral-200: #2E2E33;
+  --color-neutral-300: #3A3A40; --color-neutral-400: #7C7C86; --color-neutral-500: #A1A1AA;
+  --color-neutral-600: #C7C7CE; --color-neutral-700: #DCDCE2; --color-neutral-800: #EDEDF2;
+  --color-neutral-900: #F5F5F5;
+  --color-emerald-50: #0B2E1F; --color-emerald-600: #4ADE80;
+  --color-amber-50: #2A2110; --color-amber-700: #FCD34D;
+  --color-red-50: #2A1214; --color-red-600: #F87171;
+  --color-blue-50: #111C2E; --color-blue-600: #60A5FA;
+  --color-sky-50: #0C1E33; --color-sky-200: #1E3A5F; --color-sky-600: #38BDF8; --color-sky-700: #7DD3FC;
+  --color-cyan-50: #0B2228; --color-cyan-600: #22D3EE; --color-cyan-700: #67E8F9;
+  --color-rose-50: #2A1214; --color-rose-200: #4C1D1F; --color-rose-600: #FB7185; --color-rose-700: #FDA4AF;
+  --color-indigo-50: #16182E; --color-indigo-600: #818CF8; --color-indigo-700: #A5B4FC;
+  --color-purple-50: #1F142D; --color-purple-600: #C084FC; --color-purple-700: #D8B4FE;
+}
+
+[data-theme="dark"] .text-white { color: #F5F5F5; }
+
+/* =========================================================================
+   SCOPED DARK MODE COMPONENT OVERRIDES (Mobile)
+   ========================================================================= */
+
+/* Quiz Mobile Tags & Option Highlights */
+[data-theme="dark"] .qm-tag--brand,
+[data-theme="dark"] .qm-timer {
+  background: var(--color-warning-bg) !important;
+  border-color: var(--color-warning-border) !important;
+  color: var(--color-warning-fg) !important;
+}
+
+[data-theme="dark"] .qm-badge--es {
+  background: rgba(168, 85, 247, 0.15) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  color: #C084FC !important;
+}
+
+[data-theme="dark"] .qm-option.on {
+  background: rgba(255, 212, 0, 0.08) !important;
+  border-color: var(--color-brand) !important;
+}

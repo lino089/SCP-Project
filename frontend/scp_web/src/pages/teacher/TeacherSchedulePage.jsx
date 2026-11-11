@@ -59,7 +59,7 @@ export default function TeacherSchedulePage() {
   // Settings & System Config
   const [activeCycleSetting, setActiveCycleSetting] = useState(() => Number(user?.active_cycle || 1));
   const [selectedCycle, setSelectedCycle] = useState(() => Number(user?.active_cycle || 1));
-  const [mondayIsUpacara, setMondayIsUpacara] = useState(true);
+  const [mondayIsUpacara, setMondayIsUpacara] = useState(() => (typeof user?.monday_is_upacara === 'boolean' ? user.monday_is_upacara : true));
   const [periodTemplates, setPeriodTemplates] = useState([]);
 
   // Filter States
@@ -81,15 +81,16 @@ export default function TeacherSchedulePage() {
   const fetchSettings = useCallback(async () => {
     try {
       const setRes = await academicSettingApi.getSettings();
-      if (setRes?.data) {
-        if (setRes.data.active_cycle) {
-          setActiveCycleSetting(Number(setRes.data.active_cycle));
+      const sData = setRes?.data || setRes;
+      if (sData) {
+        if (sData.active_cycle) {
+          setActiveCycleSetting(Number(sData.active_cycle));
         }
-        if (typeof setRes.data.monday_is_upacara === 'boolean') {
-          setMondayIsUpacara(setRes.data.monday_is_upacara);
+        if (typeof sData.monday_is_upacara === 'boolean') {
+          setMondayIsUpacara(sData.monday_is_upacara);
         }
-        if (Array.isArray(setRes.data.period_templates)) {
-          setPeriodTemplates(setRes.data.period_templates);
+        if (Array.isArray(sData.period_templates)) {
+          setPeriodTemplates(sData.period_templates);
         }
       }
 
@@ -104,8 +105,11 @@ export default function TeacherSchedulePage() {
       if (user?.active_cycle) {
         setActiveCycleSetting(Number(user.active_cycle));
       }
+      if (typeof user?.monday_is_upacara === 'boolean') {
+        setMondayIsUpacara(user.monday_is_upacara);
+      }
     }
-  }, [user?.active_cycle]);
+  }, [user?.active_cycle, user?.monday_is_upacara]);
 
   // Ambil daftar perizinan mengajar guru dari backend
   const fetchTeacherLeaves = useCallback(async () => {

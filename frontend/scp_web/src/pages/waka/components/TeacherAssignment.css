@@ -21,8 +21,8 @@
 }
 
 .assignment-stat-card {
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px 20px;
   display: flex;
@@ -33,7 +33,7 @@
 }
 
 .assignment-stat-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--color-border) ;
 }
 
 .assignment-stat-icon {
@@ -47,23 +47,23 @@
 }
 
 .assignment-stat-icon--primary {
-  background-color: #eff6ff;
-  color: #2563eb;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-badge-blue-text) ;
 }
 
 .assignment-stat-icon--success {
-  background-color: #ecfdf5;
-  color: #059669;
+  background-color: var(--color-success-bg) ;
+  color: var(--color-success) ;
 }
 
 .assignment-stat-icon--warning {
-  background-color: #fffbeb;
-  color: #d97706;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
 }
 
 .assignment-stat-icon--info {
-  background-color: #f5f3ff;
-  color: #7c3aed;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-status-info-fg);
 }
 
 .assignment-stat-content {
@@ -74,14 +74,14 @@
 .assignment-stat-value {
   font-size: 1.625rem;
   font-weight: 700;
-  color: #111827;
+  color: var(--color-text-primary) ;
   line-height: 1.2;
 }
 
 .assignment-stat-label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--color-text-muted) ;
   margin-top: 2px;
 }
 
@@ -117,11 +117,11 @@
   gap: 4px;
   font-size: 0.75rem;
   font-style: italic;
-  color: #9ca3af;
-  background-color: #f3f4f6;
+  color: var(--color-text-muted) ;
+  background-color: var(--color-surface-hover) ;
   padding: 2px 8px;
   border-radius: 6px;
-  border: 1px dashed #d1d5db;
+  border: 1px dashed var(--color-border);
 }
 
 .assignment-teacher-cell {
@@ -133,13 +133,13 @@
 .assignment-teacher-name {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text-primary) ;
 }
 
 .assignment-teacher-nip {
   font-size: 0.6875rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #6b7280;
+  color: var(--color-text-muted) ;
 }
 
 .assignment-kesiswaan-badge-list {
@@ -151,8 +151,8 @@
 .assignment-kesiswaan-badge {
   display: inline-flex;
   flex-direction: column;
-  background-color: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background-color: var(--color-status-success-bg);
+  border: 1px solid var(--color-success);
   border-radius: 6px;
   padding: 3px 8px;
 }
@@ -165,8 +165,8 @@
 }
 
 .assignment-edit-class-header {
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px 16px;
   display: flex;
@@ -177,7 +177,7 @@
 .assignment-section-header {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
   margin-bottom: 8px;
   display: flex;
   align-items: center;
@@ -186,14 +186,14 @@
 
 .assignment-helper-text {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin-top: 4px;
 }
 
 .assignment-warning-pill {
   font-size: 0.6875rem;
-  color: #b45309;
-  background-color: #fef3c7;
+  color: var(--color-warning) ;
+  background-color: var(--color-warning-bg) ;
   padding: 2px 6px;
   border-radius: 4px;
   margin-left: 6px;
@@ -207,23 +207,23 @@
 }
 
 .import-dropzone {
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--color-border);
   border-radius: 12px;
   padding: 36px 20px;
   text-align: center;
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .import-dropzone:hover {
-  border-color: #94a3b8;
-  background-color: #f8fafc;
+  border-color: var(--color-text-muted);
+  background-color: var(--color-surface) ;
 }
 
 .import-dropzone--active {
-  border-color: #ffde00;
-  background-color: #fffdf0;
+  border-color: var(--color-accent) ;
+  background-color: var(--color-surface) ;
 }
 
 .import-summary-banner {
@@ -247,32 +247,32 @@
 }
 
 .import-summary-item--total {
-  background-color: #f1f5f9;
-  border-color: #cbd5e1;
+  background-color: var(--color-badge-blue-bg) ;
+  border-color: var(--color-border) ;
 }
 
 .import-summary-item--exact {
-  background-color: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #065f46;
+  background-color: var(--color-success-bg) ;
+  border-color: var(--color-success) ;
+  color: var(--color-success) ;
 }
 
 .import-summary-item--fuzzy {
-  background-color: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
+  background-color: var(--color-warning-bg) ;
+  border-color: var(--color-warning) ;
+  color: var(--color-warning) ;
 }
 
 .import-summary-item--notfound {
-  background-color: #fef2f2;
-  border-color: #fecaca;
-  color: #991b1b;
+  background-color: var(--color-error-bg) ;
+  border-color: var(--color-error) ;
+  color: var(--color-error) ;
 }
 
 .import-table-container {
   max-height: 440px;
   overflow-y: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
 }
 
@@ -283,12 +283,12 @@
 }
 
 .import-table th {
-  background-color: #f8fafc;
-  color: #475569;
+  background-color: var(--color-surface) ;
+  color: var(--color-text-secondary) ;
   font-weight: 600;
   text-align: left;
   padding: 10px 12px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -296,20 +296,20 @@
 
 .import-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-hover);
   vertical-align: middle;
 }
 
 .import-table tr:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
 }
 
 .import-row--exact {
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
 }
 
 .import-row--fuzzy {
-  background-color: #fffdf5;
+  background-color: var(--color-status-warning-bg);
 }
 
 .import-row--notfound {
@@ -327,18 +327,18 @@
 }
 
 .import-status-tag--exact {
-  background-color: #d1fae5;
-  color: #065f46;
+  background-color: var(--color-success-bg) ;
+  color: var(--color-success) ;
 }
 
 .import-status-tag--fuzzy {
-  background-color: #fef3c7;
-  color: #92400e;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
 }
 
 .import-status-tag--notfound {
-  background-color: #fee2e2;
-  color: #991b1b;
+  background-color: var(--color-error-bg) ;
+  color: var(--color-error) ;
 }
 
 /* 6. Section Partitioning & Unified Dropdown Controls */
@@ -356,61 +356,61 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .import-section-header--incomplete {
-  background-color: #fef3c7;
-  color: #92400e;
-  border-color: #fde68a;
+  background-color: var(--color-warning-bg) ;
+  color: var(--color-warning) ;
+  border-color: var(--color-warning) ;
 }
 
 .import-section-header--complete {
-  background-color: #f1f5f9;
-  color: #475569;
-  border-color: #e2e8f0;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-secondary) ;
+  border-color: var(--color-border) ;
 }
 
 .import-row--incomplete {
-  background-color: #fffdf5;
-  border-left: 3px solid #f59e0b;
+  background-color: var(--color-status-warning-bg);
+  border-left: 3px solid var(--color-warning);
 }
 
 .import-row--incomplete:hover {
-  background-color: #fffbeb;
+  background-color: var(--color-warning-bg) ;
 }
 
 .import-row--complete {
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
 }
 
 .import-row--complete:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-surface) ;
 }
 
 .import-select-control {
   font-size: 0.75rem;
   padding: 6px 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background-color: #ffffff;
+  background-color: var(--color-card) ;
   width: 100%;
   max-width: 320px;
   outline: none;
   font-weight: 500;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
   transition: all 0.15s ease;
 }
 
 .import-select-control:focus {
-  border-color: #ffde00;
+  border-color: var(--color-accent) ;
   box-shadow: 0 0 0 1px #ffde00;
 }
 
 .import-select-control--error {
-  border-color: #f59e0b;
-  background-color: #fffdf5;
+  border-color: var(--color-warning);
+  background-color: var(--color-status-warning-bg);
 }
 
 .import-select-control--error:focus {

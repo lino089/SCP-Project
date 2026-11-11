@@ -31,7 +31,7 @@
 .student-schedule__title-group h1 {
   font-size: clamp(18px, 4.3vw, 24px);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -39,7 +39,7 @@
 
 .student-schedule__subtitle {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   margin: 0.35rem 0 0;
   line-height: 1.5;
 }
@@ -60,8 +60,8 @@
 
 .schedule-detail-hero {
   padding: 14px 16px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--color-surface) ;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -72,7 +72,7 @@
 .schedule-detail-subject {
   font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text-primary) ;
 }
 
 .schedule-detail-grid {
@@ -89,8 +89,8 @@
 
 .schedule-detail-item {
   padding: 10px 14px;
-  background-color: #ffffff;
-  border: 1px solid #f1f5f9;
+  background-color: var(--color-card) ;
+  border: 1px solid var(--color-surface-hover);
   border-radius: 6px;
   display: flex;
   flex-direction: column;
@@ -100,7 +100,7 @@
 .schedule-detail-label {
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-text-secondary) ;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -108,5 +108,5 @@
 .schedule-detail-value {
   font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary) ;
 }

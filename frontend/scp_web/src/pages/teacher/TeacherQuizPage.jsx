@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Sparkles,
@@ -26,20 +27,17 @@ import {
   Modal,
   Table,
   Tabs,
-  FileUpload,
   ConfirmDialog,
 } from '../../components/shared';
 import './TeacherQuiz.css';
 
 export default function TeacherQuizPage() {
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
   const [classList, setClassList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'published' | 'draft_review'
 
-  // Modals state
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
   const [isSubmissionDetailOpen, setIsSubmissionDetailOpen] = useState(false);
@@ -63,35 +61,9 @@ export default function TeacherQuizPage() {
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
 
-  // New Quiz Form State
-  const [createForm, setCreateForm] = useState({
-    title: '',
-    class_id: '',
-    class_name: '',
-    selected_class_ids: [],
-    due_date: '',
-    max_attempts: '2',
-  });
 
-  // Generator Method Tab: 'prompt' | 'document' | 'manual'
-  const [genMethod, setGenMethod] = useState('prompt');
 
-  // Prompt Form State (Metode 1)
-  const [promptForm, setPromptForm] = useState({
-    prompt: '',
-    total_questions: '5',
-    question_types: 'combination', // 'multiple_choice' | 'essay' | 'combination'
-    mc_count: '3',
-    essay_count: '2',
-    difficulty: 'sedang',
-    teacher_notes: '',
-  });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [genProgressMsg, setGenProgressMsg] = useState('');
 
-  // Document Upload State (Metode 2)
-  const [uploadedDoc, setUploadedDoc] = useState(null);
-  const [isExtracting, setIsExtracting] = useState(false);
 
   // Manual Question Form State (Metode 3)
   const [manualForm, setManualForm] = useState({
@@ -174,215 +146,7 @@ export default function TeacherQuizPage() {
     return quizzes.filter((q) => q.status === activeTab);
   }, [quizzes, activeTab]);
 
-  // Validation for Prompt Form Composition
-  const promptCompositionError = useMemo(() => {
-    const total = parseInt(promptForm.total_questions, 10) || 0;
-    const mc = parseInt(promptForm.mc_count, 10) || 0;
-    const essay = parseInt(promptForm.essay_count, 10) || 0;
-
-    if (total <= 0) return 'Total jumlah soal minimal 1.';
-
-    if (promptForm.question_types === 'multiple_choice') {
-      if (mc !== total) return `Pada jenis Pilihan Ganda, jumlah soal PG harus sama dengan total (${total}).`;
-    } else if (promptForm.question_types === 'essay') {
-      if (essay !== total) return `Pada jenis Esai, jumlah soal Esai harus sama dengan total (${total}).`;
-    } else if (promptForm.question_types === 'combination') {
-      if (mc <= 0 || essay <= 0) return 'Pada soal kombinasi, butir PG dan Esai masing-masing minimal 1.';
-      if (mc + essay !== total) {
-        return `Penjumlahan PG (${mc}) + Esai (${essay}) = ${mc + essay}, wajib sama persis dengan Total Soal (${total}).`;
-      }
-    }
-    return '';
-  }, [promptForm]);
-
   // --- HANDLERS ---
-
-  // 1. Inisialisasi Kuis Baru
-  const handleOpenCreateModal = () => {
-    if (classOptions.length === 0) {
-      showToast('Anda belum memiliki jadwal mengajar aktif yang terdaftar. Hubungi Waka Kurikulum.', 'error');
-      return;
-    }
-    const defaultClassId = classOptions[0]?.value || '';
-    setCreateForm({
-      title: '',
-      class_id: defaultClassId,
-      class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
-      selected_class_ids: defaultClassId ? [defaultClassId] : [],
-      due_date: todayLocalISO(new Date(Date.now() + 7 * 86400000)),
-      max_attempts: '2',
-    });
-    setIsCreateModalOpen(true);
-  };
-
-  const handleCreateQuizSubmit = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!createForm.title.trim()) {
-      showToast('Judul kuis wajib diisi.', 'error');
-      return;
-    }
-    const selectedClasses = createForm.selected_class_ids?.length > 0 
-      ? createForm.selected_class_ids 
-      : createForm.class_id ? [createForm.class_id] : [];
-
-    if (selectedClasses.length === 0) {
-      showToast('Pilih minimal satu kelas target yang Anda ajar.', 'error');
-      return;
-    }
-
-    try {
-      const payload = {
-        title: createForm.title.trim(),
-        class_id: selectedClasses[0],
-        class_ids: selectedClasses,
-        due_date: createForm.due_date,
-        max_attempts: Number(createForm.max_attempts) || 1,
-      };
-
-      const res = await quizApi.createQuiz(payload);
-      const quizObj = res?.data || res;
-      if (quizObj && (quizObj.id || quizObj.title)) {
-        quizObj.target_class_ids = res?.target_class_ids || selectedClasses;
-        setQuizzes((prev) => [quizObj, ...prev.filter((q) => q.id !== quizObj.id)]);
-        setCurrentQuiz(quizObj);
-        setIsCreateModalOpen(false);
-        showToast('Kuis berhasil dibuat dalam status Draft Review.', 'success');
-        // Langsung buka opsi generator soal
-        setIsGenModalOpen(true);
-      }
-    } catch (err) {
-      showToast(err.message || err.response?.data?.message || 'Gagal membuat kuis baru.', 'error');
-    }
-  };
-
-  // Polling ringan untuk generator soal AI jika diproses asinkron di queue backend
-  const pollForQuizQuestions = async (quizId, maxAttempts = 15, delayMs = 1500) => {
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const qRes = await quizApi.getQuizQuestions(quizId);
-        const raw = qRes?.data?.questions || qRes?.data || qRes?.questions || [];
-        const questionsList = Array.isArray(raw) ? raw : (raw?.questions || []);
-        if (Array.isArray(questionsList) && questionsList.length > 0) {
-          return questionsList;
-        }
-      } catch {
-        // Abaikan error sementara saat antrean sedang menulis ke database
-      }
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-    try {
-      const finalRes = await quizApi.getQuizQuestions(quizId);
-      const rawFinal = finalRes?.data?.questions || finalRes?.data || finalRes?.questions || [];
-      const finalList = Array.isArray(rawFinal) ? rawFinal : (rawFinal?.questions || []);
-      return Array.isArray(finalList) ? finalList : [];
-    } catch {
-      return [];
-    }
-  };
-
-  // 2. Generator Metode 1: Prompt AI
-  const handleGeneratePromptSubmit = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (promptCompositionError) {
-      showToast(promptCompositionError, 'error');
-      return;
-    }
-    if (!promptForm.prompt.trim()) {
-      showToast('Instruksi materi prompt wajib diisi.', 'error');
-      return;
-    }
-
-    setIsGenerating(true);
-    setGenProgressMsg('Mengirim instruksi prompt ke Google AI Studio (Model: Gemini 3.1 Flash Lite)...');
-
-    try {
-      const payload = {
-        prompt: promptForm.prompt,
-        total_questions: parseInt(promptForm.total_questions, 10),
-        question_types: promptForm.question_types,
-        mc_count: parseInt(promptForm.mc_count, 10),
-        essay_count: parseInt(promptForm.essay_count, 10),
-        difficulty: promptForm.difficulty,
-        additional_notes: promptForm.teacher_notes,
-      };
-
-      setGenProgressMsg('Menerima respons pemrosesan. Menyiapkan butir soal...');
-      const res = await quizApi.generatePrompt(currentQuiz.id, payload);
-
-      if (res?.status === 202 || res?.success || res?.data) {
-        // Cek apakah soal langsung dikembalikan dalam payload response
-        const directQuestions = Array.isArray(res?.data?.questions) ? res.data.questions : null;
-        let questionsList = directQuestions && directQuestions.length > 0 ? directQuestions : null;
-
-        if (!questionsList) {
-          setGenProgressMsg('Menyusun butir soal dari AI ke dalam skema kuis...');
-          questionsList = await pollForQuizQuestions(currentQuiz.id);
-        }
-
-        if (Array.isArray(questionsList) && questionsList.length > 0) {
-          setQuizQuestions(questionsList);
-          setIsGenModalOpen(false);
-          setIsPreviewModalOpen(true);
-          loadData();
-          showToast('Soal kuis berhasil dihasilkan oleh AI! Silakan review sebelum dipublikasikan.', 'success');
-        } else {
-          loadData();
-          showToast('AI tidak menghasilkan butir soal atau proses belum selesai. Silakan periksa status kuis atau coba lagi.', 'error');
-        }
-      }
-    } catch (err) {
-      showToast(err.message || err.response?.data?.message || 'Gagal memproses prompt AI.', 'error');
-    } finally {
-      setIsGenerating(false);
-      setGenProgressMsg('');
-    }
-  };
-
-  // 3. Generator Metode 2: Ekstraksi Dokumen PDF/TXT
-  const handleExtractDocumentSubmit = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!uploadedDoc) {
-      showToast('Harap pilih berkas PDF atau TXT materi terlebih dahulu.', 'error');
-      return;
-    }
-
-    setIsExtracting(true);
-    setGenProgressMsg('Mengunggah dokumen dan memicu ekstraksi AI...');
-    try {
-      const formData = new FormData();
-      formData.append('document', uploadedDoc);
-      formData.append('file', uploadedDoc);
-
-      const res = await quizApi.extractDocument(currentQuiz.id, formData);
-      if (res?.status === 202 || res?.success || res?.data) {
-        const directQuestions = Array.isArray(res?.data?.questions) ? res.data.questions : null;
-        let questionsList = directQuestions && directQuestions.length > 0 ? directQuestions : null;
-
-        if (!questionsList) {
-          setGenProgressMsg('Mengekstrak butir soal materi via AI...');
-          questionsList = await pollForQuizQuestions(currentQuiz.id);
-        }
-
-        if (Array.isArray(questionsList) && questionsList.length > 0) {
-          setQuizQuestions(questionsList);
-          setIsGenModalOpen(false);
-          setIsPreviewModalOpen(true);
-          loadData();
-          showToast('Dokumen berhasil diekstrak oleh AI! Periksa butir soal yang memerlukan peninjauan.', 'success');
-        } else {
-          loadData();
-          showToast('AI tidak dapat mengekstrak soal dari dokumen atau format dokumen tidak sesuai.', 'error');
-        }
-      }
-    } catch (err) {
-      showToast(err.message || err.response?.data?.message || 'Gagal mengekstrak dokumen materi.', 'error');
-    } finally {
-      setIsExtracting(false);
-      setGenProgressMsg('');
-    }
-  };
 
   // 4. Generator Metode 3: Tambah Soal Manual
   const handleOpenManualQuestionModal = () => {
@@ -676,7 +440,7 @@ export default function TeacherQuizPage() {
     setCurrentQuiz(quiz);
     try {
       const res = await quizApi.getQuizSubmissions(quiz.id);
-      const subsList = res?.data || res;
+      const subsList = res?.data?.submissions || res?.data || (Array.isArray(res) ? res : []);
       setSubmissions(Array.isArray(subsList) ? subsList : []);
       setIsSubmissionsModalOpen(true);
     } catch (err) {
@@ -687,13 +451,13 @@ export default function TeacherQuizPage() {
   const handleOpenSubmissionDetail = (sub) => {
     setSelectedSubmission(sub);
     setOverrideScore(String(sub.score ?? sub.ai_score ?? sub.final_score ?? '0'));
-    setOverrideFeedback(sub.teacher_feedback || '');
+    setOverrideFeedback(sub.teacher_feedback || sub.ai_feedback || '');
     setIsSubmissionDetailOpen(true);
   };
 
   const handleSaveOverrideScore = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const scoreNum = parseInt(overrideScore, 10);
+    const scoreNum = parseFloat(overrideScore);
     if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 100) {
       showToast('Skor override harus berupa angka antara 0 hingga 100.', 'error');
       return;
@@ -703,13 +467,30 @@ export default function TeacherQuizPage() {
     try {
       const res = await quizApi.overrideSubmission(selectedSubmission.id, {
         score: scoreNum,
+        feedback: overrideFeedback,
         teacher_feedback: overrideFeedback,
       });
       const updatedSub = res?.data || res;
       if (updatedSub) {
-        setSelectedSubmission(updatedSub);
+        setSelectedSubmission((prev) => ({
+          ...prev,
+          ...updatedSub,
+          ai_score: scoreNum,
+          teacher_feedback: overrideFeedback,
+          is_overridden: true,
+        }));
         setSubmissions((prev) =>
-          prev.map((s) => (s.id === selectedSubmission.id ? { ...s, ...updatedSub } : s))
+          prev.map((s) =>
+            s.id === selectedSubmission.id
+              ? {
+                  ...s,
+                  ...updatedSub,
+                  ai_score: scoreNum,
+                  teacher_feedback: overrideFeedback,
+                  is_overridden: true,
+                }
+              : s
+          )
         );
         showToast('Nilai dan umpan balik berhasil di-override oleh Guru.', 'success');
       }
@@ -874,13 +655,13 @@ export default function TeacherQuizPage() {
           )}
           {row.status === 'draft_review' && (
             <Button
-              variant="secondary"
+              variant="primary"
               size="sm"
               icon={Sparkles}
-              onClick={() => handleOpenPreviewModal(row)}
-              title="Kurasi &amp; Tinjau Butir Soal"
+              onClick={() => navigate(`/teacher/quiz/create?id=${row.id}`)}
+              title="Lanjutkan pembuatan kuis di halaman penuh"
             >
-              Review Soal
+              Lanjutkan
             </Button>
           )}
           {(row.status === 'published' || row.status === 'published_result') && (
@@ -942,11 +723,24 @@ export default function TeacherQuizPage() {
     {
       key: 'submittedAt',
       label: 'Waktu Pengumpulan',
-      renderCell: (row) => (
-        <span className="text-xs font-mono text-slate-600">
-          {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
-        </span>
-      ),
+      renderCell: (row) => {
+        if (row.formatted_submitted_at) {
+          return <span className="text-xs font-mono text-slate-700">{row.formatted_submitted_at}</span>;
+        }
+        const dateStr = row.submitted_at || row.created_at;
+        if (!dateStr) return <span className="text-xs font-mono text-slate-400">-</span>;
+        const d = new Date(dateStr);
+        return (
+          <span className="text-xs font-mono text-slate-700">
+            {d.toLocaleString('id-ID', {
+              day: '2-digit',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })} WIB
+          </span>
+        );
+      },
     },
     {
       key: 'grading',
@@ -1004,14 +798,14 @@ export default function TeacherQuizPage() {
       {/* Header Halaman */}
       <div className="teacher-quiz-header">
         <div>
-          <h1 className="teacher-quiz-title">Manajemen Kuis AI</h1>
+          <h1 className="teacher-quiz-title">Manajemen Kuis</h1>
           <p className="teacher-quiz-subtitle">
             Buat asesmen formatif berbantuan AI (prompt &amp; ekstraksi PDF), kurasi butir soal, serta review koreksi semantik siswa.
           </p>
         </div>
         <div>
-          <Button variant="primary" onClick={handleOpenCreateModal}>
-            Buat Kuis Baru (AI)
+          <Button variant="primary" onClick={() => navigate('/teacher/quiz/create')}>
+            Buat Kuis Baru
           </Button>
         </div>
       </div>
@@ -1045,136 +839,6 @@ export default function TeacherQuizPage() {
           emptyMessage="Tidak ada data kuis ditemukan pada tab filter ini."
         />
       </div>
-
-      {/* =========================================================================
-          MODAL 1: Inisialisasi Kuis Baru
-         ========================================================================= */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Inisialisasi Kuis Baru"
-        maxWidth="max-w-lg"
-      >
-        <form onSubmit={handleCreateQuizSubmit} className="quiz-modal-form">
-          <Input
-            label="Judul Kuis / Asesmen"
-            placeholder="Contoh: Kuis Logika Algoritma & Struktur Data"
-            value={createForm.title}
-            onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-            required
-          />
-
-          <div className="form-group">
-            <div className="flex items-center justify-between mb-1">
-              <label className="form-label font-semibold text-slate-800 text-xs">
-                Target Rombel Kelas yang Diajar (Wajib)
-              </label>
-              {classOptions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const allIds = classOptions.map((c) => c.value);
-                    const allSelected = allIds.every((id) => createForm.selected_class_ids.includes(id));
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      selected_class_ids: allSelected ? [allIds[0]] : allIds,
-                      class_id: allSelected ? allIds[0] : allIds[0],
-                      class_name: classOptions[0]?.label?.replace('Kelas ', '') || '',
-                    }));
-                  }}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  {classOptions.every((c) => createForm.selected_class_ids.includes(c.value)) ? 'Batalkan Pilih Semua' : 'Pilih Semua Kelas'}
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500 mb-2">
-              Centang satu atau lebih kelas yang Anda ampu untuk mendistribusikan kuis ini secara paralel.
-            </p>
-
-            {classOptions.length === 0 ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                Belum ada jadwal mengajar aktif yang terdaftar untuk akun Anda. Harap hubungi Waka Kurikulum.
-              </div>
-            ) : (
-              <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2.5 bg-slate-50">
-                {classOptions.map((c) => {
-                  const isChecked = createForm.selected_class_ids.includes(c.value);
-                  return (
-                    <label
-                      key={c.value}
-                      className={`flex items-center gap-2.5 p-2 rounded cursor-pointer transition text-xs font-medium border ${
-                        isChecked
-                          ? 'bg-blue-50/80 text-blue-900 border-blue-200 shadow-xs'
-                          : 'bg-white hover:bg-slate-100/70 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {
-                          const exists = createForm.selected_class_ids.includes(c.value);
-                          let updated;
-                          if (exists) {
-                            updated = createForm.selected_class_ids.filter((id) => id !== c.value);
-                          } else {
-                            updated = [...createForm.selected_class_ids, c.value];
-                          }
-                          setCreateForm((prev) => ({
-                            ...prev,
-                            selected_class_ids: updated,
-                            class_id: updated[0] || '',
-                            class_name: classOptions.find((opt) => opt.value === updated[0])?.label || '',
-                          }));
-                        }}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                      />
-                      <span className="flex-1">{c.label}</span>
-                      {isChecked && (
-                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
-                          Target
-                        </span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              type="date"
-              label="Tenggat Waktu Pengumpulan"
-              value={createForm.due_date}
-              onChange={(e) => setCreateForm({ ...createForm, due_date: e.target.value })}
-              required
-            />
-            <Input
-              type="number"
-              label="Maks. Percobaan Pengerjaan"
-              value={createForm.max_attempts}
-              onChange={(e) => setCreateForm({ ...createForm, max_attempts: e.target.value })}
-              min="1"
-              max="5"
-            />
-          </div>
-
-          <div className="quiz-modal-hint">
-            <HelpCircle size={14} className="text-slate-400 flex-shrink-0" />
-            <span>Kuis akan diinisialisasi dalam status <strong>Draft Review</strong> sebelum butir soal di-generate oleh AI.</span>
-          </div>
-
-          <div className="quiz-modal-actions">
-            <Button variant="secondary" onClick={() => setIsCreateModalOpen(false)}>
-              Batal
-            </Button>
-            <Button type="submit" variant="primary" onClick={handleCreateQuizSubmit}>
-              Lanjut Pilih Metode Soal
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* =========================================================================
           MODAL EDIT KUIS: Edit Metadata, Rombel Kelas, & Tenggat Waktu
@@ -1267,224 +931,6 @@ export default function TeacherQuizPage() {
             </div>
           </form>
         )}
-      </Modal>
-
-      {/* =========================================================================
-          MODAL 2: Tiga Metode Pembuatan Soal (Prompt AI, Ekstraksi Dokumen, Manual)
-         ========================================================================= */}
-      <Modal
-        isOpen={isGenModalOpen}
-        onClose={() => !isGenerating && !isExtracting && setIsGenModalOpen(false)}
-        title={`Pilih Metode Pembuatan Soal: ${currentQuiz?.title || ''}`}
-        maxWidth="max-w-2xl"
-      >
-        <div className="gen-methods-wrapper">
-          {/* Method Selector Tabs */}
-          <div className="gen-nav-tabs">
-            <button
-              type="button"
-              className={`gen-nav-btn ${genMethod === 'prompt' ? 'gen-nav-btn--active' : ''}`}
-              onClick={() => setGenMethod('prompt')}
-            >
-              <Sparkles size={16} />
-              <span>Metode 1: Prompt AI</span>
-            </button>
-            <button
-              type="button"
-              className={`gen-nav-btn ${genMethod === 'document' ? 'gen-nav-btn--active' : ''}`}
-              onClick={() => setGenMethod('document')}
-            >
-              <FileUp size={16} />
-              <span>Metode 2: Ekstraksi Dokumen (PDF/TXT)</span>
-            </button>
-            <button
-              type="button"
-              className={`gen-nav-btn ${genMethod === 'manual' ? 'gen-nav-btn--active' : ''}`}
-              onClick={() => setGenMethod('manual')}
-            >
-              <Edit3 size={16} />
-              <span>Metode 3: Input Manual</span>
-            </button>
-          </div>
-
-          {/* METODE 1: FORM PROMPT AI */}
-          {genMethod === 'prompt' && (
-            <form onSubmit={handleGeneratePromptSubmit} className="quiz-gen-form">
-              <div className="form-group">
-                <label className="form-label">Instruksi Materi &amp; Topik Pembelajaran</label>
-                <textarea
-                  className="quiz-textarea"
-                  rows={3}
-                  placeholder="Contoh: Buatkan soal evaluasi mengenai konsep Object Oriented Programming (OOP), konsep inheritance, polymorphism, dan enkapsulasi pada Java/C#."
-                  value={promptForm.prompt}
-                  onChange={(e) => setPromptForm({ ...promptForm, prompt: e.target.value })}
-                  disabled={isGenerating}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  type="number"
-                  label="Total Jumlah Soal"
-                  min="1"
-                  max="30"
-                  value={promptForm.total_questions}
-                  onChange={(e) => setPromptForm({ ...promptForm, total_questions: e.target.value })}
-                  disabled={isGenerating}
-                  required
-                />
-                <Select
-                  label="Format / Jenis Soal"
-                  options={[
-                    { value: 'combination', label: 'Kombinasi (Pilihan Ganda & Esai)' },
-                    { value: 'multiple_choice', label: 'Hanya Pilihan Ganda (PG)' },
-                    { value: 'essay', label: 'Hanya Esai' },
-                  ]}
-                  value={promptForm.question_types}
-                  onChange={(e) => setPromptForm({ ...promptForm, question_types: e.target.value })}
-                  disabled={isGenerating}
-                />
-              </div>
-
-              {/* Strict Composition Configuration */}
-              {promptForm.question_types === 'combination' && (
-                <div className="composition-box">
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      type="number"
-                      label="Jumlah Soal PG"
-                      min="1"
-                      value={promptForm.mc_count}
-                      onChange={(e) => setPromptForm({ ...promptForm, mc_count: e.target.value })}
-                      disabled={isGenerating}
-                      required
-                    />
-                    <Input
-                      type="number"
-                      label="Jumlah Soal Esai"
-                      min="1"
-                      value={promptForm.essay_count}
-                      onChange={(e) => setPromptForm({ ...promptForm, essay_count: e.target.value })}
-                      disabled={isGenerating}
-                      required
-                    />
-                  </div>
-                  {promptCompositionError && (
-                    <div className="composition-alert">
-                      <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
-                      <span>{promptCompositionError}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Select
-                  label="Tingkat Kesulitan"
-                  options={[
-                    { value: 'mudah', label: 'Mudah (Dasar Pemahaman)' },
-                    { value: 'sedang', label: 'Sedang (Aplikasi & Analisis)' },
-                    { value: 'sulit', label: 'Sulit (HOTS & Penalaran Kritis)' },
-                  ]}
-                  value={promptForm.difficulty}
-                  onChange={(e) => setPromptForm({ ...promptForm, difficulty: e.target.value })}
-                  disabled={isGenerating}
-                />
-                <Input
-                  label="Catatan Khusus Guru (Opsional)"
-                  placeholder="Misal: Sertakan potongan kode program"
-                  value={promptForm.teacher_notes}
-                  onChange={(e) => setPromptForm({ ...promptForm, teacher_notes: e.target.value })}
-                  disabled={isGenerating}
-                />
-              </div>
-
-              {isGenerating ? (
-                <div className="gen-loading-state">
-                  <RotateCw size={24} className="animate-spin text-slate-800" />
-                  <p className="text-sm font-medium text-slate-800 mt-2">{genProgressMsg}</p>
-                  <p className="text-xs text-slate-400">Proses asinkron queue worker berjalan (estimasi 5–15 detik)...</p>
-                </div>
-              ) : (
-                <div className="quiz-modal-actions">
-                  <Button variant="secondary" onClick={() => setIsGenModalOpen(false)}>
-                    Tutup
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={Sparkles}
-                    disabled={Boolean(promptCompositionError)}
-                  >
-                    Generate Soal AI Sekarang
-                  </Button>
-                </div>
-              )}
-            </form>
-          )}
-
-          {/* METODE 2: FORM EKSTRAKSI DOKUMEN (PDF/TXT) */}
-          {genMethod === 'document' && (
-            <form onSubmit={handleExtractDocumentSubmit} className="quiz-gen-form">
-              <div className="doc-instruction-box">
-                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-1">
-                  Prinsip Pelestarian Konten Asli
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  AI akan mengekstrak soal yang sudah ada di dokumen modul/ujian, <strong>bukan mengarang soal baru</strong>.
-                  Jika terdapat bagian teks buram atau kunci jawaban ambigu, AI akan menandai butir soal dengan bendera <strong>needs_review</strong> pada tahap preview.
-                </p>
-              </div>
-
-              <FileUpload
-                label="Unggah Berkas Modul / Soal Ujian"
-                accept=".pdf,.txt"
-                maxSizeMB={5}
-                file={uploadedDoc}
-                onChange={setUploadedDoc}
-                hint="Mendukung dokumen .PDF atau .TXT (Maksimal 5MB)"
-                disabled={isExtracting}
-              />
-
-              {isExtracting ? (
-                <div className="gen-loading-state">
-                  <RotateCw size={24} className="animate-spin text-slate-800" />
-                  <p className="text-sm font-medium text-slate-800 mt-2">
-                    Mengekstrak dokumen PDF dan memetakan butir soal via AI...
-                  </p>
-                  <p className="text-xs text-slate-400">Menghasilkan draf soal berstatus draft_review...</p>
-                </div>
-              ) : (
-                <div className="quiz-modal-actions">
-                  <Button variant="secondary" onClick={() => setIsGenModalOpen(false)}>
-                    Tutup
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={FileUp}
-                    disabled={!uploadedDoc}
-                  >
-                    Ekstrak Dokumen ke Soal Kuis
-                  </Button>
-                </div>
-              )}
-            </form>
-          )}
-
-          {/* METODE 3: MANUAL INPUT */}
-          {genMethod === 'manual' && (
-            <div className="manual-method-intro">
-              <p className="text-xs text-slate-600 mb-3">
-                Tambahkan butir soal satu per satu secara langsung ke dalam kuis. Soal manual disimpan dengan skema data identik dengan hasil AI.
-              </p>
-              <Button variant="primary" icon={Plus} onClick={handleOpenManualQuestionModal}>
-                Buka Form Tambah Butir Soal Manual
-              </Button>
-            </div>
-          )}
-        </div>
       </Modal>
 
       {/* =========================================================================
@@ -1955,46 +1401,78 @@ export default function TeacherQuizPage() {
               </div>
             </div>
 
+            {/* Catatan Feedback Aktif */}
+            {(selectedSubmission.teacher_feedback || selectedSubmission.ai_feedback) && (
+              <div className="mb-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                <span className="font-semibold text-slate-700 block mb-0.5">Catatan Evaluasi &amp; Umpan Balik:</span>
+                <p className="text-slate-600 whitespace-pre-line font-mono text-[11px]">
+                  {selectedSubmission.teacher_feedback || selectedSubmission.ai_feedback}
+                </p>
+              </div>
+            )}
+
             {/* Answer Review Items */}
             <div className="sub-answers-list">
-              {selectedSubmission.answers && selectedSubmission.answers.length > 0 ? (
-                selectedSubmission.answers.map((ans, idx) => (
-                  <div key={idx} className="answer-review-card">
-                    <div className="answer-review-head">
-                      <span className="text-xs font-semibold text-slate-800">
-                        Soal #{idx + 1} ({ans.question_type === 'essay' ? 'Esai' : 'Pilihan Ganda'})
-                      </span>
-                      <Badge variant={ans.is_correct ? 'success' : 'error'}>
-                        {ans.is_correct ? 'Benar / Sesuai' : 'Kurang Tepat'} &bull; {ans.points_awarded || 0} poin
-                      </Badge>
+              {(() => {
+                const reviewAnswers =
+                  (selectedSubmission.answers && selectedSubmission.answers.length > 0)
+                    ? selectedSubmission.answers
+                    : (selectedSubmission.answers_payload || []);
+
+                if (reviewAnswers.length === 0) {
+                  return (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      Rincian jawaban otomatis terakumulasi dalam skor sistem.
                     </div>
+                  );
+                }
 
-                    <p className="text-xs text-slate-800 font-medium my-1">{ans.question_text}</p>
+                return reviewAnswers.map((ans, idx) => {
+                  const fallbackQ = quizQuestions.find((q) => q.id === ans.question_id);
+                  const qType = ans.question_type || fallbackQ?.question_type || 'multiple_choice';
+                  const qText = ans.question_text || fallbackQ?.question_text || `Soal #${idx + 1}`;
+                  const sAns = ans.student_answer ?? ans.answer ?? ans.selected_option ?? '(Tidak dijawab)';
+                  const cAns = ans.correct_answer || fallbackQ?.correct_answer || '-';
+                  const isCorrect = ans.is_correct !== undefined
+                    ? ans.is_correct
+                    : (qType === 'multiple_choice' ? String(sAns).trim().toUpperCase() === String(cAns).trim().toUpperCase() : null);
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2 text-xs">
-                      <div className="bg-slate-50 p-2 rounded border border-slate-200">
-                        <span className="text-[11px] font-semibold text-slate-500 block">Jawaban Siswa:</span>
-                        <p className="text-slate-800 font-mono mt-0.5">{ans.student_answer}</p>
+                  return (
+                    <div key={idx} className="answer-review-card">
+                      <div className="answer-review-head">
+                        <span className="text-xs font-semibold text-slate-800">
+                          Soal #{idx + 1} ({qType === 'essay' ? 'Esai' : 'Pilihan Ganda'})
+                        </span>
+                        {isCorrect !== null && (
+                          <Badge variant={isCorrect ? 'success' : 'error'}>
+                            {isCorrect ? 'Benar / Sesuai' : 'Kurang Tepat'} &bull; {ans.points_awarded ?? (isCorrect ? 100 : 0)} poin
+                          </Badge>
+                        )}
                       </div>
-                      <div className="bg-emerald-50 p-2 rounded border border-emerald-200">
-                        <span className="text-[11px] font-semibold text-emerald-700 block">Kunci / Rubrik:</span>
-                        <p className="text-emerald-900 font-mono mt-0.5">{ans.correct_answer}</p>
+
+                      <p className="text-xs text-slate-800 font-medium my-1">{qText}</p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2 text-xs">
+                        <div className="bg-slate-50 p-2 rounded border border-slate-200">
+                          <span className="text-[11px] font-semibold text-slate-500 block">Jawaban Siswa:</span>
+                          <p className="text-slate-800 font-mono mt-0.5">{sAns}</p>
+                        </div>
+                        <div className="bg-emerald-50 p-2 rounded border border-emerald-200">
+                          <span className="text-[11px] font-semibold text-emerald-700 block">Kunci / Rubrik:</span>
+                          <p className="text-emerald-900 font-mono mt-0.5">{cAns}</p>
+                        </div>
                       </div>
+
+                      {ans.ai_feedback && (
+                        <div className="bg-blue-50 p-2 rounded border border-blue-200 text-xs text-blue-900 mt-1">
+                          <span className="font-semibold block text-[11px] text-blue-700">Analisis Semantik AI:</span>
+                          <p className="mt-0.5">{ans.ai_feedback}</p>
+                        </div>
+                      )}
                     </div>
-
-                    {ans.ai_feedback && (
-                      <div className="bg-blue-50 p-2 rounded border border-blue-200 text-xs text-blue-900 mt-1">
-                        <span className="font-semibold block text-[11px] text-blue-700">Analisis Semantik AI:</span>
-                        <p className="mt-0.5">{ans.ai_feedback}</p>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  Rincian jawaban otomatis terakumulasi dalam skor sistem.
-                </div>
-              )}
+                  );
+                });
+              })()}
             </div>
 
             {/* TEACHER OVERRIDE FORM */}

@@ -1,6 +1,8 @@
 :root {
   /* Colors - Exness Precision Fintech Palette */
   --color-bg: #FFFFFF;
+  --color-card: #FFFFFF;
+  --color-on-dark: #FFFFFF;
   --color-surface: #F9FAFB;
   --color-surface-hover: #F3F4F6;
   --color-border: #E5E7EB;
@@ -66,6 +68,37 @@
   --sidebar-collapsed: 60px;
   --topbar-height: 56px;
   --mobile-nav-height: 56px;
+
+  /* --- token status & state --- */
+  --color-status-success-bg: #ECFDF5;
+  --color-status-success-fg: #047857;
+  --color-status-warning-bg: #FFFBEB;
+  --color-status-warning-fg: #92400E;
+  --color-status-danger-bg: #FEF2F2;
+  --color-status-danger-fg: #B91C1C;
+  --color-status-info-bg: #EFF6FF;
+  --color-status-info-fg: #1D4ED8;
+  --color-row-selected-bg: #FFFDF0;
+  --color-row-hover-bg: #F9FAFB;
+  --color-disabled-fg: #94A3B8;
+  --color-placeholder: #94A3B8;
+  --color-skeleton: #F3F4F6;
+  --color-chart-grid: #E5E7EB;
+  --color-tooltip-bg: #0F172A;
+  --color-tooltip-fg: #FFFFFF;
+
+  /* --- neutral tokens for components & fallback safety (Light Mode) --- */
+  --neutral-50: #F8FAFC;
+  --neutral-100: #F1F5F9;
+  --neutral-200: #E2E8F0;
+  --neutral-300: #CBD5E1;
+  --neutral-400: #94A3B8;
+  --neutral-500: #64748B;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1E293B;
+  --neutral-900: #0F172A;
+  --color-status-success-border: #A7F3D0;
 }
 
 @media (min-width: 640px) {

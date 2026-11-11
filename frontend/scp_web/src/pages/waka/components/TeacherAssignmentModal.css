@@ -19,9 +19,9 @@
 .teacher-assignment__avatar {
   width: 40px;
   height: 40px;
-  background-color: #f1f5f9;
-  color: #0f172a;
-  border: 1px solid #cbd5e1;
+  background-color: var(--color-badge-blue-bg) ;
+  color: var(--color-text-primary) ;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
@@ -69,7 +69,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.625rem 0.875rem;
-  background-color: #fff;
+  background-color: var(--color-card) ;
   border: 1px solid var(--neutral-200);
   border-radius: var(--radius-sm);
 }

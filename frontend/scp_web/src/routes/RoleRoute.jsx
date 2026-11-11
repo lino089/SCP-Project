@@ -10,6 +10,7 @@ export default function RoleRoute({
   requireKesiswaan = false,
   requireWaliKelas = false,
   requireKesiswaanOrWaliKelas = false,
+  requireTeacherLeaveVerifier = false,
   redirectTo = null,
 }) {
   const { hasRole, isKesiswaan, isWaliKelas } = useAuth();
@@ -37,6 +38,13 @@ export default function RoleRoute({
 
   if (requireKesiswaanOrWaliKelas) {
     if (!isKesiswaan() && !isWaliKelas() && !hasRole('waka')) {
+      isAuthorized = false;
+    }
+  }
+
+  // Verifikator perizinan guru (Waka Kurikulum atau Guru Kesiswaan)
+  if (requireTeacherLeaveVerifier) {
+    if (!isKesiswaan() && !hasRole('waka')) {
       isAuthorized = false;
     }
   }
