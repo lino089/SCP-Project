@@ -765,13 +765,13 @@ export default function TeacherSchedulePage() {
         </div>
       )}
 
-      {/* Peringatan Keterlambatan Pengisian Jurnal (> 30 menit) */}
+      {/* Peringatan Keterlambatan Pengisian Jurnal (> 30 menit sejak KBM dimulai) */}
       {missingJournals.length > 0 && scheduleContext === 'my_schedule' && (
         <div className="teacher-schedule__alert teacher-schedule__alert--warning">
           <AlertCircle size={18} className="text-amber-700 shrink-0 mt-0.5" />
           <div className="flex-1">
             <strong>Peringatan Keterlambatan Jurnal:</strong> Terdapat{' '}
-            <strong>{missingJournals.length} sesi KBM</strong> yang telah selesai lebih dari 30 menit lalu
+            <strong>{missingJournals.length} sesi KBM</strong> yang telah melewati batas waktu pengisian (30 menit setelah KBM dimulai)
             namun belum memiliki laporan jurnal KBM terverifikasi.
           </div>
         </div>

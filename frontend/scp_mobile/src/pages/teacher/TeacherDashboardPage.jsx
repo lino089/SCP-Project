@@ -266,7 +266,7 @@ export default function TeacherDashboardPage() {
               {missingJournals.length} Jurnal KBM Perlu Dilengkapi
             </h2>
             <p className="text-[11px] text-[var(--color-warning-fg)] mt-0.5 leading-relaxed">
-              Terdapat sesi mengajar yang telah usai namun belum diselesaikan laporannya beserta presensi siswa.
+              Terdapat sesi mengajar yang telah melewati batas 30 menit sejak KBM dimulai namun belum diselesaikan laporannya.
             </p>
           </div>
         </div>

@@ -234,6 +234,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::delete('/master/{entity}/{id}/force', [RecycleBinController::class, 'forceDestroy']);
 
         // Schedules & Imports Waka
+        Route::get('/schedules/export', [ScheduleController::class, 'export']);
         Route::post('/schedules', [ScheduleController::class, 'store']);
         Route::put('/schedules/{id}', [ScheduleController::class, 'update']);
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);

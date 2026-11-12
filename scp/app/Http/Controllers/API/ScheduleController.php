@@ -113,10 +113,11 @@ class ScheduleController extends Controller
                     continue;
                 }
 
-                // Cek apakah waktu selesai jadwal + toleransi 30 menit sudah terlewat
+                // Cek apakah waktu mulai jadwal + 30 menit sudah terlewat (Aturan Baru)
                 if ($this->periodResolver->isSchedulePastTolerance($schedule, $now)) {
                     $times = $this->periodResolver->getScheduleTimes($schedule, $now);
-                    $deadline = Carbon::parse($now->toDateString() . ' ' . $times['end_time'], 'Asia/Jakarta')->addMinutes(30);
+                    $startTimeString = is_string($times['start_time']) ? $times['start_time'] : (string) $times['start_time'];
+                    $deadline = Carbon::parse($now->toDateString() . ' ' . $startTimeString, 'Asia/Jakarta')->addMinutes(30);
 
                     $scheduleArray = $schedule->toArray();
                     $scheduleArray['resolved_times'] = $times;
@@ -600,6 +601,48 @@ class ScheduleController extends Controller
             'message' => "Seluruh Data Jadwal berhasil di-reset secara permanen ({$deletedCount} jadwal dihapus).",
             'data' => [
                 'deleted_count' => $deletedCount,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Ekspor data jadwal pelajaran untuk Waka Kurikulum.
+     * GET /api/schedules/export
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $query = Schedule::with([
+            'schoolClass:id,name,level',
+            'subject:id,name,category',
+            'teacher:id,name,nis_nip',
+            'room:id,name,capacity,type',
+        ]);
+
+        if ($request->filled('cycle')) {
+            $query->where('cycle_type', $request->integer('cycle'));
+        }
+
+        if ($request->filled('class_id')) {
+            $query->where('class_id', $request->integer('class_id'));
+        }
+
+        if ($request->filled('level')) {
+            $query->whereHas('schoolClass', function ($q) use ($request) {
+                $q->where('level', $request->integer('level'));
+            });
+        }
+
+        $schedules = $query->orderBy('cycle_type')
+            ->orderBy('class_id')
+            ->orderBy('day_of_week')
+            ->orderBy('period_number')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $schedules,
+            'meta' => [
+                'total' => $schedules->count(),
             ],
         ], 200);
     }

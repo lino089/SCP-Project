@@ -93,23 +93,65 @@ class PeriodResolutionService
     }
 
     /**
-     * Mengecek apakah jadwal hari ini sudah melewati batas toleransi pengisian jurnal (+30 menit).
+     * Mengecek apakah jadwal hari ini sudah melewati batas waktu pengisian jurnal
+     * (Aturan Baru: 30 menit setelah jam pelajaran DIMULAI).
      */
     public function isSchedulePastTolerance(Schedule $schedule, Carbon $now): bool
     {
         $times = $this->getScheduleTimes($schedule, $now);
 
-        if (empty($times['end_time'])) {
+        if (empty($times['start_time'])) {
             return false;
         }
 
-        $endTimeString = is_string($times['end_time'])
-            ? $times['end_time']
-            : (string) $times['end_time'];
+        $startTimeString = is_string($times['start_time'])
+            ? $times['start_time']
+            : (string) $times['start_time'];
 
-        $deadline = Carbon::parse($now->toDateString() . ' ' . $endTimeString, 'Asia/Jakarta')
+        $deadline = Carbon::parse($now->toDateString() . ' ' . $startTimeString, 'Asia/Jakarta')
             ->addMinutes(30);
 
         return $now->greaterThan($deadline);
+    }
+
+    /**
+     * Mendapatkan objek Carbon batas akhir pengisian jurnal (start_time + 30 menit).
+     */
+    public function getJournalDeadline(Schedule $schedule, Carbon $now): ?Carbon
+    {
+        $times = $this->getScheduleTimes($schedule, $now);
+
+        if (empty($times['start_time'])) {
+            return null;
+        }
+
+        $startTimeString = is_string($times['start_time'])
+            ? $times['start_time']
+            : (string) $times['start_time'];
+
+        return Carbon::parse($now->toDateString() . ' ' . $startTimeString, 'Asia/Jakarta')
+            ->addMinutes(30);
+    }
+
+    /**
+     * Mengecek apakah waktu saat ini berada dalam rentang pengisian jurnal aktif
+     * (mulai dari jam pelajaran dimulai s.d. 30 menit setelahnya).
+     */
+    public function isWithinJournalFillingWindow(Schedule $schedule, Carbon $now): bool
+    {
+        $times = $this->getScheduleTimes($schedule, $now);
+
+        if (empty($times['start_time'])) {
+            return false;
+        }
+
+        $startTimeString = is_string($times['start_time'])
+            ? $times['start_time']
+            : (string) $times['start_time'];
+
+        $startTime = Carbon::parse($now->toDateString() . ' ' . $startTimeString, 'Asia/Jakarta');
+        $deadline = $startTime->copy()->addMinutes(30);
+
+        return $now->greaterThanOrEqualTo($startTime) && $now->lessThanOrEqualTo($deadline);
     }
 }

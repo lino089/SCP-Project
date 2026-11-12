@@ -513,7 +513,7 @@ export default function TeacherDashboardPage() {
                         {item.subject?.name} &bull; {item.school_class?.name || item.schoolClass?.name || 'Kelas'}
                       </div>
                       <div className="teacher-dashboard__missing-sub">
-                        Jam ke-{item.period_number} &bull; Selesai lebih dari 30 menit lalu
+                        Jam ke-{item.period_number} &bull; Melewati batas 30 menit sejak KBM dimulai
                       </div>
                     </div>
                     <Button

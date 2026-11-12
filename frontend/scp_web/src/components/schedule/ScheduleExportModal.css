@@ -1,0 +1,213 @@
+/* ScheduleExportModal.css - Clean styling for Waka Schedule Export Modal */
+
+.export-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.export-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569;
+}
+
+/* Format Cards Grid */
+.export-format-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .export-format-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.export-format-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.875rem 1rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: left;
+  gap: 0.375rem;
+  position: relative;
+}
+
+.export-format-card:hover {
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.export-format-card--active {
+  border-color: #4f46e5;
+  background-color: #eef2ff;
+  box-shadow: 0 0 0 1px #4f46e5;
+}
+
+.export-format-card__icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.export-format-card--excel .export-format-card__icon-wrapper {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.export-format-card--pdf .export-format-card__icon-wrapper {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.export-format-card--csv .export-format-card__icon-wrapper {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.export-format-card__title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.export-format-card--active .export-format-card__title {
+  color: #4338ca;
+}
+
+.export-format-card__desc {
+  font-size: 0.6875rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+/* Cycle Selector */
+.export-cycle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.625rem;
+}
+
+@media (max-width: 640px) {
+  .export-cycle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.export-cycle-btn {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  background-color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.export-cycle-btn:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.export-cycle-btn--active {
+  background-color: #f1f5f9;
+  border-color: #0f172a;
+  border-width: 1.5px;
+}
+
+.export-cycle-btn__title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.export-cycle-btn__desc {
+  font-size: 0.6875rem;
+  color: #64748b;
+}
+
+/* Scope Selector */
+.export-scope-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+.export-scope-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.export-scope-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.export-scope-radio-label input[type="radio"] {
+  accent-color: #4f46e5;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Info Box */
+.export-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #6366f1;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.export-info-box strong {
+  color: #0f172a;
+}
+
+.export-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  gap: 0.75rem;
+}

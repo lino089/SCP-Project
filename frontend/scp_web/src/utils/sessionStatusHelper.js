@@ -97,7 +97,8 @@ export function calculateSessionStatus(schedule, currentTimeStr = null, toleranc
 
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
-  const deadlineMin = endMin + toleranceMinutes;
+  // Aturan Baru: Batas pengisian jurnal adalah 30 menit setelah jam pelajaran dimulai (start_time + 30 menit)
+  const deadlineMin = startMin + toleranceMinutes;
   const deadlineTime = minutesToTime(deadlineMin);
 
   // Waktu saat ini di Jakarta
@@ -123,7 +124,7 @@ export function calculateSessionStatus(schedule, currentTimeStr = null, toleranc
     };
   }
 
-  // 5. MULAI JURNAL: Sedang dalam jam KBM atau dalam masa toleransi +30 menit
+  // 5. MULAI JURNAL: Sedang dalam rentang pengisian jurnal (30 menit setelah jam pelajaran dimulai)
   if (nowMin >= startMin && nowMin <= deadlineMin) {
     const isOngoing = schedule.journal_status === 'ongoing';
     const remaining = deadlineMin - nowMin;
@@ -139,12 +140,12 @@ export function calculateSessionStatus(schedule, currentTimeStr = null, toleranc
       endTime,
       deadlineTime,
       isOngoing,
-      description: `Waktu mengajar aktif s/d ${endTime} WIB (Batas toleransi pengisian s/d ${deadlineTime} WIB, sisa ${remText})`,
+      description: `Batas pengisian jurnal s/d ${deadlineTime} WIB (30 menit setelah KBM dimulai, sisa ${remText})`,
       canOpen: true,
     };
   }
 
-  // 6. SESI TELAH BERAKHIR: Telah melewati jam selesai KBM + batas toleransi 30 menit
+  // 6. SESI TELAH BERAKHIR: Telah melewati batas waktu 30 menit setelah jam pelajaran dimulai
   return {
     status: 'expired',
     label: 'Sesi Telah Berakhir',
@@ -152,7 +153,7 @@ export function calculateSessionStatus(schedule, currentTimeStr = null, toleranc
     startTime,
     endTime,
     deadlineTime,
-    description: `Waktu KBM dan batas toleransi pengisian telah berakhir pada pukul ${deadlineTime} WIB.`,
+    description: `Batas waktu pengisian jurnal telah berakhir pada pukul ${deadlineTime} WIB (30 menit setelah jam pelajaran dimulai).`,
     canOpen: false,
   };
 }

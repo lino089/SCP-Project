@@ -8,6 +8,7 @@ import {
   Flag,
   AlertCircle,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import {
   Button,
@@ -25,6 +26,7 @@ import {
 } from '../../components/feedback';
 import ScheduleBreakRow from '../../components/schedule/ScheduleBreakRow';
 import ScheduleAutoGenerateModal from '../../components/schedule/ScheduleAutoGenerateModal';
+import ScheduleExportModal from '../../components/schedule/ScheduleExportModal';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
 import { unwrapList } from '../../utils/responseHelper';
@@ -90,6 +92,10 @@ export default function ScheduleManagementPage() {
 
   // Auto Generate Modal state
   const [isAutoGenerateModalOpen, setIsAutoGenerateModalOpen] = useState(false);
+
+  // Export Modal state
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportTargetClassId, setExportTargetClassId] = useState(null);
 
   // Password verification modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -676,6 +682,17 @@ export default function ScheduleManagementPage() {
           </Button>
           <Button
             variant="outline"
+            icon={Download}
+            onClick={() => {
+              setExportTargetClassId(null);
+              setIsExportModalOpen(true);
+            }}
+            title="Ekspor Jadwal Pelajaran (Excel, PDF, CSV)"
+          >
+            Ekspor Jadwal
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => navigate('/kurikulum/jadwal/import')}
           >
             Import Jadwal
@@ -971,6 +988,18 @@ export default function ScheduleManagementPage() {
                     <span className="schedule-class-stat-badge">
                       <strong>{uniqueTeachers}</strong> Guru
                     </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={Download}
+                      onClick={() => {
+                        setExportTargetClassId(c.id);
+                        setIsExportModalOpen(true);
+                      }}
+                      title={`Ekspor jadwal kelas ${c.name} (Excel, PDF, CSV)`}
+                    >
+                      Ekspor
+                    </Button>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -1420,6 +1449,24 @@ export default function ScheduleManagementPage() {
           showErrorToast={showErrorToast}
         />
       )}
+
+      {/* Modal Ekspor Data Jadwal (Excel, PDF, CSV) */}
+      <ScheduleExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => {
+          setIsExportModalOpen(false);
+          setExportTargetClassId(null);
+        }}
+        classList={classList}
+        activeCycle={selectedCycle}
+        currentSchedules={scheduleList}
+        mondayIsUpacara={mondayIsUpacara}
+        periodTemplates={periodTemplates}
+        conflictIds={conflictScheduleIds}
+        showToast={showToast}
+        showErrorToast={showErrorToast}
+        preSelectedClassId={exportTargetClassId}
+      />
     </div>
   );
 }

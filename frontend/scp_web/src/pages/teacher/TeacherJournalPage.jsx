@@ -155,6 +155,12 @@ export default function TeacherJournalPage() {
     return counts;
   }, [todaySchedules, currentTime]);
 
+  // Status dan Batas Waktu Sesi Aktif yang Sedang Dipilih
+  const currentSessionCalc = useMemo(() => {
+    if (!schedule) return null;
+    return calculateSessionStatus(schedule, currentTime);
+  }, [schedule, currentTime]);
+
   // Penegakan Otorisasi untuk Sesi yang Sedang Dipilih
   const isOriginalTeacher = useMemo(() => {
     if (!schedule || !user) return true;
@@ -1250,6 +1256,52 @@ export default function TeacherJournalPage() {
           ) : (
             /* KONDISI B: FORM PENGISIAN JURNAL AKTIF & PRESENSI KELAS */
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+              {/* Banner Batas Waktu Pengisian Jurnal (30 menit setelah KBM dimulai) */}
+              {currentSessionCalc && !submitted && (
+                <div
+                  className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                    currentSessionCalc.status === 'ready'
+                      ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                      : currentSessionCalc.status === 'expired'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : 'bg-gray-50 border-gray-200 text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Clock
+                      size={17}
+                      className={
+                        currentSessionCalc.status === 'ready'
+                          ? 'text-blue-600 shrink-0'
+                          : currentSessionCalc.status === 'expired'
+                          ? 'text-red-600 shrink-0'
+                          : 'text-gray-500 shrink-0'
+                      }
+                    />
+                    <div>
+                      <span className="font-bold">
+                        {currentSessionCalc.status === 'ready'
+                          ? 'Batas Pengisian Jurnal: '
+                          : currentSessionCalc.status === 'expired'
+                          ? 'Batas Waktu Berakhir: '
+                          : 'Jadwal Sesi: '}
+                      </span>
+                      <span>{currentSessionCalc.description}</span>
+                    </div>
+                  </div>
+                  {currentSessionCalc.status === 'ready' && (
+                    <Badge variant="primary" className="shrink-0 text-[11px]">
+                      Sisa toleransi aktif
+                    </Badge>
+                  )}
+                  {currentSessionCalc.status === 'expired' && (
+                    <Badge variant="error" className="shrink-0 text-[11px]">
+                      Telah Ditutup
+                    </Badge>
+                  )}
+                </div>
+              )}
+
               {/* Box Tugas Titipan Guru jika Kesiswaan */}
               {isSubstituteMode && taskTitipan && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-950">

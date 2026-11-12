@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import useTheme from '../../hooks/useTheme';
 import { notificationApi } from '../../services/notificationApi';
 import { unwrapList } from '../../utils/responseHelper';
+import { toast } from '../../context/ToastContext';
 import './TopBar.css';
 
 const getBreadcrumb = (pathname) => {
@@ -65,6 +66,7 @@ export default function TopBar({ onToggleSidebar }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const alertedReminders = useRef(new Set());
 
   const breadcrumb = getBreadcrumb(location.pathname);
 
@@ -102,6 +104,17 @@ export default function TopBar({ onToggleSidebar }) {
       const list = unwrapList(res);
       setNotifications(list);
       setUnreadCount(res.data?.meta?.unread_count ?? list.filter((n) => !n.read_at).length);
+
+      // Notifikasi toast interaktif setiap 5 menit jika ada pengingat jurnal KBM yang belum dibaca
+      list.forEach((n) => {
+        if (n.type === 'journal_reminder' && !n.read_at && !alertedReminders.current.has(n.id)) {
+          alertedReminders.current.add(n.id);
+          toast.warning(n.message, {
+            title: n.title || 'Pengingat: Isi Jurnal Mengajar',
+            duration: 9000,
+          });
+        }
+      });
     } catch (err) {
       console.debug('Failed loading notifications', err);
     } finally {

@@ -76,6 +76,7 @@ const renderCyclePage = ({
   const isTeacher = role === 'teacher';
   const isHomeroom = role === 'homeroom';
   const isStudent = role === 'student';
+  const isWaka = role === 'waka';
 
   const userName = user?.name || (isStudent ? 'Peserta Didik' : 'Bapak/Ibu Guru');
   const userNip = user?.nip || user?.nis_nip || user?.nip_nis || '-';
@@ -142,6 +143,10 @@ const renderCyclePage = ({
     docTitle = `JADWAL PELAJARAN KELAS BINAAN: ${targetClassName.toUpperCase()}`;
   } else if (isStudent) {
     docTitle = `JADWAL PELAJARAN SISWA: KELAS ${targetClassName.toUpperCase()}`;
+  } else if (isWaka) {
+    docTitle = targetClassName && targetClassName !== '-'
+      ? `JADWAL PELAJARAN KELAS ${targetClassName.toUpperCase()}`
+      : 'JADWAL PELAJARAN RESMI INSTITUSI';
   }
   doc.text(docTitle, 148.5, 29.5, { align: 'center' });
 
@@ -208,8 +213,30 @@ const renderCyclePage = ({
     doc.text('Jumlah Mapel:', 105, 41.8);
     doc.setFont('helvetica', 'normal');
     doc.text(`${uniqueSubjects} Mata Pelajaran`, 134, 41.8);
+  } else if (isWaka) {
+    // Kolom Kiri
+    doc.setFont('helvetica', 'bold');
+    doc.text('Rombel Kelas:', 13, 38.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(targetClassName || 'Semua Rombel', 36, 38.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Otoritas:', 13, 41.8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Waka Kurikulum', 36, 41.8);
+
+    // Kolom Tengah
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total Beban Belajar:', 105, 38.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${totalJP} JP / Minggu`, 134, 38.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Jumlah Mapel & Guru:', 105, 41.8);
+    doc.setFont('helvetica', 'normal');
+    const teacherCount = new Set(cycleSchedules.map((s) => s.teacher_id || s.teacher?.id)).size;
+    doc.text(`${uniqueSubjects} Mapel | ${teacherCount} Guru`, 134, 41.8);
   } else {
-    // Kolom Kiri (Siswa)
     doc.setFont('helvetica', 'bold');
     doc.text('Nama Siswa:', 13, 38.5);
     doc.setFont('helvetica', 'normal');
@@ -545,6 +572,7 @@ export const generateSchedulePdf = ({
   const isTeacher = role === 'teacher';
   const isHomeroom = role === 'homeroom';
   const isStudent = role === 'student';
+  const isWaka = role === 'waka';
 
   const userName = user?.name || (isStudent ? 'Peserta Didik' : 'Bapak/Ibu Guru');
   const targetClassName =
@@ -597,6 +625,10 @@ export const generateSchedulePdf = ({
     filePrefix = `Jadwal_Kelas_${sanitizeFileName(targetClassName)}`;
   } else if (isStudent) {
     filePrefix = `Jadwal_Pelajaran_${sanitizeFileName(targetClassName)}`;
+  } else if (isWaka) {
+    filePrefix = targetClassName && targetClassName !== '-'
+      ? `Jadwal_Pelajaran_Kelas_${sanitizeFileName(targetClassName)}`
+      : 'Jadwal_Pelajaran_SMKN1_Bantul';
   } else {
     filePrefix = `Jadwal_Mengajar_${sanitizeFileName(userName)}`;
   }

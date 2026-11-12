@@ -29,15 +29,16 @@ test('calculateSessionStatus returns ready (Mulai Jurnal) during session time', 
     journal_status: 'not_started',
   };
 
-  // Jam 07:30 WIB (dalam rentang 07:15 - 08:35)
+  // Jam 07:30 WIB (dalam rentang 07:15 - 07:45, yaitu 30 menit setelah jam mulai)
   const result = calculateSessionStatus(schedule, '07:30');
   assert.strictEqual(result.status, 'ready');
   assert.strictEqual(result.label, 'Mulai Jurnal');
   assert.strictEqual(result.badgeVariant, 'primary');
   assert.strictEqual(result.canOpen, true);
+  assert.strictEqual(result.deadlineTime, '07:45');
 });
 
-test('calculateSessionStatus returns ready (Mulai Jurnal) during 30-min tolerance period', () => {
+test('calculateSessionStatus returns ready (Mulai Jurnal) during 30-min window from start time', () => {
   const schedule = {
     id: 1,
     period_number: 1,
@@ -46,14 +47,14 @@ test('calculateSessionStatus returns ready (Mulai Jurnal) during 30-min toleranc
     journal_status: 'not_started',
   };
 
-  // Jam 08:50 WIB (sesi selesai 08:35, toleransi s/d 09:05 WIB)
-  const result = calculateSessionStatus(schedule, '08:50', 30);
+  // Jam 07:40 WIB (dimulai 07:15, batas waktu s/d 07:45 WIB)
+  const result = calculateSessionStatus(schedule, '07:40', 30);
   assert.strictEqual(result.status, 'ready');
   assert.strictEqual(result.canOpen, true);
-  assert.strictEqual(result.deadlineTime, '09:05');
+  assert.strictEqual(result.deadlineTime, '07:45');
 });
 
-test('calculateSessionStatus returns expired (Sesi Telah Berakhir) past tolerance limit', () => {
+test('calculateSessionStatus returns expired (Sesi Telah Berakhir) past 30-min from start time', () => {
   const schedule = {
     id: 1,
     period_number: 1,
@@ -62,12 +63,13 @@ test('calculateSessionStatus returns expired (Sesi Telah Berakhir) past toleranc
     journal_status: 'not_started',
   };
 
-  // Jam 09:10 WIB (melewati batas toleransi 09:05 WIB)
-  const result = calculateSessionStatus(schedule, '09:10', 30);
+  // Jam 07:50 WIB (melewati batas 30 menit dari 07:15, yaitu 07:45 WIB)
+  const result = calculateSessionStatus(schedule, '07:50', 30);
   assert.strictEqual(result.status, 'expired');
   assert.strictEqual(result.label, 'Sesi Telah Berakhir');
   assert.strictEqual(result.badgeVariant, 'error');
   assert.strictEqual(result.canOpen, false);
+  assert.strictEqual(result.deadlineTime, '07:45');
 });
 
 test('calculateSessionStatus returns completed (Selesai) when journal is completed regardless of time', () => {
