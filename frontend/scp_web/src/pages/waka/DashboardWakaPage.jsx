@@ -412,21 +412,11 @@ export default function DashboardWakaPage() {
       )}
 
       {/* Page Header */}
-      <div className="dashboard-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="dashboard-title">Dashboard Akademik</h1>
-          <p className="dashboard-subtitle">
-            Kelola tahun ajaran aktif, siklus rotasi KBM, status upacara, dan ringkasan master data sekolah.
-          </p>
-        </div>
-        <div className="dashboard-header-actions w-full sm:w-auto flex justify-start sm:justify-end gap-2">
-          <Button
-            variant="primary"
-            onClick={() => navigate('/kurikulum/jadwal/import')}
-          >
-            Import Jadwal
-          </Button>
-        </div>
+      <div className="dashboard-header mb-6">
+        <h1 className="dashboard-title">Dashboard Akademik</h1>
+        <p className="dashboard-subtitle">
+          Kelola tahun ajaran aktif, siklus rotasi KBM, status upacara, dan ringkasan master data sekolah.
+        </p>
       </div>
 
       {/* Error Alert Banner with Retry */}

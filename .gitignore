@@ -1,3 +1,7 @@
+# Python bytecode cache
+**/__pycache__/
+*.pyc
+
 # Root .gitignore for SchoolClassProject
 
 # Environment files across all subprojects (security guard)
@@ -18,7 +22,9 @@ deploy/heavy_job_proof.txt
 RENCANA_PENYEMPURNAAN_RESOLUSI_RUANG_DAN_KONFLIK_IMPORT.md
 RENCANA_REDESIGN_JURNAL_KBM_DAN_PRESENSI.md
 RENCANA_PEMBARUAN_SISTEM_PERIZINAN_GURU.md
+RENCANA_FITUR_GENERATE_JADWAL_OTOMATIS.md
 RENCANA_*.md
+PERENCANAAN_*.md
 
 # Java crash dumps & local test parse outputs
 hs_err_pid*.log

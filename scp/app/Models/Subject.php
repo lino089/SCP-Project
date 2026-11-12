@@ -10,7 +10,8 @@ class Subject extends Model
 {
     use SoftDeletes;
     protected $fillable = [
-        'name'
+        'name',
+        'category',
     ];
 
     public function schedules(): HasMany

@@ -15,6 +15,7 @@ class Room extends Model
     protected $fillable = [
         'name',
         'capacity',
+        'type',
     ];
 
     public function schedules(): HasMany

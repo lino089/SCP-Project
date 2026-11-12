@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Flag,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   Button,
@@ -23,6 +24,7 @@ import {
   ErrorState,
 } from '../../components/feedback';
 import ScheduleBreakRow from '../../components/schedule/ScheduleBreakRow';
+import ScheduleAutoGenerateModal from '../../components/schedule/ScheduleAutoGenerateModal';
 import { scheduleApi, academicSettingApi } from '../../services/scheduleApi';
 import { classApi, roomApi, subjectApi, teacherApi } from '../../services/masterDataApi';
 import { unwrapList } from '../../utils/responseHelper';
@@ -86,6 +88,9 @@ export default function ScheduleManagementPage() {
   });
   const [formError, setFormError] = useState('');
 
+  // Auto Generate Modal state
+  const [isAutoGenerateModalOpen, setIsAutoGenerateModalOpen] = useState(false);
+
   // Password verification modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // { type: 'save' | 'delete', data: any, id?: any }
@@ -117,6 +122,41 @@ export default function ScheduleManagementPage() {
       teachers: teacherList,
     });
   }, [classList, roomList, subjectList, teacherList]);
+
+  // Memoized Options for Fast Modal Rendering
+  const classSelectOptions = useMemo(() => {
+    return classList.map((c) => ({
+      value: String(c.id),
+      label: `${c.name} (Tingkat ${c.level})`,
+    }));
+  }, [classList]);
+
+  const subjectSelectOptions = useMemo(() => {
+    return subjectList.map((s) => ({
+      value: String(s.id),
+      label: s.name,
+    }));
+  }, [subjectList]);
+
+  const teacherSelectOptions = useMemo(() => {
+    return teacherList.map((t) => ({
+      value: String(t.id),
+      label: `${t.name} ${t.nis_nip ? `[NIP: ${t.nis_nip}]` : ''}`,
+    }));
+  }, [teacherList]);
+
+  const roomSelectOptions = useMemo(() => {
+    return roomList.map((r) => ({
+      value: String(r.id),
+      label: `${r.name} (${
+        r.type === 'lab' || r.type === 'lab_computer'
+          ? 'Lab Komputer'
+          : r.type === 'field'
+          ? 'Lapangan'
+          : 'Ruang Teori'
+      })`,
+    }));
+  }, [roomList]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -639,6 +679,16 @@ export default function ScheduleManagementPage() {
             onClick={() => navigate('/kurikulum/jadwal/import')}
           >
             Import Jadwal
+          </Button>
+          <Button
+            variant="secondary"
+            icon={Sparkles}
+            className="text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
+            disabled={!prerequisiteCheck.isReady}
+            onClick={() => setIsAutoGenerateModalOpen(true)}
+            title="Generate Jadwal Pelajaran Secara Otomatis"
+          >
+            Generate Otomatis
           </Button>
           <Button
             variant="primary"
@@ -1192,131 +1242,121 @@ export default function ScheduleManagementPage() {
       )}
 
       {/* Modal Form Tambah / Edit Jadwal */}
-      <Modal
-        isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
-        title={editingSchedule ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran'}
-        size="md"
-        footer={
-          <div className="schedule-form-footer">
-            {editingSchedule && (
-              <Button
-                variant="outline"
-                icon={Trash2}
-                className="text-red-600 hover:bg-red-50 hover:border-red-300"
-                onClick={handleDeleteTrigger}
-              >
-                Hapus Jadwal
-              </Button>
+      {isFormModalOpen && (
+        <Modal
+          isOpen={isFormModalOpen}
+          onClose={() => setIsFormModalOpen(false)}
+          title={editingSchedule ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran'}
+          size="md"
+          footer={
+            <div className="schedule-form-footer">
+              {editingSchedule && (
+                <Button
+                  variant="outline"
+                  icon={Trash2}
+                  className="text-red-600 hover:bg-red-50 hover:border-red-300"
+                  onClick={handleDeleteTrigger}
+                >
+                  Hapus Jadwal
+                </Button>
+              )}
+              <div className="schedule-form-footer__right">
+                <Button variant="secondary" onClick={() => setIsFormModalOpen(false)}>
+                  Batal
+                </Button>
+                <Button variant="primary" icon={Save} onClick={handleFormSubmit}>
+                  Simpan Jadwal
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <form onSubmit={handleFormSubmit} className="schedule-form">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium">
+                {formError}
+              </div>
             )}
-            <div className="schedule-form-footer__right">
-              <Button variant="secondary" onClick={() => setIsFormModalOpen(false)}>
-                Batal
-              </Button>
-              <Button variant="primary" icon={Save} onClick={handleFormSubmit}>
-                Simpan Jadwal
-              </Button>
+
+            <div className="schedule-form-row">
+              <Select
+                label="Putaran Jadwal"
+                value={String(formData.cycle)}
+                options={[
+                  { value: '1', label: 'Putaran 1' },
+                  { value: '2', label: 'Putaran 2' },
+                ]}
+                onChange={(e) => setFormData({ ...formData, cycle: Number(e.target.value) })}
+                required
+              />
+              <Select
+                label="Hari KBM"
+                value={formData.day}
+                options={DAYS_LIST.map((d) => ({ value: d, label: d }))}
+                onChange={(e) => setFormData({ ...formData, day: e.target.value })}
+                required
+              />
             </div>
-          </div>
-        }
-      >
-        <form onSubmit={handleFormSubmit} className="schedule-form">
-          {formError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium">
-              {formError}
+
+            <div className="schedule-form-row">
+              <Select
+                label="Jam Pelajaran Mulai"
+                value={String(formData.slot)}
+                options={Array.from({ length: 10 }, (_, i) => ({
+                  value: String(i + 1),
+                  label: `Jam Ke-${i + 1}`,
+                }))}
+                onChange={(e) => setFormData({ ...formData, slot: Number(e.target.value) })}
+                required
+              />
+              <Select
+                label="Durasi Pelajaran (JP)"
+                value={String(formData.duration)}
+                options={[
+                  { value: '1', label: '1 Jam Pelajaran (45 Menit)' },
+                  { value: '2', label: '2 Jam Pelajaran (90 Menit)' },
+                  { value: '3', label: '3 Jam Pelajaran (135 Menit)' },
+                  { value: '4', label: '4 Jam Pelajaran (180 Menit)' },
+                ]}
+                onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                required
+              />
             </div>
-          )}
 
-          <div className="schedule-form-row">
             <Select
-              label="Putaran Jadwal"
-              value={String(formData.cycle)}
-              options={[
-                { value: '1', label: 'Putaran 1' },
-                { value: '2', label: 'Putaran 2' },
-              ]}
-              onChange={(e) => setFormData({ ...formData, cycle: Number(e.target.value) })}
+              label="Rombel Kelas"
+              value={String(formData.class_id)}
+              options={classSelectOptions}
+              onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
               required
             />
+
             <Select
-              label="Hari KBM"
-              value={formData.day}
-              options={DAYS_LIST.map((d) => ({ value: d, label: d }))}
-              onChange={(e) => setFormData({ ...formData, day: e.target.value })}
+              label="Mata Pelajaran"
+              value={String(formData.subject_id)}
+              options={subjectSelectOptions}
+              onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
               required
             />
-          </div>
 
-          <div className="schedule-form-row">
             <Select
-              label="Jam Pelajaran Mulai"
-              value={String(formData.slot)}
-              options={Array.from({ length: 10 }, (_, i) => ({
-                value: String(i + 1),
-                label: `Jam Ke-${i + 1}`,
-              }))}
-              onChange={(e) => setFormData({ ...formData, slot: Number(e.target.value) })}
+              label="Guru Pengampu"
+              value={String(formData.teacher_id)}
+              options={teacherSelectOptions}
+              onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
               required
             />
+
             <Select
-              label="Durasi Pelajaran (JP)"
-              value={String(formData.duration)}
-              options={[
-                { value: '1', label: '1 Jam Pelajaran (45 Menit)' },
-                { value: '2', label: '2 Jam Pelajaran (90 Menit)' },
-                { value: '3', label: '3 Jam Pelajaran (135 Menit)' },
-                { value: '4', label: '4 Jam Pelajaran (180 Menit)' },
-              ]}
-              onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+              label="Alokasi Ruangan"
+              value={String(formData.room_id)}
+              options={roomSelectOptions}
+              onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
               required
             />
-          </div>
-
-          <Select
-            label="Rombel Kelas"
-            value={String(formData.class_id)}
-            options={classList.map((c) => ({
-              value: String(c.id),
-              label: `${c.name} (Tingkat ${c.level})`,
-            }))}
-            onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
-            required
-          />
-
-          <Select
-            label="Mata Pelajaran"
-            value={String(formData.subject_id)}
-            options={subjectList.map((s) => ({
-              value: String(s.id),
-              label: s.name,
-            }))}
-            onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
-            required
-          />
-
-          <Select
-            label="Guru Pengampu"
-            value={String(formData.teacher_id)}
-            options={teacherList.map((t) => ({
-              value: String(t.id),
-              label: `${t.name} ${t.nis_nip ? `[NIP: ${t.nis_nip}]` : ''}`,
-            }))}
-            onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-            required
-          />
-
-          <Select
-            label="Alokasi Ruangan"
-            value={String(formData.room_id)}
-            options={roomList.map((r) => ({
-              value: String(r.id),
-              label: `${r.name} (${r.type === 'lab' ? 'Lab Komputer' : r.type === 'bengkel' ? 'Bengkel' : 'Ruang Teori'})`,
-            }))}
-            onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
-            required
-          />
-        </form>
-      </Modal>
+          </form>
+        </Modal>
+      )}
 
       {/* Password Confirmation Modal (Step-Up Auth) */}
       <PasswordModal
@@ -1369,6 +1409,17 @@ export default function ScheduleManagementPage() {
         loading={passwordModalLoading}
         error={passwordModalError}
       />
+
+      {/* Modal Generate Jadwal Otomatis */}
+      {isAutoGenerateModalOpen && (
+        <ScheduleAutoGenerateModal
+          isOpen={isAutoGenerateModalOpen}
+          onClose={() => setIsAutoGenerateModalOpen(false)}
+          onSuccess={refreshAllData}
+          showToast={showToast}
+          showErrorToast={showErrorToast}
+        />
+      )}
     </div>
   );
 }

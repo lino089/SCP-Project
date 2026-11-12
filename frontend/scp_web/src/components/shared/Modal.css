@@ -9,6 +9,7 @@
   z-index: 1000;
   padding: var(--space-4);
   box-sizing: border-box;
+  transform: translateZ(0);
 }
 
 .modal-card {
@@ -22,7 +23,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: modal-appear 0.15s ease-out;
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  animation: modal-appear 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes modal-appear {
@@ -50,6 +53,15 @@
 
 .modal--xl {
   max-width: 900px;
+}
+
+.modal--2xl {
+  max-width: 1200px;
+}
+
+.modal--full {
+  max-width: min(1480px, calc(100vw - 32px));
+  width: 100%;
 }
 
 .modal-header {

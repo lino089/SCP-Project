@@ -16,6 +16,7 @@ use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\RecycleBinController;
 use App\Http\Controllers\API\RoomController;
 use App\Http\Controllers\API\ScheduleController;
+use App\Http\Controllers\API\ScheduleGenerationController;
 use App\Http\Controllers\API\ScheduleImportController;
 use App\Http\Controllers\API\SchoolClassController;
 use App\Http\Controllers\API\StudentController;
@@ -244,6 +245,17 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/schedule-imports/{id}/resolve-teachers-bulk', [ScheduleImportController::class, 'resolveTeachersBulk']);
         Route::post('/schedule-imports/{id}/confirm', [ScheduleImportController::class, 'confirm']);
         Route::delete('/schedule-imports/{id}', [ScheduleImportController::class, 'destroy']);
+
+        // Schedule Generation Otomatis Waka
+        Route::get('/schedule-generation/config', [ScheduleGenerationController::class, 'config']);
+        Route::post('/schedule-generation/check-target-state', [ScheduleGenerationController::class, 'checkTargetState']);
+        Route::post('/schedule-generation/run', [ScheduleGenerationController::class, 'run']);
+        Route::get('/schedule-generation/batches/{batchUuid}', [ScheduleGenerationController::class, 'show']);
+        Route::get('/schedule-generation/batches/{batchUuid}/drafts', [ScheduleGenerationController::class, 'drafts']);
+        Route::post('/schedule-generation/batches/{batchUuid}/apply', [ScheduleGenerationController::class, 'apply']);
+        Route::delete('/schedule-generation/batches/{batchUuid}', [ScheduleGenerationController::class, 'destroy']);
+        Route::get('/schedule-generation/curriculum-assignments', [ScheduleGenerationController::class, 'getAssignments']);
+        Route::put('/schedule-generation/curriculum-assignments/{id}', [ScheduleGenerationController::class, 'updateAssignment']);
     });
 
     // 2. Waka Kurikulum & Guru (Shared Read/Verification & Journals: PRD 9.7)

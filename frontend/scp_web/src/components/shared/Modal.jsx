@@ -11,7 +11,7 @@ export default function Modal({
   title = '',
   children,
   footer = null,
-  size = 'md', // sm, md, lg, xl
+  size = 'md', // sm, md, lg, xl, 2xl, full
   closeOnOverlayClick = true,
   closeOnEsc = true,
   className = '',
