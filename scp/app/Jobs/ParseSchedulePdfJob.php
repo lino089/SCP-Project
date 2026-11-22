@@ -80,12 +80,12 @@ class ParseSchedulePdfJob implements ShouldQueue
                     'status' => 'failed',
                     'error_message' => 'Gagal mengekstrak PDF FET: ' . trim($errOut),
                 ]);
-                Log::error('Python Parser Error: ' . $errOut);
+                $this->safeLog('error', 'Python Parser Error: ' . $errOut);
                 return;
             }
 
             if (!empty($process->getErrorOutput())) {
-                Log::info('Python Parser Warnings: ' . $process->getErrorOutput());
+                $this->safeLog('info', 'Python Parser Warnings: ' . $process->getErrorOutput());
             }
 
             $outputString = $process->getOutput();
@@ -96,7 +96,7 @@ class ParseSchedulePdfJob implements ShouldQueue
                     'status' => 'failed',
                     'error_message' => 'Hasil ekstraksi PDF tidak valid (bukan array jadwal JSON).',
                 ]);
-                Log::error('Python Parser Output is not valid JSON array.');
+                $this->safeLog('error', 'Python Parser Output is not valid JSON array.');
                 return;
             }
 
@@ -461,13 +461,25 @@ class ParseSchedulePdfJob implements ShouldQueue
                 'error_message' => null,
             ]);
         } catch (\Throwable $e) {
-            Log::error("Schedule import {$this->importId} failed: " . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
             $import->update([
                 'status' => 'failed',
                 'error_message' => 'Gagal memproses berkas PDF: ' . $e->getMessage(),
             ]);
+            $this->safeLog('error', "Schedule import {$this->importId} failed: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
+     * Write a log entry without letting filesystem permission errors abort the job.
+     */
+    private function safeLog(string $level, string $message, array $context = []): void
+    {
+        try {
+            Log::{$level}($message, $context);
+        } catch (\Throwable) {
+            // Do not fail schedule import if the log stream is not writable.
         }
     }
 
